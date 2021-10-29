@@ -1,0 +1,198 @@
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Action',{
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            eventHandler: {
+                value: "Event handler",
+                type: "hal2EventHandler",
+                required: true
+            },
+            name:       {},
+            commandset:  {},
+            ratelimit: { value: 0}
+        },
+        inputs:1,
+        outputs:0,
+        icon: "action.png",
+        label: function() {
+            return this.name||"action";
+        },
+        paletteLabel: "action",
+        oneditprepare: function () {
+            //get all things and sort them alphabetically
+            var completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            var thingsList=[];
+            for (let t in completeThingsList) {
+                let thingType = RED.nodes.node(completeThingsList[t].thingType);
+                if (!thingType.readOnly) {
+                    thingsList.push(completeThingsList[t]);
+                }
+            }
+            thingsList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+            //get all groups and sort them alphabetically
+            var groupsList = RED.nodes.filterNodes({type: "hal2Group"});
+            groupsList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+
+            //No thing nodes have been created
+            if(thingsList.length===0){
+                $("<li>No things found</li>").appendTo("#node-input-command-container");
+                return;
+            }
+
+            $("#node-input-command-container").editableList({
+                addItem: function(container,i,opt) {
+                    var command = opt;
+                    var savedThing = command.thing;
+                    var savedItem = command.item;
+
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });
+
+                    //Add rows
+                    var rowThing = $('<div/>').appendTo(container);
+                    var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+
+                    //Add labels
+                    var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
+                        .appendTo(rowThing);
+                    labelThing.append(' Thing');
+                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
+                        .appendTo(rowItem);
+                    labelItem.append(' Item');
+                    var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
+                        .appendTo(rowCommand);
+                    labelCommand.append(' Cmnd');
+
+                    var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 70px)"}).appendTo(rowThing);
+                    var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 70px)"}).appendTo(rowItem);
+
+                    thingsField.change(function() {
+                        let thing = RED.nodes.node(thingsField.val());
+                        itemsField.children().remove();
+
+                        if (thing.type == "hal2Thing") {    
+                            rowItem.show();                        
+                            //get all items and sort them alphabetically
+                            let thingType = RED.nodes.node(thing.thingType);
+                            thingType.items.sort(function(a, b) {
+                                let textA = a.name.toUpperCase();
+                                let textB = b.name.toUpperCase();
+                                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+                            });
+                            //Add items                            
+                            for (let d in thingType.items) {
+                                if (!thingType.items[d].readOnly) {
+                                    itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                                }
+                            }
+                            if ((savedItem != null) & (thingsField.val() == savedThing)) {
+                                itemsField.val(savedItem);
+                            }
+                        } else {
+                            rowItem.hide();
+                            itemsField.append($("<option></option>")
+                                .val(thing.id)
+                                .text(thing.name));
+                        }
+                    });
+
+                    //Add groups
+                    for (let d in groupsList) {
+                        thingsField.append($("<option></option>").val(groupsList[d].id).text("["+groupsList[d].name+"]"));
+                    }
+                    //Add things
+                    for (let d in thingsList) {
+                        thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                    }
+
+                    //Add command value field
+                    var commandField = $('<input/>',{class:"node-input-command-value",type:"text"})
+                        .appendTo(rowCommand)
+                        .typedInput({
+                            default:'msg',
+                            types:['msg','flow','global','env','str','num','bool','json']
+                        });
+                        commandField.typedInput('width','calc(100% - 70px)');
+
+
+                    //Add values
+                    if (Object.keys(command).length != 0) {
+                        thingsField.val(command.thing);
+                        commandField.typedInput('value',command.value);
+                        commandField.typedInput('type',command.type);
+                    } else {
+                        commandField.typedInput('value','payload');
+                    }
+                    thingsField.trigger('change');
+                },
+                removable: true,
+                sortable: true,
+                addButton: "Item"
+            });
+
+            //Add commands
+            if (this.commandset) {
+                for (var i=0; i<this.commandset.length; i++) {
+                    var command = this.commandset[i];
+                    $("#node-input-command-container").editableList('addItem',command);
+                }
+            } else {
+                $("#node-input-command-container").editableList('addItem',null);              
+            }
+        },
+        oneditsave: function() {
+            var commandcontainer = $("#node-input-command-container").children();
+            var node = this;
+            node.commandset = [];
+
+            commandcontainer.each(function(i) {
+                var command = $(this);
+                var b = {
+                    thing:command.find(".node-input-command-thing option:selected").val(),
+                    item:command.find(".node-input-command-item option:selected").val(),
+                    value:command.find(".node-input-command-value").typedInput('value'),
+                    type:command.find(".node-input-command-value").typedInput('type'),
+                }
+                debugger
+                node.commandset.push(b);
+            });
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="hal2Action">
+    <div class="form-row">
+        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    </div>
+    <div class="form-row">
+            <ol id="node-input-command-container"</ol>
+    </div>
+    <div class="form-row">
+        <i class="fa fa-pause-circle-o"></i> Wait <input type="number" value="0" id="node-input-ratelimit" style="display: inline-block; width: 70px; vertical-align: middle;"> ms between messages.
+    </div>
+
+</script>
+
+<script type="text/x-red" data-help-name="hal2Action">
+    <p>The Action node allows you to group multiple <i>Items</i> together and send their values on, one after another, when triggered.</p>
+    <li><strong>Name</strong>: Node name.</li> 
+    <li><strong>Command</strong>: Select what value the node should be sending on to the next node when triggered. If <i>thing state</i> is selected, the property configured in the <i>Item</i> node as the <i>state</i> property is sent. The configured <code>msg.name</code> and <code>msg.topic</code> from the <i>Item</i> is always added to the outgoing <code>msg</code>.</li>
+    <li><string>Wait between messages</strong> allows you to rate limit the output.</li>
+</script>

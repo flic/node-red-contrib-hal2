@@ -1,0 +1,239 @@
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Event',{
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            eventHandler: {
+                value: "Event handler",
+                type: "hal2EventHandler",
+                required: true
+            },
+            name:           {},
+            thing:          { value: "", required: true },
+            item:           { value: "", required: true },
+            operator:       { value: "", required: true },
+            change:         { value: "1" },
+            compareValue:   { value: "" },
+            compareType:    {},
+            outputValue:    { value: "" },
+            outputType:     { required: true }
+        },
+        inputs:0,
+        outputs:1,
+        icon: "event.png",
+        label: function() {
+            return this.name||"event";
+        },
+        paletteLabel: "event",
+        oneditprepare: async function () {
+            var operators = [
+                { v: "always", t: "always"},               
+                { v: "eq", t: "==" },
+                { v: "neq", t: "!=" },
+                { v: "lt", t: "<" },
+                { v: "lte", t: "<=" },
+                { v: "gt", t: ">" },
+                { v: "gte", t: ">=" },
+                { v: "cont", t: "contains" },
+                { v: "regex", t: "matches regex" },
+                { v: "true", t: "is true" },
+                { v: "false", t: "is false" }
+            ];
+
+            var savedThing = this.thing;
+            var savedItem = this.item;
+
+            //get all things and sort them alphabetically
+            const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            thingsList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+            //get all groups and sort them alphabetically
+            const groupsList = RED.nodes.filterNodes({type: "hal2Group"});
+            groupsList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+
+            $("#node-input-thing").change(function() {
+                let thing = RED.nodes.node($("#node-input-thing").val());
+                $("#node-input-item").children().remove();
+
+                if (thing.type == "hal2Thing") {    
+                    $("#div-item").show();  
+                    //get all items and sort them alphabetically
+                    let thingType = RED.nodes.node(thing.thingType);
+                    thingType.items.sort(function(a, b) {
+                        let textA = a.name.toUpperCase();
+                        let textB = b.name.toUpperCase();
+                        return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+                    });
+                    //Add items
+                    for (let d in thingType.items) {
+                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    }
+
+                    if ($("#node-input-thing").val() == savedThing) {
+                        $("#node-input-item").val(savedItem);
+                    }
+                } else {
+                    $("#div-item").hide();
+                    $("<option value='" + thing.id + "'> " + thing.name + "</option>").appendTo("#node-input-item");
+                    $("#node-input-item").val(thing.id)
+                }
+
+                // Borde man kunna välja device class i event? Samma drop-down eller en selector?
+                //device class = thing type? thing definition?
+                // device - function?
+
+            });         
+
+            //Add groups
+            for (let d in groupsList) {
+                $("<option value='" + groupsList[d].id + "'> [" + groupsList[d].name + "]</option>").appendTo("#node-input-thing");
+
+            }
+            //Add things
+            for (var d in thingsList) {
+                $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
+            }
+
+            if (this.thing) {
+                $("#node-input-thing").val(this.thing);
+                $('#node-input-thing').trigger('change');
+
+            }
+            //Add operators
+            for (var d in operators) {
+                $("<option value='" + operators[d].v + "'> " + operators[d].t + "</option>").appendTo("#node-input-operator");
+            }
+            if (this.operator) {
+                $("#node-input-operator").val(this.operator);
+                $('#node-input-operator').trigger('change');
+            } else {
+                $("#node-input-operator").val(operators[0].v);
+                $('#node-input-operator').trigger('change');  
+            }
+            //Add comparison value
+            $('#node-input-compareValue').typedInput({
+                default: 'num',
+                typeField: $("#node-input-compareType"),
+                types: ['str','num','json']
+            });
+            if (this.compareValue) {
+                $("#node-input-compareValue").typedInput('value',this.compareValue).typedInput('type',this.compareType);                           
+            }
+
+            //On change, update
+            $("<option value='0'>on update</option>").appendTo("#node-input-change");
+            $("<option value='1'>on change</option>").appendTo("#node-input-change");
+            $("<option value='2'>on change (ignore initial value)</option>").appendTo("#node-input-change");
+
+            $("#node-input-change").val(this.change);
+            $('#node-input-change').trigger('change');  
+
+            //Add output
+            var stateType = {
+                value: "state",
+                label: "event msg",
+                hasValue: false
+            };
+            $('#node-input-outputValue').typedInput({
+                default: 'state',
+                typeField: $("#node-input-outputType"),
+                types: [stateType,'flow','global','env','str','num','bool','json']
+            });
+            if (this.outputType) {
+                $("#node-input-outputValue").typedInput('type',this.outputType);
+            }
+            if (this.outputValue) {
+                if (typeof this.outputValue == 'object') {
+                        this.outputValue = JSON.stringify(this.outputValue);
+                    }
+                $("#node-input-outputValue").typedInput('value',this.outputValue);
+            } else {
+                $("#node-input-outputValue").typedInput('value','payload');
+ 
+            }
+            //Show/Hide value field
+            $("#node-input-operator").change( function() {
+                var type = $("#node-input-operator").children("option:selected").val();
+                if (type.length < 4) {
+                        $("#node-input-operator").css({ "width": "60px" });
+                        $("#node-input-compareValue").typedInput('width','calc(70% - 60px)')
+                    } else {
+                        $("#node-input-operator").css({ "width": "120px" });
+                        $("#node-input-compareValue").typedInput('width','calc(70% - 120px)')
+
+                    }
+                if (type == "always" || type === "true" || type === "false") {
+                    $("#node-input-compareValue").typedInput('hide');
+                    $("#node-input-operator").css({ "width": "40%" });
+                } else {
+                    $("#node-input-compareValue").typedInput('show');
+                }
+                if (type == "regex" || type == "lt" || type == "lte" || type == "gt" || type == "gte") {
+                    if (type == "regex") {
+                        $('#node-input-compareValue').typedInput('types',['re']);
+                        $('#node-input-compareValue').typedInput('type','re');
+                    } else {
+                        $('#node-input-compareValue').typedInput('types',['num']);
+                        $('#node-input-compareValue').typedInput('type','num');                        
+                    }
+                } else {
+                    $('#node-input-compareValue').typedInput('types',['str','num','json']);
+                    $('#node-input-compareValue').typedInput('type',this.compareType);
+                }
+            });
+        },
+        oneditsave: function () {
+
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="hal2Event">
+    <div class="form-row">
+        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
+        <select id="node-input-thing" style="width:70%"></select>
+    </div>
+    <div class="form-row" id="div-item">
+        <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
+        <select id="node-input-item" style="width:70%"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
+        <select id="node-input-operator" style="width:10%"></select>
+        <input type="text" id="node-input-compareValue" style="width:60%">
+        <input type="hidden" id="node-input-compareType">
+    </div>
+    <div class="form-row">
+        <label for="node-input-change">&nbsp;</label>
+        <select id="node-input-change" style="width:40%;"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
+        <input type="text" id="node-input-outputValue" style="width:70%"">
+        <input type="hidden" id="node-input-outputType">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Event">
+    <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
+    <li><strong>Config</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
+    <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger.</li>
+    <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
+    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>thing state</i> is selected, the property configured in the <i>Item</i> node as the <i>state</i> property is sent. The configured <code>msg.name</code> and <code>msg.topic</code> from the <i>Item</i> node is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>Name</strong>: Node name.</li>    
+</script>

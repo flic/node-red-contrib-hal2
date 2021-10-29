@@ -1,0 +1,549 @@
+<script type="text/javascript">
+    RED.nodes.registerType('hal2ThingType', {
+        category: 'config',
+        defaults: {
+            name:  {
+                value: "Thing type",
+                required: true,     
+                validate:function(v) {
+                    //Check for name collisions
+                    const thingsList = RED.nodes.filterNodes({type: "hal2ThingType"});
+                    if(thingsList.length===0){ return true; }
+                    for (var d in thingsList) {
+                        if (v == thingsList[d].name && thingsList[d].id !== this.id) { return false; }
+                    }
+                    return true;
+                }
+            },
+            items: { value: [], required: true },
+            ingress: {},
+            egress: {},
+            readOnly: {}
+        },
+        label: function () {
+            return this.name || "Thing type";
+        },
+        oneditprepare: function () {
+            var node = this;
+            node.editor = [];
+
+            //Types
+            var stateType = {
+                value: "state",
+                label: "state.",
+                hasValue: true
+            };
+            var percentType = {
+                value: "percent",
+                label: "percent",
+                icon: "fa fa-percent",
+                validate: /^\b([0-9]|[1-9][0-9]|100)\b$/,
+                hasValue: true
+            }
+            var functionType = {
+                value: "function",
+                label: "func",
+                icon: "function.svg",
+                hasValue: true
+            }
+            var MQTTType = {
+                value: "mqtt",
+                label: "MQTT Topic",
+                icon: "fa fa-tasks",
+                validate: /^(#$|(\+|[^+#]*)(\/(\+|[^+#]*))*(\/(\+|#|[^+#]*))?$)/,
+                hasValue: true
+            }
+            var StrStartType = {
+            value: "StrStart",
+            label: "starts with",
+            hasValue: true
+            }            
+            var StrEndType = {
+            value: "StrEnd",
+            label: "ends with",
+            hasValue: true
+            }
+            var StrContainsType = {
+            value: "StrContain",
+            label: "contains",
+            hasValue: true
+            }
+
+            function createId () {
+                return (1+Math.random()*4294967295).toString(16);
+            }
+
+        // Create tabs
+            var tabs = RED.tabs.create({
+                id: "tabs",
+                onchange: function(tab) {
+                    $("#tabs-content").children().hide();
+                    $("#" + tab.id).show();
+
+                }
+            });
+            tabs.addTab({
+                id: "tab-main",
+                iconClass: "fa fa-cog",
+                label: "Main"
+            });
+            tabs.addTab({
+                id: "tab-ingress",
+                iconClass: "fa fa-sign-in",
+                label: "Ingress",
+            });
+            tabs.addTab({
+                id: "tab-egress",
+                iconClass: "fa fa-sign-out",
+                label: "Egress"
+            });
+            tabs.activateTab("tab-main");
+
+        // Main
+            $("#node-config-thingtype-list-items").editableList({
+                addItem: function(container,i,opt) {
+                    var item = opt;
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });
+
+                    //Add rows
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(container); 
+                    var rowReadOnly = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);  
+
+                    //Add labels
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                        .appendTo(rowName)
+                        .append(' Name')
+                    var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .appendTo(rowTopicFilter)
+                        .append(' Topic filter')
+                    var labelIngress = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-in"})
+                        .appendTo(rowIngress)
+                        .append(" Ingress")
+                    var labelEgress = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
+                        .appendTo(rowEgress)
+                        .append(" Egress")
+                    var labelTopicSuffix = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tasks"})
+                        .appendTo(rowTopicSuffix)
+                        .append(' Cmnd suffix')
+                    var labelReadOnly = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-info-circle"})
+                        .appendTo(rowReadOnly)
+                        .append(" Status only")
+
+                    //Name property
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 100px)",class:"node-config-thingtype-name-property",type:"text"})
+                        .appendTo(rowName)
+                    var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
+                        .appendTo(rowName)
+                        .val(createId())
+                    //MQTT topic filter
+                    var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 100px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
+                    .appendTo(rowTopicFilter)
+                    .typedInput({
+                        default:'StrEnd',
+                        types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
+                    });
+                    // Read only checkbox
+                    var checkboxReadonly = $('<input/>',{style: "display: inline-block; width: auto; vertical-align: top", class:"node-config-thingtype-readonly-property",type:"checkbox"})
+                        .appendTo(rowReadOnly)
+                    //MQTT topic suffix
+                    var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 100px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
+                    .appendTo(rowTopicSuffix)
+                    //Ingress
+                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 100px)"})
+                        .appendTo(rowIngress);
+
+                    $("#node-config-ingress-list-items")
+                        .editableList('items')
+                        .each(function() {
+                            var item = $(this);
+                            let name = item.find(".node-config-ingress-name-property").val();
+                            let id = item.find(".node-config-ingress-id-property").val();
+                            ingressProperty.append($("<option></option>").val(id).text(name));
+                        })
+                    //Egress
+                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 100px)"})
+                        .appendTo(rowEgress);
+
+                    $("#node-config-egress-list-items")
+                        .editableList('items')
+                        .each(function() {
+                            var item = $(this);
+                            let name = item.find(".node-config-egress-name-property").val();
+                            let id = item.find(".node-config-egress-id-property").val();
+                            egressProperty.append($("<option></option>").val(id).text(name));
+                        })                    
+                    
+                    //Show/Hide egress buttons
+                    checkboxReadonly.click( function() {
+                        if (checkboxReadonly.is(":checked")) {
+                            rowTopicSuffix.hide();
+                            rowEgress.hide();
+                        } else {
+                            rowTopicSuffix.show();
+                            rowEgress.show();
+                        }
+                    });
+
+                    //Add values
+                    if (Object.keys(item).length != 0) {
+                        nameProperty.val(item.name);
+                        idProperty.val(item.id);
+                        topicFilterProperty.typedInput('type',item.topicFilterType);
+                        topicFilterProperty.typedInput('value',item.topicFilterValue);
+                        topicSuffixProperty.val(item.topicSuffix);
+                        checkboxReadonly.prop('checked', item.readOnly);
+                        ingressProperty.val(item.ingress);
+                        egressProperty.val(item.egress);
+
+                        if (item.readOnly) {
+                            rowTopicSuffix.hide();
+                            rowEgress.hide();
+                        } else {
+                            rowTopicSuffix.show();
+                            rowEgress.show();
+                        }
+                    }
+                },
+                removable: true,
+                sortable: true,
+                addButton: "Item"
+            });
+
+        // Ingress
+            $("#node-config-ingress-list-items").editableList({
+                addItem: function(container,i,opt) {
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });    
+
+                    //Add rows
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowEditor = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
+
+                    // Show a clickable expand icon
+                    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px;"})
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        
+                        // Switch the icon between expand and compress
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        }
+                        else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                    
+                        // Only show the relevant widget type properties
+                        rowEditor.change();
+                    });
+
+                    rowEditor.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") {
+                            rowEditor.show();
+                        } else {
+                            rowEditor.hide();
+                        }
+                    });
+
+                    //Add labels
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                        .appendTo(rowName)
+                        .append(' Name')
+                    var labelFnStart = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-cog"})
+                        .appendTo(rowEditor)
+                        .append(" Function")
+                    var labelEditor = $('<div/>',{style:"display:inline-block;text-align:left;float:right; padding-right:10px; box-sizing:border-box;"})
+                        .appendTo(rowEditor)
+
+                    //Name property
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 115px)",class:"node-config-ingress-name-property",type:"text"})
+                        .appendTo(rowName)
+                    var idProperty = $('<input/>',{class:"node-config-ingress-id-property",type:"hidden"})
+                        .appendTo(rowName)
+                        .val(createId())
+                    var editorProperty = $('<div/>',{id:"ingress"+i,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
+                        .appendTo(rowEditor)
+
+                    node.editor["ingress"+i]= RED.editor.createEditor({
+                        id: "ingress"+i,
+                        mode: "ace/mode/nrjavascript",
+                        value: "", 
+                        globals: {
+                                msg:true,
+                                context:true,
+                                RED: true,
+                                util: true,
+                                flow: true,
+                                global: true,
+                                console: true,
+                                Buffer: true,
+                                setTimeout: true,
+                                clearTimeout: true,
+                                setInterval: true,
+                                clearInterval: true
+                            }
+                    });
+                    //Add values
+                    if (Object.keys(opt).length != 0) {
+                        nameProperty.val(opt.name);
+                        idProperty.val(opt.id);
+                        node.editor["ingress"+i].setValue(opt.fn);
+                    } else {
+                        nameProperty.val("Ingress function");
+                        node.editor["ingress"+i].setValue("// msg object is passed to function\n\nreturn msg.payload;");
+                    }
+                },
+                removable: true,
+                sortable: false,
+                addButton: "Add ingress function"
+            });
+
+        // Egress
+            $("#node-config-egress-list-items").editableList({
+                addItem: function(container,i,opt) {
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });
+
+                    //Add rows
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowEditor = $('<div/>',{style:"margin-top:8px;"}).appendTo(container)
+                        .hide()
+
+                    // Show a clickable expand icon
+                    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px;"})
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        
+                        // Switch the icon between expand and compress
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        }
+                        else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                    
+                        // Only show the relevant widget type properties
+                        rowEditor.change();
+                    });
+
+                    rowEditor.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") {
+                            rowEditor.show();
+                        } else {
+                            rowEditor.hide();
+                        }
+                    });
+
+                    //Add labels
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                        .appendTo(rowName)
+                        .append(' Name')
+                    var labelFnStart = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-cog"})
+                        .appendTo(rowEditor)
+                        .append(" Function")
+                    var labelEditor = $('<div/>',{style:"display:inline-block;text-align:left;float:right; padding-right:10px; box-sizing:border-box;"})
+                        .appendTo(rowEditor)
+
+                    //Name property
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 115px)",class:"node-config-egress-name-property",type:"text"})
+                        .appendTo(rowName)
+                    var idProperty = $('<input/>',{class:"node-config-egress-id-property",type:"hidden"})
+                        .appendTo(rowName)
+                        .val(createId())
+                    var editorProperty = $('<div/>',{id:"egress"+i,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
+                        .appendTo(rowEditor)
+
+                    node.editor["egress"+i]= RED.editor.createEditor({
+                        id: "egress"+i,
+                        mode: "ace/mode/nrjavascript",
+                        value: "",
+                        globals: {
+                                msg:true,
+                                context:true,
+                                RED: true,
+                                util: true,
+                                flow: true,
+                                global: true,
+                                console: true,
+                                Buffer: true,
+                                setTimeout: true,
+                                clearTimeout: true,
+                                setInterval: true,
+                                clearInterval: true
+                            }
+                    });
+
+                    //Add values
+                    if (Object.keys(opt).length != 0) {
+                        nameProperty.val(opt.name);
+                        idProperty.val(opt.id);
+                        node.editor["egress"+i].setValue(opt.fn);
+                    } else {
+                        nameProperty.val("Egress function");
+                        node.editor["egress"+i].setValue("// msg object is passed to function\n\nreturn msg;");
+                    }
+                },
+                removable: true,
+                sortable: false,
+                addButton: "Add egress function"
+            });
+
+        //Add items
+           if (this.ingress) {
+                for (let i=0; i<this.ingress.length; i++) {
+                    let ingress = this.ingress[i];
+                    $("#node-config-ingress-list-items").editableList('addItem',ingress);
+                }
+            } else {
+                let ingress = {
+                    name: "Pass-through",
+                    id: createId(),
+                    fn: "// msg object is passed to function\n\nreturn msg.payload;"
+                }
+                $("#node-config-ingress-list-items").editableList('addItem',ingress);
+            }
+
+            if (this.egress) {
+                for (let i=0; i<this.egress.length; i++) {
+                    let egress = this.egress[i];
+                    $("#node-config-egress-list-items").editableList('addItem',egress);
+                }
+            } else {
+                let egress = {
+                    name: "Pass-through",
+                    id: createId(),
+                    fn: "// msg object is passed to function\n\nreturn msg;"
+                }
+                $("#node-config-egress-list-items").editableList('addItem',egress);
+            }
+
+            if (this.items) {
+                for (let i=0; i<this.items.length; i++) {
+                    let item = this.items[i];
+                    $("#node-config-thingtype-list-items").editableList('addItem',item);
+                }
+            } else {
+                $("#node-config-thingtype-list-items").editableList('addItem',null);
+            }
+        },
+        oneditsave: function () {
+            var node = this;
+            var i;
+            node.items = [];
+            node.ingress = [];
+            node.egress = [];
+            node.readOnly = true;
+
+            // Main tab
+            $("#node-config-thingtype-list-items")
+                .editableList('items')
+                .each(function() {
+                    let item = $(this);
+                    let r = {
+                        name:item.find(".node-config-thingtype-name-property").val(),
+                        id:item.find(".node-config-thingtype-id-property").val(),
+                        topicFilterType:item.find(".node-config-thingtype-topicfilter-property").typedInput('type'),
+                        topicFilterValue:item.find(".node-config-thingtype-topicfilter-property").typedInput('value'),
+                        topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
+                        readOnly:item.find(".node-config-thingtype-readonly-property").is(":checked"),
+                        ingress:item.find(".node-config-thingtype-ingress-property").val(),
+                        egress:item.find(".node-config-thingtype-egress-property").val(),
+                    }
+                    if (!r.readOnly) {
+                        node.readOnly = false;
+                    }
+                    node.items.push(r);
+                })
+
+            // Ingress tab
+            i=0;
+            $("#node-config-ingress-list-items")
+                .editableList('items')
+                .each(function() {
+                    let item = $(this);
+                    let r = {
+                        name:item.find(".node-config-ingress-name-property").val(),
+                        id:item.find(".node-config-ingress-id-property").val(),
+                        fn:node.editor["ingress"+i].getValue()
+                    }
+                    node.ingress.push(r);
+                    i++;
+                })
+
+            // Egress tab
+            i=0;
+            $("#node-config-egress-list-items")
+                .editableList('items')
+                .each(function() {
+                    let item = $(this);
+                    let r = {
+                        name:item.find(".node-config-egress-name-property").val(),
+                        id:item.find(".node-config-egress-id-property").val(),
+                        fn:node.editor["egress"+i].getValue()
+                    }
+                    node.egress.push(r);
+                    i++;
+                })
+
+                // Remove editors
+            for (n in node.editor) {
+                node.editor[n].destroy();
+                delete node.editor[n];
+            }
+        },
+        oneditcancel: function() {
+            // Remove editors
+            for (n in node.editor) {
+                node.editor[n].destroy();
+                delete node.editor[n];
+            }
+        }
+    });
+</script>
+
+<script type="text/html" data-template-name="hal2ThingType">
+    <!-- Tabs -->
+    <div class="form-row tabs-row">
+        <ul style="min-width: 600px; margin-bottom: 20px;" id="tabs"></ul>
+    </div>
+    <div id="tabs-content" style="min-height: calc(100% - 95px);">
+        <!-- Main tab -->
+        <div id="tab-main" style="display:none">
+            <div class="form-row">
+                <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-config-input-name" placeholder="Name">
+            </div>
+            <div class="form-row">
+                <ol id="node-config-thingtype-list-items"></ol>
+            </div>
+        </div>
+        <!-- Ingress tab -->
+        <div id="tab-ingress" style="display:none">
+            <div class="form-row">
+                <ol id="node-config-ingress-list-items"></ol>
+            </div>
+        </div>
+        <!-- Egress tab -->
+        <div id="tab-egress" style="display:none">
+            <div class="form-row">
+                <ol id="node-config-egress-list-items"></ol>
+            </div>
+        </div>
+    </div>
+</script>

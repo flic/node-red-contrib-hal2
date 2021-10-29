@@ -1,0 +1,104 @@
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Value',{
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            name:           {},
+            thing:          { required: true },
+            item:           { required: true },           
+            outputValue:    { value: "payload" },
+            outputType:     { required: true }
+        },
+        inputs:1,
+        outputs:1,
+        icon: "value.png",
+        label: function() {
+            return this.name||"value";
+        },
+        paletteLabel: "value",
+        oneditprepare: function () {
+            var savedThing = this.thing;
+            var savedItem = this.item;
+
+            //get all thing nodes and sort them alphabetically
+            const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            thingsList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+
+            $("#node-input-thing").change(function() {
+                $("#node-input-item").children().remove();
+
+                //get all items and sort them alphabetically
+                let thing = RED.nodes.node($("#node-input-thing").val());
+                let thingType = RED.nodes.node(thing.thingType);
+                thingType.items.sort(function(a, b) {
+                    let textA = a.name.toUpperCase();
+                    let textB = b.name.toUpperCase();
+                    return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+                });
+                //Add items
+                for (let d in thingType.items) {
+                    $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                }
+
+                if ($("#node-input-thing").val() == savedThing) {
+                    $("#node-input-item").val(savedItem);
+                }
+            });
+
+            //Add things
+            for (var d in thingsList) {
+                $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
+            }
+            if (this.thing) {
+                $("#node-input-thing").val(this.thing);
+                $('#node-input-thing').trigger('change');
+            }
+
+            //Add output
+            $('#node-input-outputValue').typedInput({
+                default: 'msg',
+                typeField: $("#node-input-outputType"),
+                types: ['flow','global','msg']
+            });
+
+            if (this.outputType) {
+                $("#node-input-outputValue").typedInput('type',this.outputType);
+            }
+            if (this.outputValue) {
+                $("#node-input-outputValue").typedInput('value',this.outputValue);
+            }
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="hal2Value">
+
+    <div class="form-row">
+        <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
+        <select id="node-input-thing" style="width:70%"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
+        <select id="node-input-item" style="width:70%"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output to</label>
+        <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">
+        <input type="hidden" id="node-input-outputType">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Value">
+    <p>The Value node queries a specific <i>Item</i> and sends the <i>Item</i> value on to the next node.</p>
+    <li><strong>Item</strong>: Select the <i>Item</i>.</li>
+    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>thing state</i> is selected, the property configured in the <i>Item</i> node as the <i>state</i> property is sent. The configured <code>msg.name</code> and <code>msg.topic</code> from the <i>Item</i> is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>Name</strong>: Node name.</li>  
+</script>

@@ -1,0 +1,31 @@
+
+    <script type="text/javascript">
+        RED.nodes.registerType('hal2EventHandler', {
+            category: 'config',
+            defaults: {
+                name:  {value: "Event handler"},
+                maxlisteners: {value: "50"}
+            },
+            label: function () {
+                return this.name || "Event handler";
+            }
+        });
+    </script>
+
+
+<script type="text/x-red" data-template-name="hal2EventHandler">
+    <div class="form-row" style="width:500px">
+        <p>The configuration is used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</p>
+        <p >If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
+    </div>
+    
+    <div class="form-row">
+        <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-config-input-name" placeholder="Name">
+    </div>
+
+    <div class="form-row">
+        <label for="node-config-input-maxlisteners"><i class="fa fa-sign-out"></i> Max event listeners (0 for unlimited)</label>
+        <input type="number" id="node-config-input-maxlisteners" style="display: inline-block; width: auto; vertical-align: top;" min="0" max="500" value="50">
+    </div>
+</script>

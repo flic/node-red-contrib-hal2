@@ -1,0 +1,122 @@
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Thing', {
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            eventHandler: {
+                value: "Event handler",
+                type: "hal2EventHandler",
+                required: true
+            },
+            thingType: {
+                value: "Thing type",
+                type: "hal2ThingType",
+                required: true
+            },
+            name:           { 
+                required: true, 
+                validate:function(v) {
+                    //Check for name collisions
+                    const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+                    if(thingsList.length===0){ return true; }
+                    for (var d in thingsList) {
+                        if (v == thingsList[d].name && thingsList[d].id !== this.id) { return false; }
+                    }
+                    return true;
+                }
+            },
+            topicFilter:        { value: "" },
+            topicFilterType:    {},
+            topicPrefix:        { value: "" },
+            outputs:            { value: 0 } //Storing if outputs are enabled.
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "thing.png",
+        label: function () {
+            return this.name || "thing";
+        },
+        paletteLabel: "thing",
+        oneditprepare: function () {
+            //Types
+            var typeMQTT = {
+                value: "mqtt",
+                label: "MQTT Topic",
+                icon: "fa fa-tasks",
+                validate: /^(#$|(\+|[^+#]*)(\/(\+|[^+#]*))*(\/(\+|#|[^+#]*))?$)/,
+                hasValue: true
+            }
+            
+            //Incoming topic filter
+            $('#node-input-topicFilter').typedInput({
+                default: 'mqtt',
+                typeField: $("#node-input-topicFilterType"),
+                types: ['str','re',typeMQTT],
+            });
+            if (this.topicFilter) {
+                $("#node-input-topicFilter").typedInput('value',this.topicFilter).typedInput('type',this.topicFilterType);                           
+            }
+            //Outgoing topic
+            if (this.topicPrefix) {
+                $("#node-input-topicPrefix").val(this.topicPrefix);                         
+            }
+            $("#node-input-thingType").change( function () {
+                let thingType = RED.nodes.node($("#node-input-thingType").val());
+                if (thingType.readOnly) {
+                    $("#cmnd-prefix").hide();
+                } else {
+                    $("#cmnd-prefix").show();
+                }
+            });
+
+            $("#node-input-thingType").trigger('change');
+        },
+        oneditsave: function () {
+            let TT = $("#node-input-thingType").val();
+            if (TT) {
+                var thingType = RED.nodes.node(TT);
+                if (thingType.readOnly) {
+                    this.outputs = 0;
+                } else {
+                    this.outputs = 1;
+                }
+            }
+        }
+    });
+</script>
+
+<script type="text/x-red" data-template-name="hal2Thing">
+    <div class="form-row">
+        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-thingType"><i class="fa fa-bookmark"></i> Thing type</label>
+        <input type="text" id="node-input-thingType" style="width:70%" placeholder="Thing Type">
+    </div>
+    <div class="form-row">
+        <label for="node-input-topicFilter"><i class="fa fa-filter"></i> Topic filter</label>
+        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:70%;">
+        <input type="hidden" id="node-input-topicFilterType">
+    </div>
+    <div class="form-row" id="cmnd-prefix">
+        <label for="node-input-topicPrefix"><i class="fa fa-tasks"></i> Cmnd prefix</label>
+        <input type="text" id="node-input-topicPrefix" style="width=70%">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Thing">
+    <p>The Thing node represents a single device function, like a switch or a thermometer. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Bundle</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
+    <li><strong>Config</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
+    <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
+    <li><strong>Topic</strong>: An optional property that can be configured in the node or, if left blank, can be set by <code>msg.topic</code>.</li>
+    <li><strong>State</strong>: Select which property from the incoming <code>msg.payload</code> to be used as the <i>Thing state</i> value. The <i>Thing</i> node always saves the whole <code>msg.payload</code> object, and another property can be used as output from a Value node if so desired.</li>
+    <li><strong>Conversion rules</strong>: Rules can be used to modify the <i>Thing state</i> value in a variety of ways using a simple if-then formula. If no matching rule is found the <i>Thing state</i> value will be unchanged. If more than one matching rule is found they will be executed in order from the top down. The <em>always/em> rule is executed but not counted as a match when <em>otherwise</em> is used. <em>Convert to number</em> converts an incoming string to a numeric value. <em>Modify</em> can be used to do simple arithmetic (*10, -2, /5, ...) on a numeric value.</li>
+    <li><strong>Use output</strong> can be selected to send the incoming value further to another node. The <i>state</i> value is sent on by default, but any property in the <code>msg.payload</code> object can be selected.</li>
+    <li><strong>Send bootstrap msg</strong> can be selected to send an initial bootstrap msg at startup.</li>
+    <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Bundle</i> and <i>Event</i> nodes.</li>    
+</script>
