@@ -1,16 +1,16 @@
-# node-red-contrib-hal [![npm version](https://badge.fury.io/js/node-red-contrib-hal.svg)](https://badge.fury.io/js/node-red-contrib-hal)
+# node-red-contrib-hal [![npm version](https://badge.fury.io/js/node-red-contrib-hal.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
 A set of nodes to help with basic home automation logic.
 
-**Note:** Breaking changes between 0.x and 1.x! The Topic filter value on all Item nodes and Item value on Event nodes needs to be manually updated.
+**Note:** Most of this readme isn't yet updated for HAL2!
 
 ## Install
 ```bash
 cd ~/.node-red
-npm install node-red-contrib-hal
+npm install node-red-contrib-hal2
 ```
 
 ## What is it?
-**node-red-contrib-hal** is a set of Node-RED nodes useful for creating home automation flows. The basic component is the Item node, used for keeping the state of an item. This state can then be used to trigger events, route traffic based on rules and more.
+**node-red-contrib-hal2** is a set of Node-RED nodes useful for creating home automation flows. The basic component is the Item node, used for keeping the state of an item. This state can then be used to trigger events, route traffic based on rules and more.
 
 1. Store an incoming value in an **Item node**
 2. Fire an event when the value changes using an **Event node**
