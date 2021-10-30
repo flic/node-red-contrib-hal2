@@ -66,6 +66,9 @@ module.exports = function(RED) {
 
         node.on('input', function(msg) {
             var eventmsg;
+            var result;
+            var _ingressFn;
+            var msgClone;
 
             if (node.topicFilter) {
                 if (topicFilter[node.topicFilterType](msg.topic,node.topicFilter) === false) { return; }
@@ -88,10 +91,10 @@ module.exports = function(RED) {
                     }
                 }
 
-                let _ingessFn;
+                msgClone = RED.util.cloneMessage(msg);
                 _ingressFn = new Function('msg',fn);
                 try {
-                    var result = _ingressFn(msg);
+                    result = _ingressFn(msgClone);
                 } catch (err) {
                     node.error("Error running ingress for "+node.thingType.items[i].name+": "+err);
                 }
