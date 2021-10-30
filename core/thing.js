@@ -29,39 +29,6 @@ module.exports = function(RED) {
         'StrContain': function (a,b) { return (a.includes(b)) }
     };
 
-    function showState(node,state) {
-        if (state === null) {
-            node.status({fill:"gray",shape:"ring",text:"no value"});
-            return;
-        }
-        switch(typeof state) {
-            case "boolean":
-                if (state) {
-                    node.status({fill:"green",shape:"dot",text:state});
-                } else {
-                    node.status({fill:"gray",shape:"ring",text:state});
-                }
-                break;
-            case "number":
-                if (state > 0) {
-                    node.status({fill:"green",shape:"dot",text:state});
-                } else {
-                    node.status({fill:"gray",shape:"ring",text:'0'});
-                }
-                break;
-            case "string":
-                    if (state != '') {
-                        node.status({fill:"green",shape:"dot",text:state});
-                    } else {
-                        node.status({fill:"gray",shape:"ring",text:state});
-                    }
-                break;
-            default:
-                node.status({text:"unknown"});
-                break;
-        }
-    }
-
     function hal2Thing(config) {
         RED.nodes.createNode(this,config);
 
@@ -72,11 +39,30 @@ module.exports = function(RED) {
         this.topicFilter = config.topicFilter;
         this.topicFilterType = config.topicFilterType; 
         var node = this;
+        var nodeContext = this.context();
 
-        node.laststate = {};
-        node.state = {};
-        
-        showState(node,null);
+
+        node.laststate = nodeContext.get("laststate",node.thingType.contextStore);
+        node.state = nodeContext.get("state",node.thingType.contextStore);
+        if (typeof node.laststate === 'undefined') { node.laststate = {}; }
+        if (typeof node.state === 'undefined') { node.state = {}; }
+
+        function showState() {
+            if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { return; }
+            
+            var stateStr = node.thingType.nodestatus;
+            for (let i in node.thingType.items) {
+                if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
+                    stateStr = stateStr.replace("%"+node.thingType.items[i].name,'no value');
+                } else {
+                    stateStr = stateStr.replace("%"+node.thingType.items[i].name,node.state[node.thingType.items[i].id]);
+                }
+            }
+            //node.status({fill:"green",text:stateStr});
+            node.status({text:stateStr});
+        }
+            
+        showState();
 
         node.on('input', function(msg) {
             var eventmsg;
@@ -90,15 +76,14 @@ module.exports = function(RED) {
                 return;
             }
 
-            for (let i in node.thingType.items) {
-                var item = node.thingType.items[i];
-                if (item.topicFilterValue) {
-                    if (topicFilter[item.topicFilterType](msg.topic,item.topicFilterValue) == false) { return; }
+            for (var i in node.thingType.items) {
+                if (node.thingType.items[i].topicFilterValue) {
+                    if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,node.thingType.items[i].topicFilterValue) == false) { continue; }
                 }
 
-                for (let i in node.thingType.ingress) {
-                    if (node.thingType.ingress[i].id == item.ingress){
-                        var fn = node.thingType.ingress[i].fn;
+                for (let n in node.thingType.ingress) {
+                    if (node.thingType.ingress[n].id == node.thingType.items[i].ingress){
+                        var fn = node.thingType.ingress[n].fn;
                         break;
                     }
                 }
@@ -108,27 +93,31 @@ module.exports = function(RED) {
                 try {
                     var result = _ingressFn(msg);
                 } catch (err) {
-                    node.error("Error running ingress for "+item.name+": "+err);
+                    node.error("Error running ingress for "+node.thingType.items[i].name+": "+err);
                 }
                 if (result != null) {
-                    node.debug("State "+item.name+"["+item.id+"] set to value '"+result+"'");
-                    node.laststate[item.id] = node.state[item.id];
-                    node.state[item.id] = result;
+                    node.debug("State "+node.thingType.items[i].name+"["+node.thingType.items[i].id+"] set to value '"+result+"'");
+                    node.laststate[node.thingType.items[i].id] = node.state[node.thingType.items[i].id];
+                    node.state[node.thingType.items[i].id] = result;
+                    // Save to node context
+                    nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
+                    nodeContext.set("state",node.state,node.thingType.contextStore);
                     eventmsg = {
                         _msgid: RED.util.generateId(),
                         state: result,
-                        laststate: node.laststate[item.id],
+                        laststate: node.laststate[node.thingType.items[i].id],
                         topic: msg.topic,
                         thing: {
                             name: node.name,
                             id: node.id
                         },
                         item: {
-                            name: item.name,
-                            id: item.id
+                            name: node.thingType.items[i].name,
+                            id: node.thingType.items[i].id
                         }
                     }
-                    node.eventHandler.publish('update',item.id,eventmsg);
+                    node.eventHandler.publish('update',node.thingType.items[i].id,eventmsg);
+                    showState();
                 }
             }
         });

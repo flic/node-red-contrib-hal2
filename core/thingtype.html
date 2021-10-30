@@ -15,6 +15,8 @@
                     return true;
                 }
             },
+            contextStore: {},
+            nodestatus: {},
             items: { value: [], required: true },
             ingress: {},
             egress: {},
@@ -26,7 +28,8 @@
         oneditprepare: function () {
             var node = this;
             node.editor = [];
-
+            var contextStores = RED.settings.context.stores;
+            
             //Types
             var stateType = {
                 value: "state",
@@ -100,6 +103,11 @@
             tabs.activateTab("tab-main");
 
         // Main
+            //Context stores from setup
+            for (let c in contextStores) {
+                $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>").appendTo("#node-config-input-contextStore");
+            }
+
             $("#node-config-thingtype-list-items").editableList({
                 addItem: function(container,i,opt) {
                     var item = opt;
@@ -110,40 +118,71 @@
 
                     //Add rows
                     var rowName = $('<div/>').appendTo(container);
-                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(container); 
-                    var rowReadOnly = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);  
+                    var rowDetails = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
+                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails); 
+                    var rowReadOnly = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
+
+                    // Show a clickable expand icon
+                    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        
+                        // Switch the icon between expand and compress
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        }
+                        else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                    
+                        // Only show the relevant widget type properties
+                        rowDetails.change();
+                    });
+
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") {
+                            rowDetails.show();
+                        } else {
+                            rowDetails.hide();
+                        }
+                    });
+
 
                     //Add labels
-                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
                         .appendTo(rowName)
-                        .append(' Name')
-                    var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .append(' Item name')
+                    var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowTopicFilter)
                         .append(' Topic filter')
-                    var labelIngress = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-in"})
+                    var labelIngress = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-in"})
                         .appendTo(rowIngress)
                         .append(" Ingress")
-                    var labelEgress = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
+                    var labelEgress = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
                         .appendTo(rowEgress)
                         .append(" Egress")
-                    var labelTopicSuffix = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tasks"})
+                    var labelTopicSuffix = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-tasks"})
                         .appendTo(rowTopicSuffix)
                         .append(' Cmnd suffix')
-                    var labelReadOnly = $('<div/>',{style:"display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-info-circle"})
+                    var labelReadOnly = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-info-circle"})
                         .appendTo(rowReadOnly)
-                        .append(" Status only")
+                        .append(" Status only")                      
 
                     //Name property
-                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 100px)",class:"node-config-thingtype-name-property",type:"text"})
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
                         .appendTo(rowName)
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(createId())
                     //MQTT topic filter
-                    var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 100px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
+                    var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
                     .appendTo(rowTopicFilter)
                     .typedInput({
                         default:'StrEnd',
@@ -151,12 +190,12 @@
                     });
                     // Read only checkbox
                     var checkboxReadonly = $('<input/>',{style: "display: inline-block; width: auto; vertical-align: top", class:"node-config-thingtype-readonly-property",type:"checkbox"})
-                        .appendTo(rowReadOnly)
+                        .appendTo(rowReadOnly)                       
                     //MQTT topic suffix
-                    var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 100px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
+                    var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
                     .appendTo(rowTopicSuffix)
                     //Ingress
-                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 100px)"})
+                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowIngress);
 
                     $("#node-config-ingress-list-items")
@@ -168,7 +207,7 @@
                             ingressProperty.append($("<option></option>").val(id).text(name));
                         })
                     //Egress
-                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 100px)"})
+                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowEgress);
 
                     $("#node-config-egress-list-items")
@@ -526,9 +565,17 @@
         <!-- Main tab -->
         <div id="tab-main" style="display:none">
             <div class="form-row">
-                <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
-                <input type="text" id="node-config-input-name" placeholder="Name">
+                <label for="node-config-input-name" style="width: 125px; padding-left: 10px;"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-config-input-name" placeholder="Name" style="width: calc(100% - 185px)">
             </div>
+            <div class="form-row">
+                <label for="node-config-input-contextStore" style="width: 125px; padding-left: 10px;"><i class="fa fa-database"></i> Context store</label>
+                <select id="node-config-input-contextStore" style="width: calc(100% - 185px)"></select>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-nodestatus" style="width: 125px; padding-left: 10px;"><i class="fa fa-quote-right"></i> Show state</label>
+                <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0" style="width: calc(100% - 185px)">
+            </div>            
             <div class="form-row">
                 <ol id="node-config-thingtype-list-items"></ol>
             </div>
