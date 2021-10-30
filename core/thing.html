@@ -62,6 +62,7 @@
             }
             $("#node-input-thingType").change( function () {
                 let thingType = RED.nodes.node($("#node-input-thingType").val());
+                if (typeof thingType == 'undefined') { return; }
                 if (thingType.readOnly) {
                     $("#cmnd-prefix").hide();
                 } else {

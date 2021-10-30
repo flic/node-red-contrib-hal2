@@ -22,6 +22,11 @@
 
             //get all thing nodes and sort them alphabetically
             const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            if (thingsList.length == 0) {
+                $("#div-main").hide();
+                $("#div-error").show();
+                return;
+            }
             thingsList.sort(function(a, b) {
                 var textA = a.name.toUpperCase();
                 var textB = b.name.toUpperCase();
@@ -77,22 +82,27 @@
 
 <script type="text/x-red" data-template-name="hal2Value">
 
-    <div class="form-row">
-        <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
-        <select id="node-input-thing" style="width:70%"></select>
+    <div class="form-row" id="div-error" hidden>
+        <p>No items found. Start by creating some Things.</p>
     </div>
-    <div class="form-row">
-        <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
-        <select id="node-input-item" style="width:70%"></select>
-    </div>
-    <div class="form-row">
-        <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output to</label>
-        <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">
-        <input type="hidden" id="node-input-outputType">
-    </div>
-    <div class="form-row">
-        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    <div class="form-row" id="div-main">
+        <div class="form-row" id="div-main">
+            <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
+            <select id="node-input-thing" style="width:70%"></select>
+        </div>
+        <div class="form-row">
+            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
+            <select id="node-input-item" style="width:70%"></select>
+        </div>
+        <div class="form-row">
+            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output to</label>
+            <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">
+            <input type="hidden" id="node-input-outputType">
+        </div>
+        <div class="form-row">
+            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+            <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        </div>
     </div>
 </script>
 

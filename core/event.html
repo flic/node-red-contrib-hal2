@@ -45,11 +45,17 @@
 
             //get all things and sort them alphabetically
             const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            if (thingsList.length == 0) {
+                $("#div-main").hide();
+                $("#div-error").show();
+                return;
+            }  
             thingsList.sort(function(a, b) {
                 var textA = a.name.toUpperCase();
                 var textB = b.name.toUpperCase();
                 return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
             });
+
             //get all groups and sort them alphabetically
             const groupsList = RED.nodes.filterNodes({type: "hal2Group"});
             groupsList.sort(function(a, b) {
@@ -196,36 +202,41 @@
 </script>
 
 <script type="text/x-red" data-template-name="hal2Event">
-    <div class="form-row">
-        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+    <div class="form-row" id="div-error" hidden>
+        <p>No items found. Start by creating some Things.</p>
     </div>
-    <div class="form-row">
-        <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
-        <select id="node-input-thing" style="width:70%"></select>
-    </div>
-    <div class="form-row" id="div-item">
-        <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
-        <select id="node-input-item" style="width:70%"></select>
-    </div>
-    <div class="form-row">
-        <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
-        <select id="node-input-operator" style="width:10%"></select>
-        <input type="text" id="node-input-compareValue" style="width:60%">
-        <input type="hidden" id="node-input-compareType">
-    </div>
-    <div class="form-row">
-        <label for="node-input-change">&nbsp;</label>
-        <select id="node-input-change" style="width:40%;"></select>
-    </div>
-    <div class="form-row">
-        <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
-        <input type="text" id="node-input-outputValue" style="width:70%"">
-        <input type="hidden" id="node-input-outputType">
-    </div>
-    <div class="form-row">
-        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    <div class="form-row" id="div-main">
+        <div class="form-row">
+            <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+            <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+        </div>
+        <div class="form-row">
+            <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
+            <select id="node-input-thing" style="width:70%"></select>
+        </div>
+        <div class="form-row" id="div-item">
+            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
+            <select id="node-input-item" style="width:70%"></select>
+        </div>
+        <div class="form-row">
+            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
+            <select id="node-input-operator" style="width:10%"></select>
+            <input type="text" id="node-input-compareValue" style="width:60%">
+            <input type="hidden" id="node-input-compareType">
+        </div>
+        <div class="form-row">
+            <label for="node-input-change">&nbsp;</label>
+            <select id="node-input-change" style="width:40%;"></select>
+        </div>
+        <div class="form-row">
+            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
+            <input type="text" id="node-input-outputValue" style="width:70%"">
+            <input type="hidden" id="node-input-outputType">
+        </div>
+        <div class="form-row">
+            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+            <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        </div>
     </div>
 </script>
 
