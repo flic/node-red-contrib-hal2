@@ -107,6 +107,11 @@
             for (let c in contextStores) {
                 $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>").appendTo("#node-config-input-contextStore");
             }
+            debugger
+            if (this.contextStore) {
+                $("#node-config-input-contextStore").val(this.contextStore);
+                $("#node-config-input-contextStore").trigger("change");
+            }
 
             $("#node-config-thingtype-list-items").editableList({
                 addItem: function(container,i,opt) {
