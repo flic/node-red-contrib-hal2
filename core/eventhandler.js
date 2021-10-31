@@ -15,13 +15,19 @@ module.exports = function(RED) {
             // Check all Things for heartbeat
             var thing;
             const date = Date.now();
+            var online;
             for (let n in hbList) {
                 thing = RED.nodes.getNode(hbList[n].id);
                 if (date-thing.thingType.hbTTL > thing.heartbeat) {
-                    thing.state['1'] = false;
-                    thing.showState();
+                    online=false;
                 } else {
-                    thing.state['1'] = true;
+                    online=true;
+                }
+
+                if (online != thing.state[1]) {
+                    thing.state['1'] = online;
+                    thing.laststate['1'] = !online;
+                    thing.heartbeat['1'] = date;
                     thing.showState();
                 }
             }            

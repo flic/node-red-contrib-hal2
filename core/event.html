@@ -10,6 +10,7 @@
             },
             name:           {},
             thing:          { value: "", required: true },
+            typeSel:        { value: "hal2Thing" },
             item:           { value: "", required: true },
             operator:       { value: "", required: true },
             change:         { value: "1" },
@@ -42,6 +43,7 @@
 
             var savedThing = this.thing;
             var savedItem = this.item;
+            var savedTypeSel = this.typeSel;
 
             //get all things and sort them alphabetically
             const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
@@ -64,8 +66,60 @@
                 return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
             });
 
+            //get all Thingtypes and sort them alphabetically
+            var thingTypeId = [];
+            for (let i in thingsList) {
+                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                    thingTypeId.push(thingsList[i].thingType);
+                }
+            }
+            var thingTypeList = [];
+            for (let i in thingTypeId) {
+                var thingType = RED.nodes.node(thingTypeId[i]);
+                thingTypeList.push(thingType);
+            }
+            thingTypeList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+
+            $("#node-input-typeSel").change( function() {
+                var nodeType = $("#node-input-typeSel").val();
+                switch (nodeType) {
+                    case "hal2Thing":
+                        //Add things
+                        $("#div-item").show();
+                        $("#node-input-thing").children().remove();
+                        for (var d in thingsList) {
+                            $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
+                        }
+                        $("#node-input-thing").trigger('change');
+                        break;
+                    case "hal2Group":
+                        //Add groups
+                        $("#div-item").hide();
+                        $("#node-input-thing").children().remove();
+                        for (let d in groupsList) {
+                            $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>").appendTo("#node-input-thing");
+                        }
+                        $("#node-input-thing").trigger('change');
+                        break;
+                    case "hal2ThingType":
+                        //Add groups
+                        $("#div-item").show();
+                        $("#node-input-thing").children().remove();
+                        for (let d in thingTypeList) {
+                            $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#node-input-thing");
+                        }
+                        $("#node-input-thing").trigger('change');
+                        break;
+                }                      
+            });
+
             $("#node-input-thing").change(function() {
                 let thing = RED.nodes.node($("#node-input-thing").val());
+                if (typeof thing === 'undefined') { return }
                 $("#node-input-item").children().remove();
 
                 if (thing.type == "hal2Thing") {    
@@ -80,32 +134,32 @@
                     if ($("#node-input-thing").val() == savedThing) {
                         $("#node-input-item").val(savedItem);
                     }
-                } else {
+                } else if (thing.type == "hal2Group") {
                     $("#div-item").hide();
                     $("<option value='" + thing.id + "'> " + thing.name + "</option>").appendTo("#node-input-item");
                     $("#node-input-item").val(thing.id)
+                } else if (thing.type == "hal2ThingType") {
+                    $("#div-item").show();  
+                    //get all items and sort them alphabetically
+                    let thingType = RED.nodes.node($("#node-input-thing").val());
+
+                    //Add items
+                    for (let d in thingType.items) {
+                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    }
+
+                    if ($("#node-input-thing").val() == savedThing) {
+                        $("#node-input-item").val(savedItem);
+                    }
                 }
-
-                // Borde man kunna välja device class i event? Samma drop-down eller en selector?
-                //device class = thing type? thing definition?
-                // device - function?
-
             });         
 
-            //Add groups
-            for (let d in groupsList) {
-                $("<option value='" + groupsList[d].id + "'> [" + groupsList[d].name + "]</option>").appendTo("#node-input-thing");
-
-            }
-            //Add things
-            for (var d in thingsList) {
-                $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
-            }
-
+            // Add values
             if (this.thing) {
-                $("#node-input-thing").val(this.thing);
-                $('#node-input-thing').trigger('change');
-
+                    $("#node-input-thing").val(this.thing);
+                    $('#node-input-thing').trigger('change');
+                    $("#node-input-typeSel").val(this.typeSel);
+                    $("#node-input-typeSel").trigger('change');
             }
             //Add operators
             for (var d in operators) {
@@ -204,6 +258,14 @@
         <div class="form-row">
             <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
             <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+        </div>
+        <div class="form-row">
+            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Type</label>
+            <select id="node-input-typeSel" style="width:70%">
+                <option value='hal2Thing'>Thing</option>
+                <option value='hal2Group'>Group</option>
+                <option value='hal2ThingType'>Type</option>
+            </select>
         </div>
         <div class="form-row">
             <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>

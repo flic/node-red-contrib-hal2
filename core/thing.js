@@ -140,6 +140,7 @@ module.exports = function(RED) {
                         }
                     }
                     node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);
+                    node.eventHandler.publish('update',node.thingType.id,node.thingType.items[i].id,eventmsg);
                     node.showState();
                 }
             }

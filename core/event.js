@@ -11,6 +11,7 @@ module.exports = function(RED) {
         this.compareType = config.compareType;
         this.outputValue = config.outputValue;
         this.outputType = config.outputType;
+        this.typeSel = config.typeSel;
         var node = this;
 
         //a=state, b=compare value, c=oldState/ruleMatch
