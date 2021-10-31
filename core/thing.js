@@ -48,23 +48,35 @@ module.exports = function(RED) {
         if (typeof node.state === 'undefined') { node.state = {}; }
         if (typeof node.heartbeat === 'undefined') { node.heartbeat = {}; }
 
+        node.showState = function () {
+            var statusMsg = [];
 
-        function showState() {
-            if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { return; }
-            
-            var stateStr = node.thingType.nodestatus;
-            for (let i in node.thingType.items) {
-                if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
-                    stateStr = stateStr.replace("%"+node.thingType.items[i].name,'no value');
-                } else {
-                    stateStr = stateStr.replace("%"+node.thingType.items[i].name,node.state[node.thingType.items[i].id]);
-                }
+            // Heartbeat
+            if (node.thingType.hbCheck) {
+                statusMsg["shape"] = "dot";
+
+                if (node.state[1] === 'undefined') { statusMsg["fill"] = "gray"; }
+                if (node.state[1] === true) { statusMsg["fill"] = "green"; }
+                if (node.state[1] === false) { statusMsg["fill"] = "red"; }
             }
-            //node.status({fill:"green",text:stateStr});
-            node.status({text:stateStr});
+
+            if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { 
+                node.status(statusMsg);
+            } else {            
+                var stateStr = node.thingType.nodestatus;
+                for (let i in node.thingType.items) {
+                    if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
+                        stateStr = stateStr.replace("%"+node.thingType.items[i].name,'no value');
+                    } else {
+                        stateStr = stateStr.replace("%"+node.thingType.items[i].name,node.state[node.thingType.items[i].id]);
+                    }
+                }
+                statusMsg["text"] = stateStr;
+                node.status(statusMsg);
+            }
         }
             
-        showState();
+        node.showState();
 
         node.on('input', function(msg) {
             var eventmsg;
@@ -128,7 +140,7 @@ module.exports = function(RED) {
                         }
                     }
                     node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);
-                    showState();
+                    node.showState();
                 }
             }
         });
@@ -181,17 +193,25 @@ module.exports = function(RED) {
                 if (command != null) {
                     node.send(command);
                 }
-    
             }
 
             // Start listening for events
             node.eventHandler.subscribe('command', node.id, node.listener);
+
+            // Register heartbeat check
+            if ((node.thingType.hbCheck) && (node.thingType.hbType == "ttl")) {
+                node.eventHandler.registerHeartbeat(node.id,node.thingType.hbTTL);
+            }
         }
         
         node.on("close",function() { 
             if (node.eventHandler) {
                 node.eventHandler.unsubscribe('command', node.id, node.listener);
+                if ((node.thingType.hbCheck) && (node.thingType.hbType == "ttl")) {
+                    node.eventHandler.unregisterHeartbeat(node.id);
+                }
             }
+
         });
     }
     RED.nodes.registerType("hal2Thing",hal2Thing);

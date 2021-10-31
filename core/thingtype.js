@@ -8,6 +8,13 @@ module.exports = function(RED) {
         this.ingress = config.ingress;
         this.egress = config.egress;
         this.readOnly = config.readOnly;
+        this.hbCheck= config.hbCheck;
+        this.hbType = config.hbType;
+        this.hbTTL = config.hbTTL;
+        this.hbLWT = config.hbLWT;
+        this.hbFilterVal = config.hbFilterVal;
+        this.hbFilterType = config.hbFiltertype;
+
     }
     RED.nodes.registerType("hal2ThingType",hal2ThingType);
 }

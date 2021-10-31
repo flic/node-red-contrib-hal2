@@ -20,7 +20,13 @@
             items: { value: [], required: true },
             ingress: {},
             egress: {},
-            readOnly: {}
+            readOnly: {},
+            hbCheck: { value:false },
+            hbType: { value:"lwt" },
+            hbTTL: {},
+            hbLWT: {},
+            hbFilterVal: {},
+            hbFilterType: {}
         },
         label: function () {
             return this.name || "Thing type";
@@ -107,11 +113,33 @@
             for (let c in contextStores) {
                 $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>").appendTo("#node-config-input-contextStore");
             }
-            debugger
             if (this.contextStore) {
                 $("#node-config-input-contextStore").val(this.contextStore);
                 $("#node-config-input-contextStore").trigger("change");
             }
+
+            // Heartbeat
+            $("#node-config-input-hbCheck").change( function () {
+                if ($("#node-config-input-hbCheck").is(":checked")) {
+                    $("#check-heartbeat").show();
+                } else {
+                    $("#check-heartbeat").hide();
+                }
+            });
+            $("#node-config-input-hbType").change( function () {
+                if ($("#node-config-input-hbType").val() == "ttl") {
+                    $("#heartbeat-ttl").show();
+                    $("#heartbeat-lwt").hide();
+                } else {
+                    $("#heartbeat-ttl").hide();
+                    $("#heartbeat-lwt").show();                
+                }
+            });
+            $('#node-config-input-hbFilterVal').typedInput({
+                default: 'StrEnd',
+                typeField: $("#node-config-input-hbFilterType"),
+                types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
+            });              
 
             $("#node-config-thingtype-list-items").editableList({
                 addItem: function(container,i,opt) {
@@ -158,7 +186,6 @@
                             rowDetails.hide();
                         }
                     });
-
 
                     //Add labels
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
@@ -485,6 +512,20 @@
             } else {
                 $("#node-config-thingtype-list-items").editableList('addItem',null);
             }
+
+            // Add ingress items to heartbeat
+            $("#node-config-ingress-list-items")
+                .editableList('items')
+                .each(function() {
+                    var item = $(this);
+                    let name = item.find(".node-config-ingress-name-property").val();
+                    let id = item.find(".node-config-ingress-id-property").val();
+                    $("#node-config-input-hbLWT").append($("<option></option>").val(id).text(name));
+                })
+            if (this.hbLWT) {
+                $("#node-config-input-hbLWT").val(this.hbLWT);
+            }
+            $("#node-config-input-hbType").trigger('change');
         },
         oneditsave: function () {
             var node = this;
@@ -495,6 +536,19 @@
             node.readOnly = true;
 
             // Main tab
+            if ($("#node-config-input-checkHeartbeat").is(":checked")) {
+                let r = {
+                        name: "Online",
+                        id: "1",
+                        topicFilterType:"",
+                        topicFilterValue:"",
+                        topicSuffix: "",
+                        readOnly: true,
+                        ingress:$("#node-config-input-heartbeatLWT").val(),
+                        egress: ""
+                }
+                node.items.push(r); 
+            }
             $("#node-config-thingtype-list-items")
                 .editableList('items')
                 .each(function() {
@@ -507,7 +561,7 @@
                         topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
                         readOnly:item.find(".node-config-thingtype-readonly-property").is(":checked"),
                         ingress:item.find(".node-config-thingtype-ingress-property").val(),
-                        egress:item.find(".node-config-thingtype-egress-property").val(),
+                        egress:item.find(".node-config-thingtype-egress-property").val()
                     }
                     if (!r.readOnly) {
                         node.readOnly = false;
@@ -582,26 +636,35 @@
                 <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0" style="width: calc(100% - 185px)">
             </div>
             <div class="form-row">
-                <label for="node-config-input-checkHeartbeat"><i class="fa fa-heartbeat"></i> Check heartbeat</label>
-                <input type="checkbox" id="node-config-input-checkHeartbeat" style="display: inline-block; width: auto; vertical-align: top;">
+                <label for="node-config-input-hbCheck" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Heartbeat</label>
+                <input type="checkbox" id="node-config-input-hbCheck" style="display: inline-block; width: auto; vertical-align: top">
             </div>
             <div class="form-row" id="check-heartbeat" hidden>
                 <div class="form-row">
-                    <label for="node-config-input-heartbeatType">&nbsp;</label>
-                    <select id="node-config-input-heartbeatType" style="width:40%;">
-                        <option value="heartbeat">Heartbeat</option>
-                        <option value="lwt">Last Will</option>
+                    <label for="node-config-input-hbType" style="width: 125px; padding-left: 10px;"> Type</label>
+                    <select id="node-config-input-hbType"  style="width: calc(100% - 185px)">
+                        <option value="ttl">Heartbeat</option>
+                        <option value="lwt" selected>Last Will</option>
                     </select>
                 </div>
                 <div class="form-row" id="heartbeat-ttl">
                     <div class="form-row">
-                        <label for="node-config-input-heartbeat-ttl"><i class="fa fa-heartbeat"></i> Warn after (seconds)</label>
-                        <input type="number" id="node-config-input-heartbeat-ttl" style="display: inline-block; width: auto; vertical-align: top;" min="1000" value="86400">
+                        <label for="node-config-input-hbTTL" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Warn after (seconds)</label>
+                        <input type="number" id="node-config-input-hbTTL" style="width: calc(100% - 185px)" min="1" value="86400">
                     </div>                    
                 </div>
                 <div class="form-row" id="heartbeat-lwt" hidden>
+                    <div class="form-row">
+                        <label for="node-config-input-hbFilterVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Topic filter</label>
+                        <input type="text" id="node-config-input-hbFilterVal" style="width: calc(100% - 185px)">
+                        <input type="hidden" id="node-config-input-hbFilterType">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-hbLWT" style="width: 125px; padding-left: 10px;"><i class="fa fa-sign-in"></i> Ingress</label>
+                        <select id="node-config-input-hbLWT" style="width: calc(100% - 185px)"></select>
+                        <div class="form-tips" id="LWTNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);"><b>Note:</b> Ingress function should return true or false.</div>
+                    </div>   
                 </div>
-
             </div>            
             <div class="form-row">
                 <ol id="node-config-thingtype-list-items"></ol>

@@ -6,17 +6,50 @@ module.exports = function(RED) {
         this.checkHeartbeat = config.checkHeartbeat;
         this.heartbeat = config.heartbeat;
         var node = this;
+        var hbList = [];
 
         node.debug("Max listeners set to "+node.maxlisteners);
         node.setMaxListeners(Number(node.maxlisteners));
 
+        function checkHeartbeat() {
+            // Check all Things for heartbeat
+            var thing;
+            const date = Date.now();
+            for (let n in hbList) {
+                thing = RED.nodes.getNode(hbList[n].id);
+                if (date-thing.thingType.hbTTL > thing.heartbeat) {
+                    thing.state['1'] = false;
+                    thing.showState();
+                } else {
+                    thing.state['1'] = true;
+                    thing.showState();
+                }
+            }            
+        }
+
         if (this.heartbeat) {
             node.debug("Heartbeat check interval set to "+node.heartbeat);
-            setInterval(function(){
-                // Check all Things for heartbeat
-                node.error("heartbeat check");
-            }, this.heartbeat*1000);
+            setTimeout(checkHeartbeat, 5000);
+            setInterval(checkHeartbeat, this.heartbeat*1000);
         }
+
+        node.registerHeartbeat = function (id, ttl) {
+            var hb = {
+                id: id,
+                ttl: ttl
+            }
+            hbList.push(hb);
+            node.debug("Added heartbeat TTL check for "+id);
+        }
+
+        node.unregisterHeartbeat = function (id) {
+            var tempArray = [];
+            for (let i in hbList) {
+                if (hbList[i].id != id) { tempArray.push(hbList[i])}
+            }
+            hbList = [...tempArray];
+            node.debug("Removed heartbeat TTL check for "+id);
+        }        
 
         node.subscribe = function (event, id, listener) {
             let eventStr = event+"_"+id;
