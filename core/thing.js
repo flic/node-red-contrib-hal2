@@ -35,6 +35,7 @@ module.exports = function(RED) {
         this.thingType = RED.nodes.getNode(config.thingType);
         this.eventHandler = RED.nodes.getNode(config.eventHandler);
         this.name = config.name;
+        this.notes = config.notes;
         this.topicPrefix = config.topicPrefix;
         this.topicFilter = config.topicFilter;
         this.topicFilterType = config.topicFilterType;

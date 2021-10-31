@@ -40,6 +40,13 @@
                 //get all items and sort them alphabetically
                 let thing = RED.nodes.node($("#node-input-thing").val());
                 let thingType = RED.nodes.node(thing.thingType);
+                // Show notes
+                if (thing.notes) {
+                    $("#row-notes").show();
+                    $("#thing-notes").val(thing.notes);
+                } else {
+                    $("#row-notes").hide();
+                }
                 //Add items
                 for (let d in thingType.items) {
                     $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
@@ -90,6 +97,10 @@
             <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
             <select id="node-input-item" style="width:70%"></select>
         </div>
+        <div class="form-row" id="row-notes" style="width:100%" hidden>
+            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="thing-notes" class="form-tips" style="width:70%"></textarea>
+        </div>        
         <div class="form-row">
             <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output to</label>
             <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">

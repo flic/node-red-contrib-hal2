@@ -63,28 +63,44 @@
                     var rowThing = $('<div/>').appendTo(container);
                     var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
 
                     //Add labels
                     var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
-                        .appendTo(rowThing);
-                    labelThing.append(' Thing');
+                        .appendTo(rowThing)
+                        .append(' Thing')
                     var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
-                        .appendTo(rowItem);
-                    labelItem.append(' Item');
+                        .appendTo(rowItem)
+                        .append(' Item')
                     var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
-                        .appendTo(rowCommand);
-                    labelCommand.append(' Cmnd');
+                        .appendTo(rowCommand)
+                        .append(' Cmnd')
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes)
+                        .append(' Notes')
 
-                    var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 70px)"}).appendTo(rowThing);
-                    var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 70px)"}).appendTo(rowItem);
+                    var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 70px)"})
+                        .appendTo(rowThing);
+                    var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 70px)"})
+                        .appendTo(rowItem);
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 70px)"})
+                        .appendTo(rowNotes);
 
                     thingsField.change(function() {
                         let thing = RED.nodes.node(thingsField.val());
                         itemsField.children().remove();
 
                         if (thing.type == "hal2Thing") {    
-                            rowItem.show();                        
-                            //get all items and sort them alphabetically
+                            rowItem.show();
+                            // Show notes
+                            if (thing.notes) {
+                                rowNotes.show();
+                                notesField.val(thing.notes);
+                            } else {
+                                rowNotes.hide();
+                            }
                             let thingType = RED.nodes.node(thing.thingType);
                             //Add items                            
                             for (let d in thingType.items) {

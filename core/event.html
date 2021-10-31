@@ -123,7 +123,14 @@
                 $("#node-input-item").children().remove();
 
                 if (thing.type == "hal2Thing") {    
-                    $("#div-item").show();  
+                    $("#div-item").show();
+                    // Show notes
+                    if (thing.notes) {
+                        $("#row-notes").show();
+                        $("#thing-notes").val(thing.notes);
+                    } else {
+                        $("#row-notes").hide();
+                    }
                     //get all items and sort them alphabetically
                     let thingType = RED.nodes.node(thing.thingType);
                     //Add items
@@ -274,6 +281,10 @@
         <div class="form-row" id="div-item">
             <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
             <select id="node-input-item" style="width:70%"></select>
+        </div>
+        <div class="form-row" id="row-notes" style="width:100%" hidden>
+            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="thing-notes" class="form-tips" style="width:70%"></textarea>
         </div>
         <div class="form-row">
             <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>

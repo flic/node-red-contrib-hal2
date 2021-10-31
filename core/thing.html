@@ -28,6 +28,7 @@
             topicFilter:        { value: "" },
             topicFilterType:    {},
             topicPrefix:        { value: "" },
+            notes:              {},
             outputs:            { value: 0 } //Storing if outputs are enabled.
         },
         inputs: 1,
@@ -107,6 +108,10 @@
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+    </div>
+    <div class="form-row">
+        <label for="node-input-notes"><i class="fa fa-file"></i> Notes</label>
+        <textarea id="node-input-notes" style="width:70%"></textarea>
     </div>
 </script>
 

@@ -56,30 +56,45 @@
                     });
 
                     //Add rows
-                    var row1 = $('<div/>').appendTo(container);
-                    var row2 = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var row3 = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()                    
+                    var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+
 
 
                     //Add labels
-                    var label1 = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
-                        .appendTo(row1);
-                    label1.append(' Thing');
-                    var label2 = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
-                        .appendTo(row2);
-                    label2.append(' Item');
-                    var label3 = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;"})
-                        .appendTo(row3);
-                    label3.append(' Rule');
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
+                        .appendTo(rowName)
+                        .append(' Thing')
+                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
+                        .appendTo(rowItem)
+                        .append(' Item')
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes)
+                        .append(' Notes')                         
+                    var labelRule = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;"})
+                        .appendTo(rowRule)
+                        .append(' Rule')   
 
-                    var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 70px)"}).appendTo(row1);
-                    var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 70px)"}).appendTo(row2);
+                    var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 70px)"}).appendTo(rowName);
+                    var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 70px)"}).appendTo(rowItem);
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 70px)"}).appendTo(rowNotes);
 
                     thingsField.change(function() {
                         itemsField.children().remove();
                         //get all items and sort them alphabetically
                         let thing = RED.nodes.node(thingsField.val());
                         let thingType = RED.nodes.node(thing.thingType);
+                        // Show notes
+                        if (thing.notes) {
+                            rowNotes.show();
+                            notesField.val(thing.notes);
+                        } else {
+                            rowNotes.hide();
+                        }
                         //Add items                            
                         for (let d in thingType.items) {
                             itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
@@ -96,14 +111,14 @@
                     }
 
                     //Add operators
-                    var operatorField = $('<select/>',{class:"node-input-rule-operator"}).appendTo(row3);
+                    var operatorField = $('<select/>',{class:"node-input-rule-operator"}).appendTo(rowRule);
                     for (var d in operators) {
                         operatorField.append($("<option></option>").val(operators[d].v).text(operators[d].t));
                     }
 
                     //Add comparison value field
                     var valueField = $('<input/>',{class:"node-input-rule-value",type:"text"})
-                        .appendTo(row3)
+                        .appendTo(rowRule)
                         .typedInput({
                             default:'num'
                         });
