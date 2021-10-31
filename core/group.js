@@ -17,6 +17,7 @@ module.exports = function(RED) {
             var queue = [];
             for (var i = 0; i < node.group.length; i += 1) {
                 command = {
+                    thing: node.group[i].thing,
                     item: node.group[i].item,
                     payload: payload
                 }
@@ -26,25 +27,46 @@ module.exports = function(RED) {
         }
 
         if (node.eventHandler) {
-            node.updateListener = function(id, payload) {
-                node.eventHandler.publish("update",node.id,payload);
+            node.updateListener = function(thingid, itemid, payload) {
+                var match = false;
+                for (let g in node.group) {
+                    if ((node.group[g].thing == thingid) && (node.group[g].item == itemid)) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (match) {
+                    node.eventHandler.publish("update",node.id,node.id,payload);
+                    node.send(payload);
+                }
             }
 
-            node.commandListener = function(id, payload) {
+            node.commandListener = function(thingid, itemid, payload) {
                 sendCommand(payload);
             }
 
             // Start listening for events
+            var things = [];
             for (let g in node.group) {
-                node.eventHandler.subscribe('update', node.group[g].item, node.updateListener);
+                things.push(node.group[g].thing);
+            }
+            var uniqueThings = [...new Set(things)];
+            for (let t in uniqueThings) {
+                node.eventHandler.subscribe('update', uniqueThings[t], node.updateListener);
             }
             node.eventHandler.subscribe('command', node.id, node.commandListener);
         }
 
         node.on("close",function() { 
             if (node.eventHandler) {
-                for (let g in events) {
-                    node.eventHandler.unsubscribe('update', node.group[g].item, node.listener);
+                var things = [];
+                for (let g in node.group) {
+                    things.push(node.group[g].thing);
+                }
+                var uniqueThings = [...new Set(things)];
+                uniqueThings = Array.from(uniqueThings);
+                for (let t in uniqueThings) {
+                    node.eventHandler.unsubscribe('update', uniqueThings[t], node.updateListener);
                 }
                 node.eventHandler.unsubscribe('command', node.id, node.commandListener);
             }

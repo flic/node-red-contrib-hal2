@@ -39,7 +39,8 @@ module.exports = function(RED) {
         };
 
         if (node.eventHandler) {
-            node.listener = function(id, event) {
+            node.listener = function(thingid, itemid, event) {
+                if (itemid != node.item) { return; }
                 if (node.change == '2' && event.laststate == undefined) { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
                 if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){
@@ -48,7 +49,7 @@ module.exports = function(RED) {
 
                     switch (node.outputType) {
                         case 'state':
-                            msg = event;
+                            msg = RED.util.cloneMessage(event);
                             break;
                         case 'flow':
                             msg.payload = node.context().flow.get(node.outputValue);
@@ -67,12 +68,12 @@ module.exports = function(RED) {
             }
 
             // Start listening for events
-            node.eventHandler.subscribe('update', node.item, node.listener);
+            node.eventHandler.subscribe('update', node.thing, node.listener);
         }
             
         node.on("close",function() { 
             if (node.eventHandler) {
-                node.eventHandler.unsubscribe('update', node.item, node.listener);
+                node.eventHandler.unsubscribe('update', node.thing, node.listener);
             }
         });
     }

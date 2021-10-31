@@ -4,7 +4,9 @@
             category: 'config',
             defaults: {
                 name:  {value: "Event handler"},
-                maxlisteners: {value: "50"}
+                maxlisteners: {value: "50"},
+                checkHeartbeat: {value: false},
+                heartbeat: {value: 3600}
             },
             label: function () {
                 return this.name || "Event handler";
@@ -27,5 +29,10 @@
     <div class="form-row">
         <label for="node-config-input-maxlisteners"><i class="fa fa-sign-out"></i> Max event listeners (0 for unlimited)</label>
         <input type="number" id="node-config-input-maxlisteners" style="display: inline-block; width: auto; vertical-align: top;" min="0" max="500" value="50">
+    </div>
+
+    <div class="form-row">
+        <label for="node-config-input-heartbeat"><i class="fa fa-heartbeat"></i> Heartbeat check interval (seconds)</label>
+        <input type="number" id="node-config-input-heartbeat" style="display: inline-block; width: auto; vertical-align: top;" min="1000" value="3600">
     </div>
 </script>

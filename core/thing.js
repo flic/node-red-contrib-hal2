@@ -37,15 +37,17 @@ module.exports = function(RED) {
         this.name = config.name;
         this.topicPrefix = config.topicPrefix;
         this.topicFilter = config.topicFilter;
-        this.topicFilterType = config.topicFilterType; 
+        this.topicFilterType = config.topicFilterType;
         var node = this;
         var nodeContext = this.context();
 
-
         node.laststate = nodeContext.get("laststate",node.thingType.contextStore);
         node.state = nodeContext.get("state",node.thingType.contextStore);
+        node.heartbeat = nodeContext.get("heartbeat",node.thingType.contextStore);
         if (typeof node.laststate === 'undefined') { node.laststate = {}; }
         if (typeof node.state === 'undefined') { node.state = {}; }
+        if (typeof node.heartbeat === 'undefined') { node.heartbeat = {}; }
+
 
         function showState() {
             if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { return; }
@@ -102,6 +104,9 @@ module.exports = function(RED) {
                     node.debug("State "+node.thingType.items[i].name+"["+node.thingType.items[i].id+"] set to value '"+result+"'");
                     node.laststate[node.thingType.items[i].id] = node.state[node.thingType.items[i].id];
                     node.state[node.thingType.items[i].id] = result;
+                    node.heartbeat[node.thingType.items[i].id] = Date.now();
+                    node.heartbeat[node.id] = Date.now();
+
                     // Save to node context
                     nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
                     nodeContext.set("state",node.state,node.thingType.contextStore);
@@ -110,23 +115,26 @@ module.exports = function(RED) {
                         state: result,
                         laststate: node.laststate[node.thingType.items[i].id],
                         topic: msg.topic,
+                        payload: result,
                         thing: {
                             name: node.name,
-                            id: node.id
+                            id: node.id,
+                            heartbeat: node.heartbeat[node.id]
                         },
                         item: {
                             name: node.thingType.items[i].name,
-                            id: node.thingType.items[i].id
+                            id: node.thingType.items[i].id,
+                            heartbeat: node.heartbeat[node.thingType.items[i].id]
                         }
                     }
-                    node.eventHandler.publish('update',node.thingType.items[i].id,eventmsg);
+                    node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);
                     showState();
                 }
             }
         });
 
         if (node.eventHandler) {
-            node.listener = function(id, payload) {
+            node.listener = function(thingid, itemid, payload) {
                 var item;
 
                 if (!node.thingType.items) {
@@ -135,7 +143,7 @@ module.exports = function(RED) {
                 }
     
                 for (i in node.thingType.items) {
-                    if (node.thingType.items[i].id == id){
+                    if (node.thingType.items[i].id == itemid){
                         item = node.thingType.items[i];
                         break;
                     }
@@ -177,22 +185,12 @@ module.exports = function(RED) {
             }
 
             // Start listening for events
-            for (i in node.thingType.items) {
-                let item = node.thingType.items[i];
-                if (!node.thingType.items[i].readOnly) {
-                    node.eventHandler.subscribe('command', node.thingType.items[i].id, node.listener);
-                }
-            }
+            node.eventHandler.subscribe('command', node.id, node.listener);
         }
         
         node.on("close",function() { 
             if (node.eventHandler) {
-                for (i in node.thingType.items) {
-                    let item = node.thingType.items[i];
-                    if (!node.thingType.items[i].readOnly) {
-                        node.eventHandler.unsubscribe('command', node.thingType.items[i].id, node.listener);
-                    }
-                }            
+                node.eventHandler.unsubscribe('command', node.id, node.listener);
             }
         });
     }

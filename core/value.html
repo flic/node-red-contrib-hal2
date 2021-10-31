@@ -4,10 +4,11 @@
         color: '#b3b3ff',
         defaults: {
             name:           {},
-            thing:          { required: true },
-            item:           { required: true },           
+            thing:          { required: true   },
+            item:           { required: true   },           
             outputValue:    { value: "payload" },
-            outputType:     { required: true }
+            outputType:     { required: true   },
+            heartbeat:      { value: false     }
         },
         inputs:1,
         outputs:1,
@@ -94,6 +95,10 @@
             <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">
             <input type="hidden" id="node-input-outputType">
         </div>
+        <div class="form-row">
+            <label for="node-input-heartbeat"><i class="fa fa-heartbeat"></i> Heartbeat</label>
+            <input type="checkbox" id="node-input-heartbeat" style="display: inline-block; width: auto; vertical-align: top;">
+        </div>        
         <div class="form-row">
             <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
             <input type="text" id="node-input-name" placeholder="Name" style="width:70%">

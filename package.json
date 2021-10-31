@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-hal2",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "A set of nodes to help with basic home automation logic",
   "repository": {
     "type": "git",

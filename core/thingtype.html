@@ -580,6 +580,28 @@
             <div class="form-row">
                 <label for="node-config-input-nodestatus" style="width: 125px; padding-left: 10px;"><i class="fa fa-quote-right"></i> Show state</label>
                 <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0" style="width: calc(100% - 185px)">
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-checkHeartbeat"><i class="fa fa-heartbeat"></i> Check heartbeat</label>
+                <input type="checkbox" id="node-config-input-checkHeartbeat" style="display: inline-block; width: auto; vertical-align: top;">
+            </div>
+            <div class="form-row" id="check-heartbeat" hidden>
+                <div class="form-row">
+                    <label for="node-config-input-heartbeatType">&nbsp;</label>
+                    <select id="node-config-input-heartbeatType" style="width:40%;">
+                        <option value="heartbeat">Heartbeat</option>
+                        <option value="lwt">Last Will</option>
+                    </select>
+                </div>
+                <div class="form-row" id="heartbeat-ttl">
+                    <div class="form-row">
+                        <label for="node-config-input-heartbeat-ttl"><i class="fa fa-heartbeat"></i> Warn after (seconds)</label>
+                        <input type="number" id="node-config-input-heartbeat-ttl" style="display: inline-block; width: auto; vertical-align: top;" min="1000" value="86400">
+                    </div>                    
+                </div>
+                <div class="form-row" id="heartbeat-lwt" hidden>
+                </div>
+
             </div>            
             <div class="form-row">
                 <ol id="node-config-thingtype-list-items"></ol>

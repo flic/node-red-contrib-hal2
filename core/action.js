@@ -16,7 +16,8 @@ module.exports = function(RED) {
             for (let i = 0; i < node.commandset.length; i += 1) {
                 command = {
                     payload: "",
-                    item: ""
+                    item: "",
+                    thing: ""
                 };
 
                 switch (node.commandset[i].type) {
@@ -34,6 +35,7 @@ module.exports = function(RED) {
                         break;
                 }
                 command.item = node.commandset[i].item;
+                command.thing = node.commandset[i].thing;
                 queue.push(command);
             }
             common.queueSend(node,queue);

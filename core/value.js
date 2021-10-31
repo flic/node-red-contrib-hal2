@@ -5,6 +5,7 @@ module.exports = function(RED) {
         this.item = config.item;
         this.outputValue = config.outputValue;
         this.outputType = config.outputType;
+        this.heartbeat = config.heartbeat;
         var node = this;
 
         node.on('input', function(msg) {
@@ -25,6 +26,9 @@ module.exports = function(RED) {
                 case 'msg':
                     msg[node.outputValue] = thing.state[node.item];
                     break;
+            }
+            if (node.heartbeat) {
+                msg.heartbeat = thing.heartbeat[node.item];
             }
             node.send(msg);
         });
