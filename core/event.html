@@ -40,7 +40,7 @@
                 { v: "true", t: "is true" },
                 { v: "false", t: "is false" }
             ];
-
+debugger
             var savedThing = this.thing;
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;
@@ -90,27 +90,42 @@
                     case "hal2Thing":
                         //Add things
                         $("#div-item").show();
+                        $("#label-node-input-thing").text(" Thing");
+                        $("#label-node-input-thing").attr('class','fa fa-microchip')
                         $("#node-input-thing").children().remove();
                         for (var d in thingsList) {
                             $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
+                        }
+                        if (savedTypeSel == 'hal2Thing') {
+                            $("#node-input-thing").val(savedThing);
                         }
                         $("#node-input-thing").trigger('change');
                         break;
                     case "hal2Group":
                         //Add groups
                         $("#div-item").hide();
+                        $("#label-node-input-thing").text(" Group");
+                        $("#label-node-input-thing").attr('class','fa fa-object-group');
                         $("#node-input-thing").children().remove();
                         for (let d in groupsList) {
                             $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>").appendTo("#node-input-thing");
+                        }
+                        if (savedTypeSel == 'hal2Group') {
+                            $("#node-input-thing").val(savedThing);
                         }
                         $("#node-input-thing").trigger('change');
                         break;
                     case "hal2ThingType":
                         //Add groups
                         $("#div-item").show();
+                        $("#label-node-input-thing").text(" Type");
+                        $("#label-node-input-thing").attr('class','fa fa-gears');
                         $("#node-input-thing").children().remove();
                         for (let d in thingTypeList) {
                             $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#node-input-thing");
+                        }
+                        if (savedTypeSel == 'hal2ThingType') {
+                            $("#node-input-thing").val(savedThing);
                         }
                         $("#node-input-thing").trigger('change');
                         break;
@@ -137,7 +152,7 @@
                     for (let d in thingType.items) {
                         $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                     }
-
+debugger
                     if ($("#node-input-thing").val() == savedThing) {
                         $("#node-input-item").val(savedItem);
                     }
@@ -162,11 +177,12 @@
             });         
 
             // Add values
+            
             if (this.thing) {
-                    $("#node-input-thing").val(this.thing);
-                    $('#node-input-thing').trigger('change');
                     $("#node-input-typeSel").val(this.typeSel);
                     $("#node-input-typeSel").trigger('change');
+                    $("#node-input-thing").val(this.thing);
+                    $('#node-input-thing').trigger('change');
             }
             //Add operators
             for (var d in operators) {
@@ -252,7 +268,9 @@
             });
         },
         oneditsave: function () {
-
+            this.typeSel = $("#node-input-typeSel").val();
+            this.thing =   $("#node-input-thing").val();
+            debugger
         }
     });
 </script>
@@ -267,7 +285,7 @@
             <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
         </div>
         <div class="form-row">
-            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Type</label>
+            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Category</label>
             <select id="node-input-typeSel" style="width:70%">
                 <option value='hal2Thing'>Thing</option>
                 <option value='hal2Group'>Group</option>
@@ -275,7 +293,7 @@
             </select>
         </div>
         <div class="form-row">
-            <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
+            <label for="node-input-thing" id="label-node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
             <select id="node-input-thing" style="width:70%"></select>
         </div>
         <div class="form-row" id="div-item">
