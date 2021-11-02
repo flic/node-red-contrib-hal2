@@ -95,6 +95,8 @@ module.exports = function(RED) {
             }
 
             for (var i in node.thingType.items) {
+                if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'ttl')) { continue; }
+
                 if (node.thingType.items[i].topicFilterValue) {
                     if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,node.thingType.items[i].topicFilterValue) == false) { continue; }
                 }
