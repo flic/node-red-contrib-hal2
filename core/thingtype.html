@@ -105,7 +105,34 @@
                     id: createId(),
                     fn: "// msg object is passed to function\n\nreturn msg.payload;"
                 }
-            }            
+            }
+        var lastTab = "";
+        
+        function updateMainTab(id) {
+            var items = [];
+            $("#node-config-"+id+"-list-items")
+                .editableList('items')
+                .each(function() {
+                    let item = $(this);
+                    let params = {
+                        name:item.find(".node-config-"+id+"-name-property").val(),
+                        id:item.find(".node-config-"+id+"-id-property").val()
+                    }
+                    items.push(params);
+                })
+                
+            $("#node-config-thingtype-list-items")
+                .editableList('items')
+                .each(function() {
+                    var property = this.find(".node-config-thingtype-"+id+"-property");
+                    let saveValue = property.val();
+                    property.children().remove();
+                    for (let i in items) {
+                        property.append($("<option></option>").val(items[i].id).text(items[i].name));
+                    }
+                    property.val(saveValue);                                 
+                });                     
+        }
 
         // Create tabs
             var tabs = RED.tabs.create({
@@ -114,6 +141,15 @@
                     $("#tabs-content").children().hide();
                     $("#" + tab.id).show();
 
+                    switch (lastTab) {
+                        case 'tab-ingress':
+                            updateMainTab('ingress');
+                            break;
+                        case 'tab-egress':
+                            updateMainTab('egress')
+                            break;
+                    }
+                    lastTab = tab.id;
                 }
             });
             tabs.addTab({
@@ -402,7 +438,7 @@
                     }
                 },
                 removable: true,
-                sortable: false,
+                sortable: true,
                 addButton: "Add ingress function"
             });
 
@@ -496,7 +532,7 @@
                     }
                 },
                 removable: true,
-                sortable: false,
+                sortable: true,
                 addButton: "Add egress function"
             });
 
