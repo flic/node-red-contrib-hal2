@@ -5,7 +5,7 @@ module.exports = function(RED) {
         this.item = config.item;
         this.outputValue = config.outputValue;
         this.outputType = config.outputType;
-        this.heartbeat = config.heartbeat;
+        this.info = config.info;
         var node = this;
 
         node.on('input', function(msg) {
@@ -27,8 +27,21 @@ module.exports = function(RED) {
                     msg[node.outputValue] = thing.state[node.item];
                     break;
             }
-            if (node.heartbeat) {
-                msg.heartbeat = thing.heartbeat[node.item];
+            if (node.info) {
+                var i;
+                for (i in thing.thingType.items) {
+                    if (thing.thingType.items[i].id == node.item) { break; }
+                }
+                msg.thing = {
+                    name: thing.name,
+                    id: thing.id,
+                    last_update: thing.heartbeat[node.item]
+                }
+                msg.item = {
+                    name: thing.thingType.items[i].name,
+                    id: thing.thingType.items[i].id,
+                    last_update: thing.heartbeat[node.item]
+                }
             }
             node.send(msg);
         });

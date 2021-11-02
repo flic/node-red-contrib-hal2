@@ -132,12 +132,12 @@ module.exports = function(RED) {
                         thing: {
                             name: node.name,
                             id: node.id,
-                            heartbeat: node.heartbeat[node.id]
+                            last_update: node.heartbeat[node.id]
                         },
                         item: {
                             name: node.thingType.items[i].name,
                             id: node.thingType.items[i].id,
-                            heartbeat: node.heartbeat[node.thingType.items[i].id]
+                            last_update: node.heartbeat[node.thingType.items[i].id]
                         }
                     }
                     node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);

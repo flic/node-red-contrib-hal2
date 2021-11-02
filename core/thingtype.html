@@ -82,6 +82,31 @@
                 return (1+Math.random()*4294967295).toString(16);
             }
 
+            var defaultIngressFunctions = {
+                0 : {
+                    name: "Pass-through",
+                    id: createId(),
+                    fn: "// msg object is passed to function\n\nreturn msg.payload;"
+                },
+                1 : {
+                    name: "Convert to Number",
+                    id: createId(),
+                    fn: "// msg object is passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+                },                
+                2 : {
+                    name: "Convert to Boolean",
+                    id: createId(),
+                    fn: "// msg object is passed to function\n\nmsg.payload = !!msg.payload;\nreturn msg.payload;"
+                }, 
+            }
+            var defaultEgressFunctions = {
+                0 : {
+                    name: "Pass-through",
+                    id: createId(),
+                    fn: "// msg object is passed to function\n\nreturn msg.payload;"
+                }
+            }            
+
         // Create tabs
             var tabs = RED.tabs.create({
                 id: "tabs",
@@ -482,12 +507,9 @@
                     $("#node-config-ingress-list-items").editableList('addItem',ingress);
                 }
             } else {
-                let ingress = {
-                    name: "Pass-through",
-                    id: createId(),
-                    fn: "// msg object is passed to function\n\nreturn msg.payload;"
+                for (let i in defaultIngressFunctions) {
+                    $("#node-config-ingress-list-items").editableList('addItem',defaultIngressFunctions[i]);
                 }
-                $("#node-config-ingress-list-items").editableList('addItem',ingress);
             }
 
             if (this.egress) {
@@ -496,18 +518,17 @@
                     $("#node-config-egress-list-items").editableList('addItem',egress);
                 }
             } else {
-                let egress = {
-                    name: "Pass-through",
-                    id: createId(),
-                    fn: "// msg object is passed to function\n\nreturn msg;"
+                for (let i in defaultEgressFunctions) {
+                    $("#node-config-egress-list-items").editableList('addItem',defaultEgressFunctions[i]);
                 }
-                $("#node-config-egress-list-items").editableList('addItem',egress);
             }
 
             if (this.items) {
                 for (let i=0; i<this.items.length; i++) {
                     let item = this.items[i];
-                    $("#node-config-thingtype-list-items").editableList('addItem',item);
+                    if (item.id.length > 1) {
+                        $("#node-config-thingtype-list-items").editableList('addItem',item);
+                    }
                 }
             } else {
                 $("#node-config-thingtype-list-items").editableList('addItem',null);
@@ -536,15 +557,15 @@
             node.readOnly = true;
 
             // Main tab
-            if ($("#node-config-input-checkHeartbeat").is(":checked")) {
+            if ($("#node-config-input-hbCheck").is(":checked")) {
                 let r = {
-                        name: "Online",
+                        name: "Alive",
                         id: "1",
-                        topicFilterType:"",
-                        topicFilterValue:"",
+                        topicFilterType:$("#node-config-input-hbFilterType").val(),
+                        topicFilterValue:$("#node-config-input-hbFilterVal").val(),
                         topicSuffix: "",
                         readOnly: true,
-                        ingress:$("#node-config-input-heartbeatLWT").val(),
+                        ingress:$("#node-config-input-hbLWT").val(),
                         egress: ""
                 }
                 node.items.push(r); 
