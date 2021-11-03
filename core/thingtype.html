@@ -20,7 +20,8 @@
             items: { value: [], required: true },
             ingress: {},
             egress: {},
-            readOnly: {},
+            thingStatus: {},
+            thingCommand: {},
             hbCheck: { value:false },
             hbType: { value:"lwt" },
             hbTTL: {},
@@ -103,7 +104,7 @@
                 0 : {
                     name: "Pass-through",
                     id: createId(),
-                    fn: "// msg object is passed to function\n\nreturn msg.payload;"
+                    fn: "// msg object is passed to function\n\nreturn msg;"
                 }
             }
         var lastTab = "";
@@ -216,10 +217,10 @@
                         .appendTo(container)
                         .hide()
                     var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails); 
-                    var rowReadOnly = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
 
                     // Show a clickable expand icon
                     var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
@@ -255,6 +256,9 @@
                     var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowTopicFilter)
                         .append(' Topic filter')
+                    var labelItemType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
+                        .appendTo(rowItemType)
+                        .append(' Type')                          
                     var labelIngress = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-in"})
                         .appendTo(rowIngress)
                         .append(" Ingress")
@@ -264,10 +268,7 @@
                     var labelTopicSuffix = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-tasks"})
                         .appendTo(rowTopicSuffix)
                         .append(' Cmnd suffix')
-                    var labelReadOnly = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-info-circle"})
-                        .appendTo(rowReadOnly)
-                        .append(" Status only")                      
-
+                  
                     //Name property
                     var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
                         .appendTo(rowName)
@@ -281,9 +282,12 @@
                         default:'StrEnd',
                         types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
                     });
-                    // Read only checkbox
-                    var checkboxReadonly = $('<input/>',{style: "display: inline-block; width: auto; vertical-align: top", class:"node-config-thingtype-readonly-property",type:"checkbox"})
-                        .appendTo(rowReadOnly)                       
+                    // Item type
+                    var itemTypeProperty = $('<select/>',{class:"node-config-thingtype-itemtype-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowItemType)
+                        .append($("<option></option>").val('both').text('Command & Status'))
+                        .append($("<option></option>").val('status').text('Status only'))
+                        .append($("<option></option>").val('command').text('Command only'))                     
                     //MQTT topic suffix
                     var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
                     .appendTo(rowTopicSuffix)
@@ -312,14 +316,25 @@
                             egressProperty.append($("<option></option>").val(id).text(name));
                         })                    
                     
-                    //Show/Hide egress buttons
-                    checkboxReadonly.click( function() {
-                        if (checkboxReadonly.is(":checked")) {
-                            rowTopicSuffix.hide();
-                            rowEgress.hide();
-                        } else {
-                            rowTopicSuffix.show();
-                            rowEgress.show();
+                    // Show/hide ingress/egress/command
+                    itemTypeProperty.change( function() {
+                        let val = itemTypeProperty.val();
+                        switch(val) {
+                            case 'both':
+                                rowTopicSuffix.show();
+                                rowEgress.show();
+                                rowIngress.show();
+                                break;
+                            case 'status':
+                                rowTopicSuffix.hide();
+                                rowEgress.hide();
+                                rowIngress.show();
+                                break;
+                            case 'command':
+                                rowTopicSuffix.show();
+                                rowEgress.show();
+                                rowIngress.hide();
+                                break;
                         }
                     });
 
@@ -330,18 +345,11 @@
                         topicFilterProperty.typedInput('type',item.topicFilterType);
                         topicFilterProperty.typedInput('value',item.topicFilterValue);
                         topicSuffixProperty.val(item.topicSuffix);
-                        checkboxReadonly.prop('checked', item.readOnly);
+                        itemTypeProperty.val(item.type);
                         ingressProperty.val(item.ingress);
                         egressProperty.val(item.egress);
-
-                        if (item.readOnly) {
-                            rowTopicSuffix.hide();
-                            rowEgress.hide();
-                        } else {
-                            rowTopicSuffix.show();
-                            rowEgress.show();
-                        }
                     }
+                    itemTypeProperty.trigger('change');
                 },
                 removable: true,
                 sortable: true,
@@ -590,7 +598,8 @@
             node.items = [];
             node.ingress = [];
             node.egress = [];
-            node.readOnly = true;
+            node.thingStatus = false;
+            node.thingCommand = false;
 
             // Main tab
             if ($("#node-config-input-hbCheck").is(":checked")) {
@@ -616,12 +625,21 @@
                         topicFilterType:item.find(".node-config-thingtype-topicfilter-property").typedInput('type'),
                         topicFilterValue:item.find(".node-config-thingtype-topicfilter-property").typedInput('value'),
                         topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
-                        readOnly:item.find(".node-config-thingtype-readonly-property").is(":checked"),
+                        type:item.find(".node-config-thingtype-itemtype-property").val(),
                         ingress:item.find(".node-config-thingtype-ingress-property").val(),
                         egress:item.find(".node-config-thingtype-egress-property").val()
                     }
-                    if (!r.readOnly) {
-                        node.readOnly = false;
+                    switch(r.type) {
+                        case 'both':
+                            node.thingStatus = true;
+                            node.thingCommand = true;
+                            break;
+                        case 'status':
+                            node.thingStatus = true;
+                            break;
+                        case 'command':
+                            node.thingCommand = true;
+                            break;
                     }
                     node.items.push(r);
                 })
@@ -661,6 +679,7 @@
                 node.editor[n].destroy();
                 delete node.editor[n];
             }
+            debugger
         },
         oneditcancel: function() {
             // Remove editors

@@ -25,7 +25,7 @@
             var thingsList=[];
             for (let t in completeThingsList) {
                 let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                if (!thingType.readOnly) {
+                if (thingType.thingCommand) {
                     thingsList.push(completeThingsList[t]);
                 }
             }
@@ -41,6 +41,25 @@
                 var textB = b.name.toUpperCase();
                 return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
             });
+            //get all Thingtypes and sort them alphabetically
+            var thingTypeId = [];
+            for (let i in thingsList) {
+                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                    thingTypeId.push(thingsList[i].thingType);
+                }
+            }
+            var thingTypeList = [];
+            for (let i in thingTypeId) {
+                var thingType = RED.nodes.node(thingTypeId[i]);
+                if (thingType.thingStatus) {
+                    thingTypeList.push(thingType);
+                }
+            }
+            thingTypeList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });            
 
             //No thing nodes have been created
             if(thingsList.length===0){
@@ -53,6 +72,7 @@
                     var command = opt;
                     var savedThing = command.thing;
                     var savedItem = command.item;
+                    var savedTypeSel = command.category;
 
                     container.css({
                         overflow: 'hidden',
@@ -60,7 +80,8 @@
                     });
 
                     //Add rows
-                    var rowThing = $('<div/>').appendTo(container);
+                    var rowCategory = $('<div/>').appendTo(container);
+                    var rowThing = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"})
@@ -68,65 +89,132 @@
                         .hide()
 
                     //Add labels
-                    var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
+                    var labelCategory = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-folder"})
+                        .appendTo(rowCategory)
+                        .append(' Category')
+                    var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowThing)
                         .append(' Thing')
-                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
+                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowItem)
                         .append(' Item')
-                    var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
+                    var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
                         .appendTo(rowCommand)
                         .append(' Cmnd')
-                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
 
-                    var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 70px)"})
+                    var categoryField = $('<select/>',{class:"node-input-command-category",style:"width:calc(100% - 90px)"})
+                        .appendTo(rowCategory)
+                        .append($("<option></option>").val('hal2Thing').text('Thing'))
+                        .append($("<option></option>").val('hal2Group').text('Group'))
+                        .append($("<option></option>").val('hal2ThingType').text('Type'))
+                        .append($("<option></option>").val('msg').text('Thing & Item id from msg'))
+                    var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 90px)"})
                         .appendTo(rowThing);
-                    var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 70px)"})
+                    var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 90px)"})
                         .appendTo(rowItem);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 70px)"})
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"})
                         .appendTo(rowNotes);
 
                     thingsField.change(function() {
-                        let thing = RED.nodes.node(thingsField.val());
+                        var thing = RED.nodes.node(thingsField.val());
                         itemsField.children().remove();
 
-                        if (thing.type == "hal2Thing") {    
-                            rowItem.show();
-                            // Show notes
-                            if (thing.notes) {
-                                rowNotes.show();
-                                notesField.val(thing.notes);
-                            } else {
-                                rowNotes.hide();
-                            }
-                            let thingType = RED.nodes.node(thing.thingType);
-                            //Add items                            
-                            for (let d in thingType.items) {
-                                if (!thingType.items[d].readOnly) {
-                                    itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                        switch(thing.type) {
+                            case 'hal2Thing': 
+                                // Show notes
+                                if (thing.notes) {
+                                    rowNotes.show();
+                                    notesField.val(thing.notes);
+                                } else {
+                                    rowNotes.hide();
                                 }
-                            }
-                            if ((savedItem != null) & (thingsField.val() == savedThing)) {
-                                itemsField.val(savedItem);
-                            }
-                        } else {
-                            rowItem.hide();
-                            itemsField.append($("<option></option>")
-                                .val(thing.id)
-                                .text(thing.name));
+                                let thingType = RED.nodes.node(thing.thingType);
+                                //Add items                            
+                                for (let d in thingType.items) {
+                                    if (thingType.items[d].type != 'status') {
+                                        itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                                    }
+                                }
+                                if ((savedItem != null) & (thingsField.val() == savedThing)) {
+                                    itemsField.val(savedItem);
+                                }
+                                break;
+                            case 'hal2Group':
+                                itemsField.append($("<option></option>")
+                                    .val(thing.id)
+                                    .text(thing.name));
+                                break;
+                            case 'hal2ThingType':
+                                //Add items
+                                for (let d in thing.items) {
+                                    if (thing.items[d].type != 'status') {
+                                        itemsField.append($("<option></option>").val(thing.items[d].id).text(thing.items[d].name));
+                                    }
+                                }
+                                if (thingsField.val() == savedThing) {
+                                    itemsField.val(savedItem);
+                                }
+                                break;
                         }
                     });
 
-                    //Add groups
-                    for (let d in groupsList) {
-                        thingsField.append($("<option></option>").val(groupsList[d].id).text("["+groupsList[d].name+"]"));
-                    }
-                    //Add things
-                    for (let d in thingsList) {
-                        thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
-                    }
+                    categoryField.change( function() {
+                        var nodeType = categoryField.val();
+                        switch (nodeType) {
+                            case "hal2Thing":
+                                //Add things
+                                rowThing.show();
+                                rowItem.show();
+                                labelThing.text(" Thing");
+                                labelThing.attr('class','fa fa-microchip')
+                                thingsField.children().remove();
+                                for (var t in thingsList) {
+                                    thingsField.append($("<option></option>").val(thingsList[t].id).text(thingsList[t].name))
+                                }
+                                if (savedTypeSel == 'hal2Thing') {
+                                    thingsField.val(savedThing);
+                                }
+                                thingsField.trigger('change');
+                                break;
+                            case "hal2Group":
+                                //Add groups
+                                rowThing.show();
+                                rowItem.hide();
+                                labelThing.text(" Group");
+                                labelThing.attr('class','fa fa-object-group');
+                                thingsField.children().remove();
+                                for (let d in groupsList) {
+                                    thingsField.append($("<option></option>").val(groupsList[d].id).text(groupsList[d].name))
+                                }
+                                if (savedTypeSel == 'hal2Group') {
+                                    thingsField.val(savedThing);
+                                }
+                                thingsField.trigger('change');
+                                break;
+                            case "hal2ThingType":
+                                //Add groups
+                                rowThing.show();
+                                rowItem.show();
+                                labelThing.text(" Type");
+                                labelThing.attr('class','fa fa-gears');
+                                thingsField.children().remove();
+                                for (let d in thingTypeList) {
+                                    thingsField.append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name))
+                                }
+                                if (savedTypeSel == 'hal2ThingType') {
+                                    thingsField.val(savedThing);
+                                }
+                                thingsField.trigger('change');
+                                break;
+                            case "msg":
+                                rowThing.hide();
+                                rowItem.hide();
+                                break;
+                        }                      
+                    });
 
                     //Add command value field
                     var commandField = $('<input/>',{class:"node-input-command-value",type:"text"})
@@ -141,16 +229,18 @@
                     //Add values
                     if (Object.keys(command).length != 0) {
                         thingsField.val(command.thing);
+                        categoryField.val(command.category);
                         commandField.typedInput('value',command.value);
                         commandField.typedInput('type',command.type);
                     } else {
                         commandField.typedInput('value','payload');
                     }
+                    categoryField.trigger('change');
                     thingsField.trigger('change');
                 },
                 removable: true,
                 sortable: true,
-                addButton: "Item"
+                addButton: "Action"
             });
 
             //Add commands
@@ -171,12 +261,12 @@
             commandcontainer.each(function(i) {
                 var command = $(this);
                 var b = {
+                    category:command.find(".node-input-command-category option:selected").val(),
                     thing:command.find(".node-input-command-thing option:selected").val(),
                     item:command.find(".node-input-command-item option:selected").val(),
                     value:command.find(".node-input-command-value").typedInput('value'),
                     type:command.find(".node-input-command-value").typedInput('type'),
                 }
-                debugger
                 node.commandset.push(b);
             });
         }

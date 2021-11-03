@@ -22,7 +22,14 @@
             var savedItem = this.item;
 
             //get all thing nodes and sort them alphabetically
-            const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            var thingsList = [];
+            for (let t in completeThingsList) {
+                let thingType = RED.nodes.node(completeThingsList[t].thingType);
+                if (thingType.thingStatus) {
+                    thingsList.push(completeThingsList[t]);
+                }
+            }            
             if (thingsList.length == 0) {
                 $("#div-main").hide();
                 $("#div-error").show();
@@ -49,7 +56,9 @@
                 }
                 //Add items
                 for (let d in thingType.items) {
-                    $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    if (thingType.items[d].type != 'command') {
+                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    }
                 }
 
                 if ($("#node-input-thing").val() == savedThing) {

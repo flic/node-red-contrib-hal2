@@ -29,7 +29,14 @@
                 { v: "false", t: "is false" }
             ];
             //get all thing nodes and sort them alphabetically
-            const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            var thingsList = [];
+            for (let t in completeThingsList) {
+                let thingType = RED.nodes.node(completeThingsList[t].thingType);
+                if (thingType.thingStatus) {
+                    thingsList.push(completeThingsList[t]);
+                }
+            }            
             thingsList.sort(function(a, b) {
                 var textA = a.name.toUpperCase();
                 var textB = b.name.toUpperCase();
@@ -97,7 +104,9 @@
                         }
                         //Add items                            
                         for (let d in thingType.items) {
-                            itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                            if (thingType.items[d].type != 'command') {
+                                itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                            }
                         }
 
                         if ((savedItem != null) & (thingsField.val() == savedThing)) {

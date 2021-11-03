@@ -170,8 +170,8 @@ module.exports = function(RED) {
                     return;
                 }
 
-                if (item.readOnly) {
-                    node.error("Item "+item.name+"["+item.id+"] is read only");
+                if (item.type != 'command') {
+                    node.error("Item "+item.name+"["+item.id+"] is status only");
                     return;
                 }
 
@@ -201,6 +201,8 @@ module.exports = function(RED) {
 
             // Start listening for events
             node.eventHandler.subscribe('command', node.id, node.listener);
+            node.eventHandler.subscribe('command', node.thingType.id, node.listener);
+
 
             // Register heartbeat check
             if ((node.thingType.hbCheck) && (node.thingType.hbType == "ttl")) {
@@ -211,6 +213,7 @@ module.exports = function(RED) {
         node.on("close",function() { 
             if (node.eventHandler) {
                 node.eventHandler.unsubscribe('command', node.id, node.listener);
+                node.eventHandler.unsubscribe('command', node.thingType.id, node.listener);
                 if ((node.thingType.hbCheck) && (node.thingType.hbType == "ttl")) {
                     node.eventHandler.unregisterHeartbeat(node.id);
                 }

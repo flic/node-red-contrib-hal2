@@ -10,7 +10,7 @@
             },
             name:           {},
             thing:          { value: "", required: true },
-            typeSel:        { value: "hal2Thing" },
+            typeSel:        {},
             item:           { value: "", required: true },
             operator:       { value: "", required: true },
             change:         { value: "1" },
@@ -40,13 +40,20 @@
                 { v: "true", t: "is true" },
                 { v: "false", t: "is false" }
             ];
-debugger
+
             var savedThing = this.thing;
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;
 
             //get all things and sort them alphabetically
-            const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+            var thingsList = [];
+            for (let t in completeThingsList) {
+                let thingType = RED.nodes.node(completeThingsList[t].thingType);
+                if (thingType.thingStatus) {
+                    thingsList.push(completeThingsList[t]);
+                }
+            }
             if (thingsList.length == 0) {
                 $("#div-main").hide();
                 $("#div-error").show();
@@ -76,7 +83,9 @@ debugger
             var thingTypeList = [];
             for (let i in thingTypeId) {
                 var thingType = RED.nodes.node(thingTypeId[i]);
-                thingTypeList.push(thingType);
+                if (thingType.thingStatus) {
+                    thingTypeList.push(thingType);
+                }
             }
             thingTypeList.sort(function(a, b) {
                 var textA = a.name.toUpperCase();
@@ -93,8 +102,8 @@ debugger
                         $("#label-node-input-thing").text(" Thing");
                         $("#label-node-input-thing").attr('class','fa fa-microchip')
                         $("#node-input-thing").children().remove();
-                        for (var d in thingsList) {
-                            $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
+                        for (var t in thingsList) {
+                            $("<option value='" + thingsList[t].id + "'> " + thingsList[t].name + "</option>").appendTo("#node-input-thing");
                         }
                         if (savedTypeSel == 'hal2Thing') {
                             $("#node-input-thing").val(savedThing);
@@ -150,9 +159,10 @@ debugger
                     let thingType = RED.nodes.node(thing.thingType);
                     //Add items
                     for (let d in thingType.items) {
-                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                        if (thingType.items[d].type != 'command') {
+                            $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                        }
                     }
-debugger
                     if ($("#node-input-thing").val() == savedThing) {
                         $("#node-input-item").val(savedItem);
                     }
@@ -167,7 +177,9 @@ debugger
 
                     //Add items
                     for (let d in thingType.items) {
-                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                        if (thingType.items[d].type != 'command') {
+                            $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                        }
                     }
 
                     if ($("#node-input-thing").val() == savedThing) {
@@ -177,13 +189,15 @@ debugger
             });         
 
             // Add values
-            
             if (this.thing) {
-                    $("#node-input-typeSel").val(this.typeSel);
-                    $("#node-input-typeSel").trigger('change');
-                    $("#node-input-thing").val(this.thing);
-                    $('#node-input-thing').trigger('change');
+                $("#node-input-typeSel").val(this.typeSel);
+                $("#node-input-thing").val(this.thing);
+            } else {
+                $("#node-input-typeSel").val('hal2Thing');
             }
+            $("#node-input-typeSel").trigger('change');
+            $('#node-input-thing').trigger('change');
+
             //Add operators
             for (var d in operators) {
                 $("<option value='" + operators[d].v + "'> " + operators[d].t + "</option>").appendTo("#node-input-operator");
@@ -270,7 +284,6 @@ debugger
         oneditsave: function () {
             this.typeSel = $("#node-input-typeSel").val();
             this.thing =   $("#node-input-thing").val();
-            debugger
         }
     });
 </script>

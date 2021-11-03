@@ -77,10 +77,10 @@
             let TT = $("#node-input-thingType").val();
             if (TT) {
                 var thingType = RED.nodes.node(TT);
-                if (thingType.readOnly) {
-                    this.outputs = 0;
-                } else {
+                if (thingType.thingCommand) {
                     this.outputs = 1;
+                } else {
+                    this.outputs = 0;
                 }
             }
         }
