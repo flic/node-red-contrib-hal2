@@ -602,19 +602,6 @@
             node.thingCommand = false;
 
             // Main tab
-            if ($("#node-config-input-hbCheck").is(":checked")) {
-                let r = {
-                        name: "Alive",
-                        id: "1",
-                        topicFilterType:$("#node-config-input-hbFilterType").val(),
-                        topicFilterValue:$("#node-config-input-hbFilterVal").val(),
-                        topicSuffix: "",
-                        readOnly: true,
-                        ingress:$("#node-config-input-hbLWT").val(),
-                        egress: ""
-                }
-                node.items.push(r); 
-            }
             $("#node-config-thingtype-list-items")
                 .editableList('items')
                 .each(function() {
@@ -643,6 +630,20 @@
                     }
                     node.items.push(r);
                 })
+            if ($("#node-config-input-hbCheck").is(":checked")) {
+            let r = {
+                    name: "Alive",
+                    id: "1",
+                    topicFilterType:$("#node-config-input-hbFilterType").val(),
+                    topicFilterValue:$("#node-config-input-hbFilterVal").val(),
+                    topicSuffix: "",
+                    readOnly: true,
+                    ingress:$("#node-config-input-hbLWT").val(),
+                    egress: ""
+            }
+            node.items.push(r); 
+        }
+
 
             // Ingress tab
             i=0;

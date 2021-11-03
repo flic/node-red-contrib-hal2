@@ -170,7 +170,7 @@ module.exports = function(RED) {
                     return;
                 }
 
-                if (item.type != 'command') {
+                if (item.type == 'status') {
                     node.error("Item "+item.name+"["+item.id+"] is status only");
                     return;
                 }
