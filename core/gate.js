@@ -65,13 +65,24 @@ module.exports = function(RED) {
         this.name = config.name;
         this.rules = config.rules;
         this.checkall = config.checkall;
+        this.if = config.if;
         var node = this;
 
         node.on('input', function(msg) {
             if (checkRules(node,msg)) {
-                node.send([msg,null]);
+                if (node.if) {
+                    msg.payload = true;
+                    node.send(msg);
+                } else {
+                    node.send([msg,null]);
+                }
             } else {
-                node.send([null,msg]);
+                if (node.if) {
+                    msg.payload = false;
+                    node.send(msg);
+                } else {                
+                    node.send([null,msg]);
+                }
             }
         });
     }

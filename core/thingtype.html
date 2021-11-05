@@ -97,7 +97,7 @@
                 2 : {
                     name: "Convert to Boolean",
                     id: createId(),
-                    fn: "// msg object is passed to function\n\nmsg.payload = !!msg.payload;\nreturn msg.payload;"
+                    fn: "// msg object is passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
                 }, 
             }
             var defaultEgressFunctions = {

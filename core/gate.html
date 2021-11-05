@@ -5,7 +5,9 @@
         defaults: {
             name:       {},
             rules:      {},
-            checkall:   { value: "true", required: true }
+            checkall:   { value: "true" },
+            if:         {},
+            outputs:    {}, // Store number of outputs
         },
         inputs:1,
         outputs:2,
@@ -172,7 +174,6 @@
                     }
                     operatorField.trigger('change');
                     thingsField.trigger('change');
-
                 },
                 removable: true,
                 sortable: true,
@@ -188,6 +189,7 @@
             } else {
                 $("#node-input-rule-container").editableList('addItem',null);              
             }
+            
         },
         oneditsave: function() {
             var rules = $("#node-input-rule-container").children();
@@ -206,6 +208,13 @@
                 var r = {thing:thing, item:item, operator:operator, value:value, type:type};
                 node.rules.push(r);
             });
+
+            // Change mode gate/if
+            if ($("#node-input-if").is(":checked")) {
+                this.outputs = 1;
+            } else {
+                this.outputs = 2;
+            }
         }
     });
 </script>
@@ -223,6 +232,10 @@
             <option value="true">all rules must be true</option>
             <option value="false">minimum one rule must be true</option>
         </select>
+    </div>
+    <div class="form-row">
+        <label for="node-input-if" style="width:43%">Set msg.payload to result</label>
+        <input type="checkbox" id="node-input-if" style="display: inline-block; width: auto; vertical-align: top;">
     </div>
 
 </script>
