@@ -1,0 +1,44 @@
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Log',{
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            eventHandler: {
+                value: "Event handler",
+                type: "hal2EventHandler",
+                required: true
+            },
+            name:           {},
+            onchange:       { value:true }
+        },
+        inputs:0,
+        outputs:1,
+        icon: "log.png",
+        label: function() {
+            return this.name||"log";
+        },
+        paletteLabel: "log",
+    });
+</script>
+
+<script type="text/x-red" data-template-name="hal2Log">
+    <div class="form-row">
+        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+    </div>
+    <div class="form-row" id="div-main">
+        <div class="form-row">
+            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+            <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        </div>
+    </div>
+    <div class="form-row">
+        <label for="node-input-onchange" style="width:30%">Only log on change</label>
+        <input type="checkbox" id="node-input-onchange" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>    
+</script>
+
+<script type="text/x-red" data-help-name="hal2Log">
+    <p>The Log node outputs a log message for all <i>Thing</i> and <i>Item</i> events on the selected <i>event handler</i>.</p>
+    <li><strong>Name</strong>: Node name.</li>  
+</script>

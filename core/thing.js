@@ -144,6 +144,8 @@ module.exports = function(RED) {
                     }
                     node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);
                     node.eventHandler.publish('update',node.thingType.id,node.thingType.items[i].id,eventmsg);
+                    eventmsg.logtype = 'ingress';
+                    node.eventHandler.publish('log','0',node.thingType.items[i].id,eventmsg);
                     node.showState();
                 }
             }
@@ -166,7 +168,7 @@ module.exports = function(RED) {
                 }
 
                 if (!item) {
-                    node.error("Item ["+id+"] undefined.");
+                    node.error("Item ["+itemid+"] undefined.");
                     return;
                 }
 
@@ -196,6 +198,19 @@ module.exports = function(RED) {
                 }
                 if (command != null) {
                     node.send(command);
+
+                    command.thing = {
+                        name: node.name,
+                        id: node.id,
+                        last_update: node.heartbeat[node.id]
+                    }
+                    command.item = {
+                        name: item.name,
+                        id: item.id,
+                        last_update: node.heartbeat[item.id]
+                    }
+                    command.logtype = 'egress';
+                    node.eventHandler.publish('log','0',node.thingType.items[i].id,command);
                 }
             }
 
