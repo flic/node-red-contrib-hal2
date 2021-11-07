@@ -33,6 +33,8 @@ module.exports = function(RED) {
                     case 'env':
                         command.payload = process.env[node.commandset[i].value];
                         break;
+                    default:
+                        command.payload = RED.util.evaluateNodeProperty(node.commandset[i].value,node.commandset[i].type);
                 }
                 command.item = node.commandset[i].item;
                 command.thing = node.commandset[i].thing;
