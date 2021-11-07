@@ -131,6 +131,10 @@ module.exports = function(RED) {
                         laststate: node.laststate[node.thingType.items[i].id],
                         topic: msg.topic,
                         payload: result,
+                        type: {
+                            name: node.thingType.name,
+                            id: node.thingType.id
+                        },
                         thing: {
                             name: node.name,
                             id: node.id,
@@ -199,6 +203,10 @@ module.exports = function(RED) {
                 if (command != null) {
                     node.send(command);
 
+                    command.type = {
+                        name: node.thingType.name,
+                        id: node.thingType.id
+                    }
                     command.thing = {
                         name: node.name,
                         id: node.id,
