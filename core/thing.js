@@ -67,9 +67,9 @@ module.exports = function(RED) {
                 var stateStr = node.thingType.nodestatus;
                 for (let i in node.thingType.items) {
                     if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
-                        stateStr = stateStr.replace("%"+node.thingType.items[i].name,'no value');
+                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",'no value');
                     } else {
-                        stateStr = stateStr.replace("%"+node.thingType.items[i].name,node.state[node.thingType.items[i].id]);
+                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",node.state[node.thingType.items[i].id]);
                     }
                 }
                 statusMsg["text"] = stateStr;
