@@ -1,4 +1,4 @@
-# node-red-contrib-hal2 [![npm version](https://www.npmjs.com/package/node-red-contrib-hal2)](https://badge.fury.io/js/node-red-contrib-hal2)
+# node-red-contrib-hal2 [![npm version](https://badge.fury.io/js/node-red-contrib-hal2.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
 A set of nodes to help with basic home automation logic.
 
 ## Install
