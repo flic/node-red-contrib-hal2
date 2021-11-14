@@ -34,7 +34,7 @@
         },
         oneditprepare: function () {
             var node = this;
-            node.editor = [];
+            node.editor = {};
             var contextStores = RED.settings.context.stores;
             
             //Types
@@ -413,11 +413,21 @@
                     var idProperty = $('<input/>',{class:"node-config-ingress-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(createId())
-                    var editorProperty = $('<div/>',{id:"ingress"+i,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
+
+                    //Add name+id values
+                    if (Object.keys(opt).length != 0) {
+                        nameProperty.val(opt.name);
+                        idProperty.val(opt.id);
+                    } else {
+                        nameProperty.val("Ingress function");
+                    }                        
+                    var editorId = "ingress-"+idProperty.val();
+                    editorId = editorId.split('.').join("");
+                    var editorProperty = $('<div/>',{id:editorId,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
                         .appendTo(rowEditor)
 
-                    node.editor["ingress"+i]= RED.editor.createEditor({
-                        id: "ingress"+i,
+                    node.editor[editorId] = RED.editor.createEditor({
+                        id: editorId,
                         mode: "ace/mode/nrjavascript",
                         value: "", 
                         globals: {
@@ -435,14 +445,12 @@
                                 clearInterval: true
                             }
                     });
-                    //Add values
+                    //Add editor value
                     if (Object.keys(opt).length != 0) {
-                        nameProperty.val(opt.name);
-                        idProperty.val(opt.id);
-                        node.editor["ingress"+i].setValue(opt.fn);
+                        node.editor[editorId].setValue(opt.fn);
                     } else {
                         nameProperty.val("Ingress function");
-                        node.editor["ingress"+i].setValue("// msg object is passed to function\n\nreturn msg.payload;");
+                        node.editor[editorId].setValue("// msg object is passed to function\n\nreturn msg.payload;");
                     }
                 },
                 removable: true,
@@ -506,11 +514,21 @@
                     var idProperty = $('<input/>',{class:"node-config-egress-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(createId())
-                    var editorProperty = $('<div/>',{id:"egress"+i,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
+
+                    //Add name+id values
+                    if (Object.keys(opt).length != 0) {
+                        nameProperty.val(opt.name);
+                        idProperty.val(opt.id);
+                    } else {
+                        nameProperty.val("Egress function");
+                    }
+                    var editorId = "egress-"+idProperty.val();
+                    editorId = editorId.split('.').join("");
+                    var editorProperty = $('<div/>',{id:editorId,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
                         .appendTo(rowEditor)
 
-                    node.editor["egress"+i]= RED.editor.createEditor({
-                        id: "egress"+i,
+                    node.editor[editorId]= RED.editor.createEditor({
+                        id: editorId,
                         mode: "ace/mode/nrjavascript",
                         value: "",
                         globals: {
@@ -529,14 +547,11 @@
                             }
                     });
 
-                    //Add values
+                    //Add editor values
                     if (Object.keys(opt).length != 0) {
-                        nameProperty.val(opt.name);
-                        idProperty.val(opt.id);
-                        node.editor["egress"+i].setValue(opt.fn);
+                        node.editor[editorId].setValue(opt.fn);
                     } else {
-                        nameProperty.val("Egress function");
-                        node.editor["egress"+i].setValue("// msg object is passed to function\n\nreturn msg;");
+                        node.editor[editorId].setValue("// msg object is passed to function\n\nreturn msg;");
                     }
                 },
                 removable: true,
@@ -631,48 +646,53 @@
                     node.items.push(r);
                 })
             if ($("#node-config-input-hbCheck").is(":checked")) {
-            let r = {
-                    name: "Alive",
-                    id: "1",
-                    topicFilterType:$("#node-config-input-hbFilterType").val(),
-                    topicFilterValue:$("#node-config-input-hbFilterVal").val(),
-                    topicSuffix: "",
-                    readOnly: true,
-                    ingress:$("#node-config-input-hbLWT").val(),
-                    egress: ""
+                let r = {
+                        name: "Alive",
+                        id: "1",
+                        topicFilterType:$("#node-config-input-hbFilterType").val(),
+                        topicFilterValue:$("#node-config-input-hbFilterVal").val(),
+                        topicSuffix: "",
+                        readOnly: true,
+                        ingress:$("#node-config-input-hbLWT").val(),
+                        egress: ""
+                }
+                node.items.push(r); 
             }
-            node.items.push(r); 
-        }
-
 
             // Ingress tab
-            i=0;
             $("#node-config-ingress-list-items")
                 .editableList('items')
                 .each(function() {
                     let item = $(this);
+                    let name = item.find(".node-config-ingress-name-property").val();
+                    let id = item.find(".node-config-ingress-id-property").val();
+                    let editorId = "ingress-"+id;
+                    editorId = editorId.split('.').join("");
+                    let fn = node.editor[editorId].getValue();
                     let r = {
-                        name:item.find(".node-config-ingress-name-property").val(),
-                        id:item.find(".node-config-ingress-id-property").val(),
-                        fn:node.editor["ingress"+i].getValue()
+                        name:name,
+                        id:id,
+                        fn:fn
                     }
                     node.ingress.push(r);
-                    i++;
                 })
 
             // Egress tab
-            i=0;
             $("#node-config-egress-list-items")
                 .editableList('items')
                 .each(function() {
                     let item = $(this);
+                    let name = item.find(".node-config-egress-name-property").val();
+                    let id = item.find(".node-config-egress-id-property").val();
+                    let editorId = "egress-"+id;
+                    editorId = editorId.split('.').join("");
+                    let fn = node.editor[editorId].getValue();
                     let r = {
-                        name:item.find(".node-config-egress-name-property").val(),
-                        id:item.find(".node-config-egress-id-property").val(),
-                        fn:node.editor["egress"+i].getValue()
+                        name:name,
+                        id:id,
+                        fn:fn
                     }
                     node.egress.push(r);
-                    i++;
                 })
 
                 // Remove editors
@@ -680,7 +700,6 @@
                 node.editor[n].destroy();
                 delete node.editor[n];
             }
-            debugger
         },
         oneditcancel: function() {
             // Remove editors
