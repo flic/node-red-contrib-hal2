@@ -129,6 +129,7 @@
 <script type="text/x-red" data-help-name="hal2Value">
     <p>The Value node queries a specific <i>Item</i> and sends the <i>Item</i> value on to the next node.</p>
     <li><strong>Item</strong>: Select the <i>Item</i>.</li>
-    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>thing state</i> is selected, the property configured in the <i>Item</i> node as the <i>state</i> property is sent. The configured <code>msg.name</code> and <code>msg.topic</code> from the <i>Item</i> is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>Output to</strong>: Select where the value should be output to.</li>
+    <li><strong>Item info</strong>: Output <code>msg.thing</code> and <code>msg.item</code> information. Only works when <code>msg</code> is used for output.</li>
     <li><strong>Name</strong>: Node name.</li>  
 </script>

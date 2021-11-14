@@ -1,0 +1,304 @@
+[
+    {
+        "id": "efee41508ff4da3e",
+        "type": "mqtt in",
+        "z": "0c00c2675250c0b5",
+        "name": "Shellies",
+        "topic": "shellies/#",
+        "qos": "0",
+        "datatype": "utf8",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 830,
+        "y": 480,
+        "wires": [
+            [
+                "d380b551e759d003"
+            ]
+        ]
+    },
+    {
+        "id": "79080e435b987ad0",
+        "type": "mqtt out",
+        "z": "0c00c2675250c0b5",
+        "name": "Send command",
+        "topic": "",
+        "qos": "2",
+        "retain": "false",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "",
+        "x": 1240,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "d380b551e759d003",
+        "type": "hal2Thing",
+        "z": "0c00c2675250c0b5",
+        "eventHandler": "e228014191d14be6",
+        "thingType": "9f5c7da2f334215b",
+        "name": "Shelly Example Relay",
+        "topicFilter": "shellies/example-relay/#",
+        "topicFilterType": "mqtt",
+        "topicPrefix": "shellies/example-relay",
+        "notes": "Shelly 2.5 Double Relay",
+        "outputs": 1,
+        "x": 1020,
+        "y": 480,
+        "wires": [
+            [
+                "79080e435b987ad0"
+            ]
+        ]
+    },
+    {
+        "id": "e228014191d14be6",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "maxlisteners": "50",
+        "heartbeat": "60"
+    },
+    {
+        "id": "9f5c7da2f334215b",
+        "type": "hal2ThingType",
+        "name": "Shelly Relay",
+        "contextStore": "filesystem",
+        "nodestatus": "💡 [0] %Relay0% (%Power0%w)💡 [1] %Relay1% (%Power1%w) 🌡 %Temperature%°C",
+        "items": [
+            {
+                "name": "Relay0",
+                "id": "45880dc6.a24df4",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/relay/0",
+                "topicSuffix": "/relay/0/command",
+                "type": "both",
+                "ingress": "aaf12047.8d497",
+                "egress": "b0499ab0.270728"
+            },
+            {
+                "name": "Relay1",
+                "id": "4d304056.9c77b",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/relay/1",
+                "topicSuffix": "/relay/1/command",
+                "type": "both",
+                "ingress": "aaf12047.8d497",
+                "egress": "b0499ab0.270728"
+            },
+            {
+                "name": "Power0",
+                "id": "279e85eb.c15aaa",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/relay/0/power",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Power1",
+                "id": "81cf9caf.b6fb4",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/relay/1/power",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Energy0",
+                "id": "f491f1b0.11302",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/relay/0/energy",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Energy1",
+                "id": "44ed47e4.5664f8",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/relay/1/energy",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Input0",
+                "id": "54e0d4ec.a2c6dc",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/input/0",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "52a65ce9.552aa4",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Input1",
+                "id": "a8ac48cd.9a9608",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/input/1",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "52a65ce9.552aa4",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Longpush0",
+                "id": "f7c9cffe.eb9dc",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/longpush/0",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "52a65ce9.552aa4",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Longpush1",
+                "id": "f73320d6.4b44f",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/longpush/1",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "52a65ce9.552aa4",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Temperature",
+                "id": "abf17780.8c9ff8",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/temperature",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Temperature F",
+                "id": "77edb762.97a038",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/temperature_f",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "New Firmware",
+                "id": "bed60fff.b612a",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/announce",
+                "topicSuffix": "/command",
+                "type": "both",
+                "ingress": "4bf3ad0b.ee1184",
+                "egress": "5e055328.81229c"
+            },
+            {
+                "name": "Overtemperature",
+                "id": "7165e795.7c8ee8",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/overtemperature",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Temperature Status",
+                "id": "560378d5.0b9628",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/temperature_status",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "8b40061c.c71688",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Voltage",
+                "id": "4ea0c29c.a2047c",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/voltage",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "46b4038e.514b5c",
+                "egress": "a9adc959.52dea8"
+            },
+            {
+                "name": "Alive",
+                "id": "1",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "/online",
+                "topicSuffix": "",
+                "readOnly": true,
+                "ingress": "723376c2.8f69a8",
+                "egress": ""
+            }
+        ],
+        "ingress": [
+            {
+                "name": "Pass-through",
+                "id": "8b40061c.c71688",
+                "fn": "// msg object is passed to function\n\nreturn msg.payload;"
+            },
+            {
+                "name": "Shelly Relay",
+                "id": "aaf12047.8d497",
+                "fn": "// msg object is passed to function\nmsg.payload = (msg.payload == \"on\");\nreturn msg.payload;"
+            },
+            {
+                "name": "Convert to Number",
+                "id": "46b4038e.514b5c",
+                "fn": "// msg object is passed to function\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+            },
+            {
+                "name": "Convert to Boolean",
+                "id": "723376c2.8f69a8",
+                "fn": "// msg object is passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
+            },
+            {
+                "name": "Shelly Firmware",
+                "id": "4bf3ad0b.ee1184",
+                "fn": "// msg object is passed to function\nmsg.payload = JSON.parse(msg.payload).new_fw;\nreturn msg.payload;"
+            },
+            {
+                "name": "Number to Boolean",
+                "id": "52a65ce9.552aa4",
+                "fn": "// msg object is passed to function\nmsg.payload = (msg.payload == 1);\nreturn msg.payload;"
+            }
+        ],
+        "egress": [
+            {
+                "name": "Pass-through",
+                "id": "a9adc959.52dea8",
+                "fn": "// msg object is passed to function\n\nreturn msg;"
+            },
+            {
+                "name": "Shelly Relay",
+                "id": "b0499ab0.270728",
+                "fn": "// msg object is passed to function\nmsg.payload = msg.payload ? \"on\" : \"off\";\nreturn msg;"
+            },
+            {
+                "name": "Shelly Update Firmware",
+                "id": "5e055328.81229c",
+                "fn": "// msg object is passed to function\nmsg.payload = \"update_fw\";\nreturn msg;"
+            }
+        ],
+        "thingStatus": true,
+        "thingCommand": true,
+        "hbCheck": true,
+        "hbType": "lwt",
+        "hbTTL": "",
+        "hbLWT": "723376c2.8f69a8",
+        "hbFilterVal": "/online",
+        "hbFilterType": "StrEnd"
+    }
+]

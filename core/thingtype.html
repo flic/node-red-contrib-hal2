@@ -713,7 +713,7 @@
                 <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0%" style="width: calc(100% - 185px)">
             </div>
             <div class="form-row">
-                <label for="node-config-input-hbCheck" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Heartbeat</label>
+                <label for="node-config-input-hbCheck" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Check alive</label>
                 <input type="checkbox" id="node-config-input-hbCheck" style="display: inline-block; width: auto; vertical-align: top">
             </div>
             <div class="form-row" id="check-heartbeat" hidden>
@@ -760,4 +760,13 @@
             </div>
         </div>
     </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2ThingType">
+    <p>The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor<i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
+    <li><strong>Name</strong>: A describing name for the specific device type. For example, 'Shelly Dimmer'.</li>
+    <li><strong>Context store</strong>: The Node-RED context store uesd to store device values. Please see <a href="https://nodered.org/docs/user-guide/context" target="_blank">Node-RED documentation</a> for more information about different types of context stores.</li>
+    <li><strong>Show state</strong>: A string defining how to show information about state on the node in the Node-RED GUI. Use '%Item_name%' (case sensitive) to show a specific item value. Leave blank if not wanted.</li>
+    <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific 'Alive' Item (possible values: true/false) is automatically created.</li>    
+    <li><strong>Items</strong>: Define items. See example code on GitHub.</li>    
 </script>

@@ -193,8 +193,9 @@
 </script>
 
 <script type="text/x-red" data-help-name="hal2Group">
-    <p>The Bundle node allows you to group multiple <i>Items</i> together and send their values on, one after another, when triggered.</p>
+    <p>The Group node allows you to group multiple <i>Items</i> together, for use in <i>Event</i> or <i>Action</i> nodes or directly if input and/or output is enabled.</p>
     <li><strong>Name</strong>: Node name.</li> 
-    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>thing state</i> is selected, the property configured in the <i>Item</i> node as the <i>state</i> property is sent. The configured <code>msg.name</code> and <code>msg.topic</code> from the <i>Item</i> is always added to the outgoing <code>msg</code>.</li>
-    <li><string>Wait between messages</strong> allows you to rate limit the output.</li>
+    <li><strong>Input</strong>: Send <code>msg.payload</code> as a command to all <i>Items</i> in the group.</li>
+    <li><strong>Output</strong>: Outputs events from any <i>Items</i> in the group.</li>
+    <li><string>Wait between messages</strong> allows you to rate limit the commands.</li>
 </script>

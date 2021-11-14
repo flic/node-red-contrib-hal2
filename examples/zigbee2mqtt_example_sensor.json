@@ -1,0 +1,162 @@
+[
+    {
+        "id": "8123ce679a74c373",
+        "type": "mqtt in",
+        "z": "117d6b683f63a540",
+        "name": "zigbee2mqtt",
+        "topic": "zigbee2mqtt/#",
+        "qos": "2",
+        "datatype": "json",
+        "broker": "",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 780,
+        "y": 420,
+        "wires": [
+            [
+                "84473431464ed865"
+            ]
+        ]
+    },
+    {
+        "id": "84473431464ed865",
+        "type": "hal2Thing",
+        "z": "117d6b683f63a540",
+        "eventHandler": "e228014191d14be6",
+        "thingType": "19b42b0f1fc81b6f",
+        "name": "zigbee2mqtt Philips Hue example sensor",
+        "topicFilter": "zigbee2mqtt/sensor/example-sensor",
+        "topicFilterType": "mqtt",
+        "topicPrefix": "",
+        "notes": "",
+        "outputs": 0,
+        "x": 1040,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "e228014191d14be6",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "maxlisteners": "50",
+        "heartbeat": "60"
+    },
+    {
+        "id": "19b42b0f1fc81b6f",
+        "type": "hal2ThingType",
+        "name": "Philips Hue Sensor",
+        "contextStore": "filesystem",
+        "nodestatus": "🌡 %Temperature%°C 🔅 %Lux% 🕺 %Occupancy% 🔋 %Battery%%",
+        "items": [
+            {
+                "name": "Battery",
+                "id": "2fb3e80b.13cdb8",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "410fd2db.5ede1c",
+                "egress": "73669930.31db58"
+            },
+            {
+                "name": "Lux",
+                "id": "5d5424be.d7c0cc",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "42bb0917.8f2d28",
+                "egress": "73669930.31db58"
+            },
+            {
+                "name": "Occupancy",
+                "id": "b78f11b2.00d09",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "2d03ee52.2ca642",
+                "egress": "73669930.31db58"
+            },
+            {
+                "name": "Temperature",
+                "id": "af3d2442.e51898",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "7bd72d05.ef4f64",
+                "egress": "73669930.31db58"
+            },
+            {
+                "name": "Update_available",
+                "id": "6d47a97a.aa1ab8",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "32317de5.a09a22",
+                "egress": "73669930.31db58"
+            },
+            {
+                "name": "Alive",
+                "id": "1",
+                "topicFilterType": "StrEnd",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "readOnly": true,
+                "ingress": "5be6fde7.b81cf4",
+                "egress": ""
+            }
+        ],
+        "ingress": [
+            {
+                "name": "Pass-through",
+                "id": "5be6fde7.b81cf4",
+                "fn": "// msg object is passed to function\n\nreturn msg.payload;"
+            },
+            {
+                "name": "Battery",
+                "id": "410fd2db.5ede1c",
+                "fn": "// msg object is passed to function\nif (msg.payload.battery) {\n    msg.payload = Number(msg.payload.battery);\n    return msg.payload;\n}\n"
+            },
+            {
+                "name": "Lux",
+                "id": "42bb0917.8f2d28",
+                "fn": "// msg object is passed to function\nif (msg.payload.illuminance_lux) {\n    msg.payload = Number(msg.payload.illuminance_lux);\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Occupancy",
+                "id": "2d03ee52.2ca642",
+                "fn": "// msg object is passed to function\n\nmsg.payload = msg.payload.occupancy;\nreturn msg.payload;"
+            },
+            {
+                "name": "Temperature",
+                "id": "7bd72d05.ef4f64",
+                "fn": "// msg object is passed to function\nif (msg.payload.temperature) {\n    msg.payload = Number(msg.payload.temperature);\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Update_available",
+                "id": "32317de5.a09a22",
+                "fn": "// msg object is passed to function\nif (msg.payload.update_available) {\n    msg.payload = msg.payload.update_available;\n    return msg.payload;\n}"
+            }
+        ],
+        "egress": [
+            {
+                "name": "Pass-through",
+                "id": "73669930.31db58",
+                "fn": "// msg object is passed to function\n\nreturn msg;"
+            }
+        ],
+        "thingStatus": true,
+        "thingCommand": false,
+        "hbCheck": true,
+        "hbType": "ttl",
+        "hbTTL": "3600",
+        "hbLWT": "5be6fde7.b81cf4",
+        "hbFilterVal": "",
+        "hbFilterType": "StrEnd"
+    }
+]

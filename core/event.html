@@ -341,9 +341,9 @@
 
 <script type="text/x-red" data-help-name="hal2Event">
     <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
-    <li><strong>Config</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
+    <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
     <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger.</li>
     <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
-    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>thing state</i> is selected, the property configured in the <i>Item</i> node as the <i>state</i> property is sent. The configured <code>msg.name</code> and <code>msg.topic</code> from the <i>Item</i> node is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
     <li><strong>Name</strong>: Node name.</li>    
 </script>

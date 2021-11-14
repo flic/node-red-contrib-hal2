@@ -116,13 +116,10 @@
 </script>
 
 <script type="text/x-red" data-help-name="hal2Thing">
-    <p>The Thing node represents a single device function, like a switch or a thermometer. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Bundle</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
-    <li><strong>Config</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
+    <p>The Thing node is a virtual representation of a physical device, like a switch or a sensor. The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor<i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
+    <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
     <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
-    <li><strong>Topic</strong>: An optional property that can be configured in the node or, if left blank, can be set by <code>msg.topic</code>.</li>
-    <li><strong>State</strong>: Select which property from the incoming <code>msg.payload</code> to be used as the <i>Thing state</i> value. The <i>Thing</i> node always saves the whole <code>msg.payload</code> object, and another property can be used as output from a Value node if so desired.</li>
-    <li><strong>Conversion rules</strong>: Rules can be used to modify the <i>Thing state</i> value in a variety of ways using a simple if-then formula. If no matching rule is found the <i>Thing state</i> value will be unchanged. If more than one matching rule is found they will be executed in order from the top down. The <em>always/em> rule is executed but not counted as a match when <em>otherwise</em> is used. <em>Convert to number</em> converts an incoming string to a numeric value. <em>Modify</em> can be used to do simple arithmetic (*10, -2, /5, ...) on a numeric value.</li>
-    <li><strong>Use output</strong> can be selected to send the incoming value further to another node. The <i>state</i> value is sent on by default, but any property in the <code>msg.payload</code> object can be selected.</li>
-    <li><strong>Send bootstrap msg</strong> can be selected to send an initial bootstrap msg at startup.</li>
-    <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Bundle</i> and <i>Event</i> nodes.</li>    
+    <li><strong>Cmnd prefix</strong>: The command prefix is added to the item command suffix to create the item specific command <code>msg.topic</code>.</li>
+    <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Action</i> and <i>Event</i> nodes.</li>    
+    <li><strong>Notes</strong>: Thing specific notes.</li>    
 </script>
