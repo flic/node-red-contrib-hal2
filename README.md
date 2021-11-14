@@ -1,7 +1,5 @@
-# node-red-contrib-hal [![npm version](https://badge.fury.io/js/node-red-contrib-hal.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
+# node-red-contrib-hal2 [![npm version](https://badge.fury.io/js/node-red-contrib-hal.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
 A set of nodes to help with basic home automation logic.
-
-**Note:** Most of this readme isn't yet updated for HAL2!
 
 ## Install
 ```bash
@@ -10,22 +8,12 @@ npm install node-red-contrib-hal2
 ```
 
 ## What is it?
-**node-red-contrib-hal2** is a set of Node-RED nodes useful for creating home automation flows. The basic component is the Item node, used for keeping the state of an item. This state can then be used to trigger events, route traffic based on rules and more.
+**node-red-contrib-hal2** is a set of Node-RED nodes useful for creating home automation flows. The basic component is the Thing node, a virtual representation of a (usually) physical IoT device. This can then be used to trigger events, route traffic based on rules and more.
 
-1. Store an incoming value in an **Item node**
+1. Store a device state in a **Thing node**
 2. Fire an event when the value changes using an **Event node**
 3. One or more rules will compare the value and that of other Items in a **Gate node**
 4. Output the value to another flow with a **Value node**
-5. Output multiple Item values, one after another, using a **Bundle node**
+5. Send device commands to multiple Things using an **Action node**
 
-## Messaging format
-
-The **Item node** will always save the whole incoming *msg*, so it's possible to output different properties from different **Value nodes**.
-
-The **Item node** will also add the following properties:
-```javascript
-msg.payload = {
-    topic: 'xxx',           //(optional) a Topic identifier
-    name: 'Item name'       //The Item Name parameter
-}
-```
+The documentation is somewhat lacking at the moment, but take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
