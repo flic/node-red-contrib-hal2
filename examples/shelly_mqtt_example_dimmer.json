@@ -1,8 +1,8 @@
 [
     {
-        "id": "efee41508ff4da3e",
+        "id": "f98b24b85a1465b8",
         "type": "mqtt in",
-        "z": "0c00c2675250c0b5",
+        "z": "271e8ad78d5b8b9e",
         "name": "Shellies",
         "topic": "shellies/#",
         "qos": "0",
@@ -12,18 +12,18 @@
         "rap": true,
         "rh": 0,
         "inputs": 0,
-        "x": 830,
-        "y": 480,
+        "x": 310,
+        "y": 180,
         "wires": [
             [
-                "d380b551e759d003"
+                "0ba8556a661ff41b"
             ]
         ]
     },
     {
-        "id": "79080e435b987ad0",
+        "id": "bf8373ac92044e0e",
         "type": "mqtt out",
-        "z": "0c00c2675250c0b5",
+        "z": "271e8ad78d5b8b9e",
         "name": "Send command",
         "topic": "",
         "qos": "2",
@@ -34,14 +34,14 @@
         "correl": "",
         "expiry": "",
         "broker": "",
-        "x": 1240,
-        "y": 480,
+        "x": 720,
+        "y": 180,
         "wires": []
     },
     {
-        "id": "d380b551e759d003",
+        "id": "0ba8556a661ff41b",
         "type": "hal2Thing",
-        "z": "0c00c2675250c0b5",
+        "z": "271e8ad78d5b8b9e",
         "eventHandler": "e228014191d14be6",
         "thingType": "7f66fd3afad86089",
         "name": "Shelly Example Dimmer",
@@ -50,11 +50,11 @@
         "topicPrefix": "shellies/example-dimmer",
         "notes": "",
         "outputs": 1,
-        "x": 1030,
-        "y": 480,
+        "x": 510,
+        "y": 180,
         "wires": [
             [
-                "79080e435b987ad0"
+                "bf8373ac92044e0e"
             ]
         ]
     },
@@ -269,12 +269,12 @@
             {
                 "name": "Shelly Set Brightness",
                 "id": "1e22702a.e2dda",
-                "fn": "// msg object is passed to function\nmsg.payload = msg.payload ? '{\"turn\":\"on\"}' : '{\"turn\":\"off\"}';\nreturn msg;"
+                "fn": "var payload;\n\nswitch (typeof msg.payload) {\n    case \"boolean\":\n        payload = msg.payload ? '{\"turn\":\"on\",\"brightness\":100}' : '{\"turn\":\"off\"}';\n        break;\n    case \"number\":\n        if (msg.payload > 0) {\n            payload = {\n                \"turn\": \"on\",\n                \"brightness\": msg.payload\n            }\n        } else {\n            payload = {\n                \"turn\": \"off\",\n                \"brightness\": 0\n            }\n        }\n        break;\n}\nmsg.payload = payload;\nreturn msg;"
             },
             {
                 "name": "Shelly Update Firmware",
                 "id": "51086fa9.8560b",
-                "fn": "var payload;\n\nswitch(typeof msg.payload) {\n    case \"boolean\":\n        payload = msg.payload ? '{\"turn\":\"on\",\"brightness\":100}' : '{\"turn\":\"off\"}'; \n    break;\n    case \"number\":\n        if (msg.payload > 0) {\n            payload = {\n                \"turn\": \"on\",\n                \"brightness\": msg.payload\n            }\n        } else {\n            payload = {\n                \"turn\": \"off\",\n                \"brightness\": 0\n            }\n        }\n    break;\n}\nmsg.payload = payload;\nreturn msg;"
+                "fn": "// msg object is passed to function\nmsg.payload = \"update_fw\";\nreturn msg;"
             }
         ],
         "thingStatus": true,
