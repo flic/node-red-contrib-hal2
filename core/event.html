@@ -9,6 +9,7 @@
                 required: true
             },
             name:           {},
+            topic:          { value:"" },
             thing:          { value: "", required: true },
             typeSel:        {},
             item:           { value: "", required: true },
@@ -333,6 +334,10 @@
             <input type="hidden" id="node-input-outputType">
         </div>
         <div class="form-row">
+            <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
+            <input type="text" id="node-input-topic" placeholder="Topic" style="width=70%">
+        </div>        
+        <div class="form-row">
             <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
             <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
         </div>
@@ -345,5 +350,6 @@
     <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger.</li>
     <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
     <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>Topic</strong>: <code>msg.topic</code>, leave blank to get topic from <i>Item</i>.</li>
     <li><strong>Name</strong>: Node name.</li>    
 </script>

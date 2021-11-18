@@ -5,6 +5,7 @@ module.exports = function(RED) {
         this.eventHandler = RED.nodes.getNode(config.eventHandler);
         this.thing = config.thing;
         this.item = config.item;
+        this.topic = config.topic;
         this.operator = config.operator;
         this.change = config.change;
         this.compareValue = config.compareValue;
@@ -63,6 +64,10 @@ module.exports = function(RED) {
                             break;
                         default:
                             msg.payload = RED.util.evaluateNodeProperty(node.outputValue,node.outputType);
+                    }
+
+                    if (node.topic != '') {
+                        msg.topic = node.topic;
                     }
                     node.send(msg);
                 }
