@@ -51,6 +51,26 @@
                 return;
             }
 
+            //get all Thingtypes and sort them alphabetically
+            var thingTypeId = [];
+            for (let i in thingsList) {
+                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                    thingTypeId.push(thingsList[i].thingType);
+                }
+            }
+            var thingTypeList = [];
+            for (let i in thingTypeId) {
+                var thingType = RED.nodes.node(thingTypeId[i]);
+                if (thingType.thingStatus) {
+                    thingTypeList.push(thingType);
+                }
+            }
+            thingTypeList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });            
+
            //Rules
            $("#node-input-rule-container").editableList({
                 addItem: function(container,i,opt) {
@@ -66,6 +86,9 @@
 
                     //Add rows
                     var rowName = $('<div/>').appendTo(container);
+                    var rowFilter = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
                     var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
@@ -78,6 +101,9 @@
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowName)
                         .append(' Thing')
+                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .appendTo(rowFilter)
+                        .append(' Filter')
                     var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowItem)
                         .append(' Item')
@@ -88,9 +114,12 @@
                         .appendTo(rowRule)
                         .append(' Rule')   
 
-                    var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 70px)"}).appendTo(rowName);
-                    var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 70px)"}).appendTo(rowItem);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 70px)"}).appendTo(rowNotes);
+                    var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 90px)"}).appendTo(rowName);
+                    var thingsFilter = $('<button type="button"/>').appendTo(rowName);
+                    $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
+                    var filterField = $('<select/>',{style:"width:calc(100% - 90px)"}).appendTo(rowFilter);
+                    var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 90px)"}).appendTo(rowItem);
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowNotes);
 
                     thingsField.change(function() {
                         itemsField.children().remove();
@@ -116,10 +145,38 @@
                         }
                     });
 
+                    filterField.change(function() {
+                        thingsField.children().remove();
+                        for (var d in thingsList) {
+                            if ((filterField.val() == 0) || (thingsList[d].thingType == filterField.val())) {
+                                thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                            }
+                        }
+                        thingsField.trigger('change');
+                    });
+
+                    thingsFilter.on('click', function() {
+                        if (rowFilter.is(':visible')) {
+                            rowFilter.hide();
+                            if (filterField.val() != 0) {
+                                filterField.val(0);
+                                filterField.trigger('change');
+                            }
+                        } else {
+                            rowFilter.show();
+                        }
+                    });
+
                     //Add things
                     for (var d in thingsList) {
                         thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
                     }
+
+                    //Add types
+                    filterField.append($("<option></option>").val(0).text("<All types>"));
+                    for (let d in thingTypeList) {
+                        filterField.append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));
+                    }                    
 
                     //Add operators
                     var operatorField = $('<select/>',{class:"node-input-rule-operator"}).appendTo(rowRule);
@@ -139,10 +196,10 @@
                         var type = $(this).children("option:selected").val();
                         if (type.length < 4) {
                             $(this).css({ "width": "60px" });
-                            valueField.typedInput('width','calc(100% - 60px - 70px)')
+                            valueField.typedInput('width','calc(100% - 60px - 90px)')
                         } else {
                             $(this).css({ "width": "120px" });
-                            valueField.typedInput('width','calc(100% - 120px - 70px)')
+                            valueField.typedInput('width','calc(100% - 120px - 90px)')
 
                         }
                         if (type == "full" || type == "update" || type == "change" || type === "true" || type === "false") {
