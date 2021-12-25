@@ -108,6 +108,37 @@
                 }
             }
         var lastTab = "";
+
+        // Get thingTypes
+        const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
+        var thingsList = [];
+        for (let t in completeThingsList) {
+            let thingType = RED.nodes.node(completeThingsList[t].thingType);
+            if ((typeof thingType !== 'undefined') && (thingType.thingStatus)) {
+                thingsList.push(completeThingsList[t]);
+            }
+        }
+        if(thingsList.length>0){
+            //get all Thingtypes and sort them alphabetically
+            var thingTypeId = [];
+            for (let i in thingsList) {
+                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                    thingTypeId.push(thingsList[i].thingType);
+                }
+            }
+            var thingTypeList = [];
+            for (let i in thingTypeId) {
+                var thingType = RED.nodes.node(thingTypeId[i]);
+                if (thingType.thingStatus) {
+                    thingTypeList.push(thingType);
+                }
+            }
+            thingTypeList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+        }         
         
         function updateMainTab(id) {
             var items = [];
@@ -458,6 +489,44 @@
                 addButton: "Add ingress function"
             });
 
+            //Copy functions from other types
+            $('#tab-ingress-copy-show').on('click', function() {
+                if ($('#tab-ingress-copy').is(':visible')) {
+                    $('#tab-ingress-copy').hide();
+                } else {
+                    $('#tab-ingress-copy').show();
+                }
+            });
+
+            $('#tab-ingress-copy-button').on('click', function () {
+                var thingType = RED.nodes.node($('#tab-ingress-copy-thing').val());
+                var selectedFn = $('#tab-ingress-copy-ingress').val();
+                for (n in thingType.ingress) {
+                    if (thingType.ingress[n].id == selectedFn) {
+                        $("#node-config-ingress-list-items").editableList('addItem',thingType.ingress[n]);
+                        $("#node-config-ingress-list-items").trigger('change');
+                        break;
+                    }
+                }
+            });
+
+            $('#tab-ingress-copy-thing').on('change', function() {
+                $("#tab-ingress-copy-ingress").children().remove();
+                var thingType = RED.nodes.node($('#tab-ingress-copy-thing').val());
+                if (typeof thingType !== 'undefined') {
+                    for (let n in thingType.ingress) {
+                        $("<option value='" + thingType.ingress[n].id + "'>" + thingType.ingress[n].name + "</option>").appendTo("#tab-ingress-copy-ingress");
+                    }
+                }
+            });
+
+            for (let d in thingTypeList) {
+                if (thingTypeList[d].id != node.id) {
+                    $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#tab-ingress-copy-thing");
+                }
+            }
+            $('#tab-ingress-copy-thing').trigger('change');
+
         // Egress
             $("#node-config-egress-list-items").editableList({
                 addItem: function(container,i,opt) {
@@ -558,6 +627,44 @@
                 sortable: true,
                 addButton: "Add egress function"
             });
+
+            //Copy functions from other types
+            $('#tab-egress-copy-show').on('click', function() {
+                if ($('#tab-egress-copy').is(':visible')) {
+                    $('#tab-egress-copy').hide();
+                } else {
+                    $('#tab-egress-copy').show();
+                }
+            });
+
+            $('#tab-egress-copy-button').on('click', function () {
+                var thingType = RED.nodes.node($('#tab-egress-copy-thing').val());
+                var selectedFn = $('#tab-egress-copy-egress').val();
+                for (n in thingType.egress) {
+                    if (thingType.egress[n].id == selectedFn) {
+                        $("#node-config-egress-list-items").editableList('addItem',thingType.egress[n]);
+                        $("#node-config-egress-list-items").trigger('change');
+                        break;
+                    }
+                }
+            });
+
+            $('#tab-egress-copy-thing').on('change', function() {
+                $("#tab-egress-copy-egress").children().remove();
+                var thingType = RED.nodes.node($('#tab-egress-copy-thing').val());
+                if (typeof thingType !== 'undefined') {
+                    for (let n in thingType.egress) {
+                        $("<option value='" + thingType.egress[n].id + "'>" + thingType.egress[n].name + "</option>").appendTo("#tab-egress-copy-egress");
+                    }
+                }
+            });
+
+            for (let d in thingTypeList) {
+                if (thingTypeList[d].id != node.id) {
+                    $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#tab-egress-copy-thing");
+                }
+            }
+            $('#tab-egress-copy-thing').trigger('change');            
 
         //Add items
            if (this.ingress) {
@@ -771,11 +878,43 @@
             <div class="form-row">
                 <ol id="node-config-ingress-list-items"></ol>
             </div>
+            <div class="form-row">
+                <button id="tab-ingress-copy-show"><i class="fa fa-copy"></i></button>
+            </div>
+            <div class="form-row" id="tab-ingress-copy" hidden>
+                <div class="form-row">
+                    <label for="tab-ingress-copy-thing"><i class="fa fa-gears"></i> Type</label>
+                    <select id="tab-ingress-copy-thing" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <label for="tab-ingress-copy-ingress"><i class="fa fa-sign-in"></i> Function</label>
+                    <select id="tab-ingress-copy-ingress" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <button id="tab-ingress-copy-button"><i class="fa fa-copy"></i> Import function</button>
+                </div>
+            </div>
         </div>
         <!-- Egress tab -->
         <div id="tab-egress" style="display:none">
             <div class="form-row">
                 <ol id="node-config-egress-list-items"></ol>
+            </div>
+            <div class="form-row">
+                <button id="tab-egress-copy-show"><i class="fa fa-copy"></i></button>
+            </div>
+            <div class="form-row" id="tab-egress-copy" hidden>
+                <div class="form-row">
+                    <label for="tab-egress-copy-thing"><i class="fa fa-gears"></i> Type</label>
+                    <select id="tab-egress-copy-thing" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <label for="tab-egress-copy-egress"><i class="fa fa-sign-out"></i> Function</label>
+                    <select id="tab-egress-copy-egress" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <button id="tab-egress-copy-button"><i class="fa fa-copy"></i> Import function</button>
+                </div>
             </div>
         </div>
     </div>

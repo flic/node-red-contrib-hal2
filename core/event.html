@@ -84,7 +84,7 @@
             var thingTypeList = [];
             for (let i in thingTypeId) {
                 var thingType = RED.nodes.node(thingTypeId[i]);
-                if (thingType.thingStatus) {
+                if ((typeof thingType !== 'undefined') && (thingType.thingStatus)) {
                     thingTypeList.push(thingType);
                 }
             }
