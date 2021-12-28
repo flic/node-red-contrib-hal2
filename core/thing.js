@@ -132,6 +132,8 @@ module.exports = function(RED) {
                     // Save to node context
                     nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
                     nodeContext.set("state",node.state,node.thingType.contextStore);
+                    nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
+
                     eventmsg = {
                         _msgid: RED.util.generateId(),
                         state: result,
