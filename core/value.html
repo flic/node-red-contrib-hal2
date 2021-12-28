@@ -114,7 +114,7 @@ debugger
             });            
 
             //Add things
-            $("<option value='0'><em>< Get thing.id from msg ></i></em></option>").appendTo("#node-input-thing");
+            $("<option value='0'>- set by msg.thing.id -</option>").appendTo("#node-input-thing");
             for (var d in thingsList) {
                 $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
             }

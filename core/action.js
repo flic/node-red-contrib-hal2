@@ -36,9 +36,29 @@ module.exports = function(RED) {
                     default:
                         command.payload = RED.util.evaluateNodeProperty(node.commandset[i].value,node.commandset[i].type);
                 }
-                command.item = node.commandset[i].item;
-                command.thing = node.commandset[i].thing;
-                queue.push(command);
+
+                if (node.commandset[i].category == 'dynamic') {
+                    if ((typeof msg.thing !== 'undefined') && (typeof msg.thing.id !== 'undefined')) {
+                        var thing = RED.nodes.getNode(msg.thing.id);
+                        if (thing === null) {
+                            node.error("Can't find thing with id "+msg.thing.id);
+                        } else if (thing.type !== 'hal2Thing') {
+                            node.error("Node with id "+msg.thing.id+ " isn't a thing");
+                        } else if (thing.thingType.id !== node.commandset[i].thing) {
+                            node.error("Node with id "+msg.thing.id+ " is of the wrong type");
+                        } else {
+                            command.thing = msg.thing.id;
+                            command.item = node.commandset[i].item;
+                            queue.push(command);                            
+                        }
+                    } else {
+                        node.error("thing.id missing from payload");
+                    }
+                } else {
+                    command.item = node.commandset[i].item;
+                    command.thing = node.commandset[i].thing;
+                    queue.push(command);
+                }
             }
             common.queueSend(node,queue);
         });

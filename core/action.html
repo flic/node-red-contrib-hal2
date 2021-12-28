@@ -110,6 +110,7 @@
                         .append($("<option></option>").val('hal2Thing').text('Thing'))
                         .append($("<option></option>").val('hal2Group').text('Group'))
                         .append($("<option></option>").val('hal2ThingType').text('Type'))
+                        .append($("<option></option>").val('dynamic').text('Thing - set by msg.thing.id -'))
                     var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 90px)"})
                         .appendTo(rowThing);
                     var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 90px)"})
@@ -147,6 +148,7 @@
                                     .text(thing.name));
                                 break;
                             case 'hal2ThingType':
+                            case 'dynamic':
                                 //Add items
                                 for (let d in thing.items) {
                                     if (thing.items[d].type != 'status') {
@@ -194,6 +196,7 @@
                                 thingsField.trigger('change');
                                 break;
                             case "hal2ThingType":
+                            case 'dynamic':
                                 //Add groups
                                 rowThing.show();
                                 rowItem.show();
@@ -207,10 +210,6 @@
                                     thingsField.val(savedThing);
                                 }
                                 thingsField.trigger('change');
-                                break;
-                            case "msg":
-                                rowThing.hide();
-                                rowItem.hide();
                                 break;
                         }                      
                     });
