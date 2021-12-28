@@ -20,10 +20,10 @@ module.exports = function(RED) {
             for (let n in hbList) {
                 thing = RED.nodes.getNode(hbList[n].id);
                 if (thing.id in thing.heartbeat) {
-                    if (date-(thing.thingType.hbTTL*1000) > thing.heartbeat[thing.id]) {
-                        online=false;
-                    } else {
+                    if (date < (thing.thingType.hbTTL*1000)+thing.heartbeat[thing.id]) {
                         online=true;
+                    } else {
+                        online=false;
                     }
                 } else {
                     online=false;
