@@ -4,11 +4,12 @@
         color: '#b3b3ff',
         defaults: {
             name:           {},
-            thing:          { required: true   },
+            thing:          {},
+            thingType:      {},   
             item:           { required: true   },           
             outputValue:    { value: "payload" },
             outputType:     { required: true   },
-            info:      { value: false     }
+            info:           { value: false     }
         },
         inputs:1,
         outputs:1,
@@ -19,6 +20,7 @@
         paletteLabel: "value",
         oneditprepare: function () {
             var savedThing = this.thing;
+            var savedType = this.thingType;
             var savedItem = this.item;
 
             //get all thing nodes and sort them alphabetically
@@ -41,7 +43,34 @@
                 return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
             });
 
+            //get all Thingtypes and sort them alphabetically
+            var thingTypeId = [];
+            for (let i in thingsList) {
+                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                    thingTypeId.push(thingsList[i].thingType);
+                }
+            }
+            var thingTypeList = [];
+            for (let i in thingTypeId) {
+                var thingType = RED.nodes.node(thingTypeId[i]);
+                if ((typeof thingType !== 'undefined') && (thingType.thingStatus)) {
+                    thingTypeList.push(thingType);
+                }
+            }
+            thingTypeList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });
+
             $("#node-input-thing").change(function() {
+                if ($("#node-input-thing").val() == '0') {
+                    $("#div-type").show();
+                    return;
+                } else {
+                    $("#div-type").hide();
+                }
+
                 $("#node-input-item").children().remove();
 
                 //get all items and sort them alphabetically
@@ -60,18 +89,53 @@
                         $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                     }
                 }
-
+debugger
                 if ($("#node-input-thing").val() == savedThing) {
                     $("#node-input-item").val(savedItem);
                 }
             });
 
+            $("#node-input-thingType").change(function() {
+                if ($("#node-input-thingType").is(':hidden')) { return; }
+                $("#node-input-item").children().remove();
+
+                //get all items and sort them alphabetically
+                let thingType = RED.nodes.node($("#node-input-thingType").val());
+                //Add items
+                for (let d in thingType.items) {
+                    if (thingType.items[d].type != 'command') {
+                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    }
+                }
+
+                if ($("#node-input-thingType").val() == savedType) {
+                    $("#node-input-item").val(savedItem);
+                }
+            });            
+
             //Add things
+            $("<option value='0'><em>< Get thing.id from msg ></i></em></option>").appendTo("#node-input-thing");
             for (var d in thingsList) {
                 $("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>").appendTo("#node-input-thing");
             }
-            if (this.thing) {
+            //Add types
+            for (var d in thingTypeList) {
+                $("<option value='" + thingTypeList[d].id + "'> " + thingTypeList[d].name + "</option>").appendTo("#node-input-thingType");
+            }
+
+            if (typeof this.thingType !== 'undefined') {
+                $("#node-input-thingType").val(this.thingType);
+            }
+
+            if (typeof this.thing !== 'undefined') {
                 $("#node-input-thing").val(this.thing);
+            } else {
+                $("#node-input-thing").val(thingsList[0].id);
+            }
+
+            if ($("#node-input-thing").val() == '0') {
+                $('#node-input-thingType').trigger('change');
+            } else {
                 $('#node-input-thing').trigger('change');
             }
 
@@ -98,9 +162,13 @@
         <p>No items found. Start by creating some Things.</p>
     </div>
     <div class="form-row" id="div-main">
-        <div class="form-row" id="div-main">
+        <div class="form-row">
             <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
             <select id="node-input-thing" style="width:70%"></select>
+        </div>
+        <div class="form-row" id="div-type" hidden>
+            <label for="node-input-thingType"><i class="fa fa-gears"></i> Type</label>
+            <select id="node-input-thingType" style="width:70%"></select>
         </div>
         <div class="form-row">
             <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
