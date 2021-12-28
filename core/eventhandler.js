@@ -13,18 +13,26 @@ module.exports = function(RED) {
 
         function checkHeartbeat() {
             // Check all Things for heartbeat
+            node.debug("Check heartbeat");
             var thing;
             const date = Date.now();
             var online;
             for (let n in hbList) {
                 thing = RED.nodes.getNode(hbList[n].id);
-                if (date-thing.thingType.hbTTL > thing.heartbeat) {
-                    online=false;
+                if (thing.id in thing.heartbeat) {
+                    if (date-(thing.thingType.hbTTL*1000) > thing.heartbeat[thing.id]) {
+                        online=false;
+                    } else {
+                        online=true;
+                    }
                 } else {
-                    online=true;
+                    online=false;
                 }
 
-                if (online != thing.state[1]) {
+                if (online != thing.state['1']) {
+                    if (!online) {
+                        node.debug("Heartbeat: "+thing.name+" offline")
+                    }
                     thing.state['1'] = online;
                     thing.laststate['1'] = !online;
                     thing.heartbeat['1'] = date;
