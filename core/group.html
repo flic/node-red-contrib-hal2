@@ -49,6 +49,27 @@
                 return;
             }
 
+            //get all Thingtypes and sort them alphabetically
+            var thingTypeId = [];
+            for (let i in thingsList) {
+                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                    thingTypeId.push(thingsList[i].thingType);
+                }
+            }
+            var thingTypeList = [];
+            for (let i in thingTypeId) {
+                var thingType = RED.nodes.node(thingTypeId[i]);
+                if (thingType.thingStatus) {
+                    thingTypeList.push(thingType);
+                }
+            }
+            thingTypeList.sort(function(a, b) {
+                var textA = a.name.toUpperCase();
+                var textB = b.name.toUpperCase();
+                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+            });            
+
+
             $("#node-input-group-container").editableList({
                 addItem: function(container,i,opt) {
                     var group = opt;
@@ -62,25 +83,34 @@
 
                     //Add rows
                     var rowThing = $('<div/>').appendTo(container);
+                    var rowFilter = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()                    
                     var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()                    
 
                     //Add labels
-                    var label1 = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
-                        .appendTo(rowThing);
-                    label1.append(' Thing');
-                    var label2 = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
-                        .appendTo(rowItem);
-                    label2.append(' Item');
+                    var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
+                        .appendTo(rowThing)
+                        .append(' Thing')
+                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .appendTo(rowFilter)
+                        .append(' Filter')                         
+                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
+                        .appendTo(rowItem)
+                        .append(' Item')
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')                    
 
-                    var thingsField = $('<select/>',{class:"node-input-group-thing",style:"width:calc(100% - 70px)"}).appendTo(rowThing);
-                    var itemsField = $('<select/>',{class:"node-input-group-item",style:"width:calc(100% - 70px)"}).appendTo(rowItem);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 70px)"}).appendTo(rowNotes);                    
+                    var thingsField = $('<select/>',{class:"node-input-group-thing",style:"width:calc(100% - 90px)"}).appendTo(rowThing);
+                    var thingsFilter = $('<button type="button"/>').appendTo(rowThing);
+                        $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
+                    var filterField = $('<select/>',{style:"width:calc(100% - 90px)"}).appendTo(rowFilter);
+                    var itemsField = $('<select/>',{class:"node-input-group-item",style:"width:calc(100% - 90px)"}).appendTo(rowItem);
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowNotes);                    
 
                     thingsField.change(function() {
                         let thing = RED.nodes.node(thingsField.val());
@@ -111,12 +141,38 @@
                                 .text(thing.name));
                         }                            
                     });
+
+                    filterField.change(function() {
+                        thingsField.children().remove();
+                        for (var d in thingsList) {
+                            if ((filterField.val() == 0) || (thingsList[d].thingType == filterField.val())) {
+                                thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                            }
+                        }
+                        thingsField.trigger('change');
+                    });
+
+                    thingsFilter.on('click', function() {
+                        if (rowFilter.is(':visible')) {
+                            rowFilter.hide();
+                            if (filterField.val() != 0) {
+                                filterField.val(0);
+                                filterField.trigger('change');
+                            }
+                        } else {
+                            rowFilter.show();
+                        }
+                    });                    
            
                     //Add things
                     for (let d in thingsList) {
                         thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
                     }
-
+                    //Add filter types
+                    filterField.append($("<option></option>").val(0).text("<All types>"));
+                    for (let d in thingTypeList) {
+                        filterField.append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));
+                    } 
                     //Add values
                     if (Object.keys(group).length != 0) {
                         thingsField.val(group.thing);

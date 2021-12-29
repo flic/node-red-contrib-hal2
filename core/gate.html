@@ -95,8 +95,6 @@
                         .hide()                    
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
 
-
-
                     //Add labels
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowName)
@@ -172,7 +170,7 @@
                         thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
                     }
 
-                    //Add types
+                    //Add filter types
                     filterField.append($("<option></option>").val(0).text("<All types>"));
                     for (let d in thingTypeList) {
                         filterField.append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));

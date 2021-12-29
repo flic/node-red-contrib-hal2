@@ -101,7 +101,9 @@
                         //Add things
                         $("#div-item").show();
                         $("#label-node-input-thing").text(" Thing");
-                        $("#label-node-input-thing").attr('class','fa fa-microchip')
+                        $("#label-node-input-thing").attr('class','fa fa-microchip');
+                        $("#thing-filter-button").show();
+                        $("#thing-filter-div").hide();
                         $("#node-input-thing").children().remove();
                         for (var t in thingsList) {
                             $("<option value='" + thingsList[t].id + "'> " + thingsList[t].name + "</option>").appendTo("#node-input-thing");
@@ -116,6 +118,8 @@
                         $("#div-item").hide();
                         $("#label-node-input-thing").text(" Group");
                         $("#label-node-input-thing").attr('class','fa fa-object-group');
+                        $("#thing-filter-button").hide();
+                        $("#thing-filter-div").hide();
                         $("#node-input-thing").children().remove();
                         for (let d in groupsList) {
                             $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>").appendTo("#node-input-thing");
@@ -130,6 +134,8 @@
                         $("#div-item").show();
                         $("#label-node-input-thing").text(" Type");
                         $("#label-node-input-thing").attr('class','fa fa-gears');
+                        $("#thing-filter-button").hide();
+                        $("#thing-filter-div").hide();
                         $("#node-input-thing").children().remove();
                         for (let d in thingTypeList) {
                             $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#node-input-thing");
@@ -141,6 +147,28 @@
                         break;
                 }                      
             });
+
+            $("#thing-filter").change(function() {
+                $("#node-input-thing").children().remove();
+                for (var d in thingsList) {
+                    if (($("#thing-filter").val() == 0) || (thingsList[d].thingType == $("#thing-filter").val())) {
+                        $("#node-input-thing").append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                    }
+                }
+                $("#node-input-thing").trigger('change');
+            });
+
+            $("#thing-filter-button").on('click', function() {
+                        if ($("#thing-filter-div").is(':visible')) {
+                            $("#thing-filter-div").hide();
+                            if ($("#thing-filter").val() != 0) {
+                                $("#thing-filter").val(0);
+                                $("#thing-filter").trigger('change');
+                            }
+                        } else {
+                            $("#thing-filter-div").show();
+                        }
+                    });
 
             $("#node-input-thing").change(function() {
                 let thing = RED.nodes.node($("#node-input-thing").val());
@@ -188,6 +216,12 @@
                     }
                 }
             });         
+
+            //Add filter types
+            $("#thing-filter").append($("<option></option>").val(0).text("<All types>"));
+            for (let d in thingTypeList) {
+                $("#thing-filter").append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));
+            }   
 
             // Add values
             if (this.thing) {
@@ -309,7 +343,12 @@
         <div class="form-row">
             <label for="node-input-thing" id="label-node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
             <select id="node-input-thing" style="width:70%"></select>
+            <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
+        <div class="form-row" id="thing-filter-div" hidden>
+            <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
+            <select id="thing-filter" style="width:70%"></select>
+        </div>        
         <div class="form-row" id="div-item">
             <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
             <select id="node-input-item" style="width:70%"></select>
