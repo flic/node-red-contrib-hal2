@@ -21,7 +21,9 @@ module.exports = function(RED) {
                     item: node.group[i].item,
                     payload: payload
                 }
-                queue.push(command);
+                if (command.item != '1') {
+                    queue.push(command);
+                }
             }
             common.queueSend(node,queue);              
         }

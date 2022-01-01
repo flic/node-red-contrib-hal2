@@ -144,7 +144,7 @@
                                 let thingType = RED.nodes.node(thing.thingType);
                                 //Add items                            
                                 for (let d in thingType.items) {
-                                    if (thingType.items[d].type != 'status') {
+                                    if (thingType.items[d].id != '1') {
                                         itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                                     }
                                 }
