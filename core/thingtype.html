@@ -18,6 +18,7 @@
             contextStore: {},
             nodestatus: {},
             items: { value: [], required: true },
+            attributes: { value: [], required: false },
             ingress: {},
             egress: {},
             thingStatus: {},
@@ -251,7 +252,8 @@
                     var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
-                    var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails); 
+                    var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
 
                     // Show a clickable expand icon
                     var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
@@ -299,6 +301,9 @@
                     var labelTopicSuffix = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-tasks"})
                         .appendTo(rowTopicSuffix)
                         .append(' Cmnd suffix')
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes)
+                        .append(' Notes')
                   
                     //Name property
                     var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
@@ -347,6 +352,10 @@
                             egressProperty.append($("<option></option>").val(id).text(name));
                         })                    
                     
+                    // Notes
+                    var notesProperty = $('<textarea/>',{class:"node-config-thingtype-notes-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowNotes)
+
                     // Show/hide ingress/egress/command
                     itemTypeProperty.change( function() {
                         let val = itemTypeProperty.val();
@@ -379,12 +388,100 @@
                         itemTypeProperty.val(item.type);
                         ingressProperty.val(item.ingress);
                         egressProperty.val(item.egress);
+                        notesProperty.val(item.notes);
                     }
                     itemTypeProperty.trigger('change');
                 },
                 removable: true,
                 sortable: true,
                 addButton: "Item"
+            });
+
+            $("#node-config-thingtype-list-attributes").editableList({
+                addItem: function(container,i,opt) {
+                    var item = opt;
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });
+
+                    //Add rows
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
+                    var rowDefaultValue = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowDescription = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
+
+                    // Show a clickable expand icon
+                    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        
+                        // Switch the icon between expand and compress
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        }
+                        else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                    
+                        // Only show the relevant widget type properties
+                        rowDetails.change();
+                    });
+
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") {
+                            rowDetails.show();
+                        } else {
+                            rowDetails.hide();
+                        }
+                    });
+
+                    //Add labels
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                        .appendTo(rowName)
+                        .append(' Item name')
+                    var labelDefaultValue = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .appendTo(rowDefaultValue)
+                        .append(' Default value')
+                    var labelDescription = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
+                        .appendTo(rowDescription)
+                        .append(' Description')                          
+                  
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
+                        .appendTo(rowName)
+                    var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
+                        .appendTo(rowName)
+                        .val(createId())
+                    var defaultValueProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
+                    .appendTo(rowDefaultValue)
+                    .typedInput({
+                        default:'StrEnd',
+                        types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
+                    });
+
+                    var descriptionProperty = $('<textarea/>',{class:"node-config-thingtype-itemtype-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowDescription)
+
+                    //Add values
+                    //if (Object.keys(item).length != 0) {
+                    //    nameProperty.val(item.name);
+                    //    idProperty.val(item.id);
+                    //    topicFilterProperty.typedInput('type',item.topicFilterType);
+                    //    topicFilterProperty.typedInput('value',item.topicFilterValue);
+                    //    topicSuffixProperty.val(item.topicSuffix);
+                    //    itemTypeProperty.val(item.type);
+                    //    ingressProperty.val(item.ingress);
+                    //    egressProperty.val(item.egress);
+                    //}
+                    //itemTypeProperty.trigger('change');
+                },
+                removable: true,
+                sortable: true,
+                addButton: "Attributes"
             });
 
         // Ingress
@@ -736,7 +833,8 @@
                         topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
                         type:item.find(".node-config-thingtype-itemtype-property").val(),
                         ingress:item.find(".node-config-thingtype-ingress-property").val(),
-                        egress:item.find(".node-config-thingtype-egress-property").val()
+                        egress:item.find(".node-config-thingtype-egress-property").val(),
+                        notes:item.find(".node-config-thingtype-notes-property").val()
                     }
                     switch(r.type) {
                         case 'both':
@@ -871,6 +969,9 @@
             </div>            
             <div class="form-row">
                 <ol id="node-config-thingtype-list-items"></ol>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-thingtype-list-attributes"></ol>
             </div>
         </div>
         <!-- Ingress tab -->

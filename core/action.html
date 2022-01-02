@@ -83,14 +83,17 @@
                     //Add rows
                     var rowCategory = $('<div/>').appendTo(container);
                     var rowThing = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
                     var rowFilter = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
                     var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                    var rowItemNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
+                    var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
 
                     //Add labels
                     var labelCategory = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-folder"})
@@ -99,18 +102,21 @@
                     var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowThing)
                         .append(' Thing')
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes)
+                        .append(' Notes')
                     var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowFilter)
                         .append(' Filter')                        
                     var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowItem)
                         .append(' Item')
+                    var labelItemNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowItemNotes)
+                        .append(' Notes')
                     var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
                         .appendTo(rowCommand)
                         .append(' Cmnd')
-                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
-                        .appendTo(rowNotes)
-                        .append(' Notes')
 
                     var categoryField = $('<select/>',{class:"node-input-command-category",style:"width:calc(100% - 110px)"})
                         .appendTo(rowCategory)
@@ -120,13 +126,15 @@
                         .append($("<option></option>").val('dynamic').text('Thing - set by msg.thing.id -'))
                     var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 110px)"})
                         .appendTo(rowThing);
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 110px)"})
+                        .appendTo(rowNotes);
                     var thingsFilter = $('<button type="button"/>').appendTo(rowThing);
                         $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
                     var filterField = $('<select/>',{style:"width:calc(100% - 110px)"}).appendTo(rowFilter);
                     var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 110px)"})
                         .appendTo(rowItem);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 110px)"})
-                        .appendTo(rowNotes);
+                    var itemNotesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 110px)"})
+                        .appendTo(rowItemNotes);
 
                     thingsField.change(function() {
                         var thing = RED.nodes.node(thingsField.val());
@@ -151,23 +159,29 @@
                                 if ((savedItem != null) & (thingsField.val() == savedThing)) {
                                     itemsField.val(savedItem);
                                 }
+                                itemsField.trigger('change');
                                 break;
                             case 'hal2Group':
+                                rowNotes.hide();
+                                rowItemNotes.hide();
                                 itemsField.append($("<option></option>")
                                     .val(thing.id)
                                     .text(thing.name));
                                 break;
                             case 'hal2ThingType':
                             case 'dynamic':
+                                rowNotes.hide();
+                                rowItemNotes.hide();
                                 //Add items
                                 for (let d in thing.items) {
-                                    if (thing.items[d].type != 'status') {
+                                    if (thing.items[d].it != '1') {
                                         itemsField.append($("<option></option>").val(thing.items[d].id).text(thing.items[d].name));
                                     }
                                 }
                                 if (thingsField.val() == savedThing) {
                                     itemsField.val(savedItem);
                                 }
+                                itemsField.trigger('change');
                                 break;
                         }
                     });
@@ -192,6 +206,26 @@
                         } else {
                             rowFilter.show();
                         }
+                    });
+
+                    itemsField.change(function() {
+                        rowItemNotes.hide();
+                        var thing = RED.nodes.node(thingsField.val());
+                        if (thing.type == 'hal2Thing') {                        
+                            var thingType = RED.nodes.node(thing.thingType);
+                        } else {
+                            var thingType = thing;
+                        }
+                        var item = itemsField.val();
+                        for (let d in thingType.items) {
+                            if (thingType.items[d].id == item) {
+                                if (thingType.items[d].notes) {
+                                    rowItemNotes.show();
+                                    itemNotesField.val(thingType.items[d].notes);
+                                }
+                                break;
+                            }
+                        }                        
                     });
 
                     categoryField.change( function() {
@@ -278,6 +312,7 @@
                     }
                     categoryField.trigger('change');
                     thingsField.trigger('change');
+                    itemsField.trigger('change');
                 },
                 removable: true,
                 sortable: true,

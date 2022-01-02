@@ -75,7 +75,6 @@
            $("#node-input-rule-container").editableList({
                 addItem: function(container,i,opt) {
                     var rule = opt;
-
                     var savedThing = rule.thing;
                     var savedItem = rule.item;
 
@@ -86,38 +85,45 @@
 
                     //Add rows
                     var rowName = $('<div/>').appendTo(container);
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()                    
                     var rowFilter = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
                     var rowItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                    var rowItemNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
-                        .hide()                    
+                        .hide()
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
 
                     //Add labels
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowName)
                         .append(' Thing')
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes)
+                        .append(' Notes')                         
                     var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowFilter)
                         .append(' Filter')
                     var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowItem)
                         .append(' Item')
-                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
-                        .appendTo(rowNotes)
-                        .append(' Notes')                         
+                    var labelItemNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowItemNotes)
+                        .append(' Notes')
                     var labelRule = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;"})
                         .appendTo(rowRule)
                         .append(' Rule')   
 
                     var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 90px)"}).appendTo(rowName);
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowNotes);
                     var thingsFilter = $('<button type="button"/>').appendTo(rowName);
                     $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
                     var filterField = $('<select/>',{style:"width:calc(100% - 90px)"}).appendTo(rowFilter);
                     var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 90px)"}).appendTo(rowItem);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowNotes);
+                    var itemNotesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowItemNotes);
 
                     thingsField.change(function() {
                         itemsField.children().remove();
@@ -141,6 +147,7 @@
                         if ((savedItem != null) & (thingsField.val() == savedThing)) {
                             itemsField.val(savedItem);
                         }
+                        itemsField.trigger('change');
                     });
 
                     filterField.change(function() {
@@ -163,6 +170,22 @@
                         } else {
                             rowFilter.show();
                         }
+                    });
+
+                    itemsField.change(function() {
+                        rowItemNotes.hide();
+                        var thing = RED.nodes.node(thingsField.val());
+                        var thingType = RED.nodes.node(thing.thingType);
+                        var item = itemsField.val();
+                        for (let d in thingType.items) {
+                            if (thingType.items[d].id == item) {
+                                if (thingType.items[d].notes) {
+                                    rowItemNotes.show();
+                                    itemNotesField.val(thingType.items[d].notes);
+                                }
+                                break;
+                            }
+                        }                        
                     });
 
                     //Add things
@@ -229,6 +252,7 @@
                     }
                     operatorField.trigger('change');
                     thingsField.trigger('change');
+                    itemsField.trigger('change');
                 },
                 removable: true,
                 sortable: true,

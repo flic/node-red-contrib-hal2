@@ -116,6 +116,8 @@
                     case "hal2Group":
                         //Add groups
                         $("#div-item").hide();
+                        $("#row-notes").hide();
+                        $("#row-item-notes").hide();
                         $("#label-node-input-thing").text(" Group");
                         $("#label-node-input-thing").attr('class','fa fa-object-group');
                         $("#thing-filter-button").hide();
@@ -136,6 +138,7 @@
                         $("#label-node-input-thing").attr('class','fa fa-gears');
                         $("#thing-filter-button").hide();
                         $("#thing-filter-div").hide();
+                        $("#row-notes").hide();
                         $("#node-input-thing").children().remove();
                         for (let d in thingTypeList) {
                             $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#node-input-thing");
@@ -195,6 +198,7 @@
                     if ($("#node-input-thing").val() == savedThing) {
                         $("#node-input-item").val(savedItem);
                     }
+                    $("#node-input-item").trigger('change');
                 } else if (thing.type == "hal2Group") {
                     $("#div-item").hide();
                     $("<option value='" + thing.id + "'> " + thing.name + "</option>").appendTo("#node-input-item");
@@ -214,8 +218,29 @@
                     if ($("#node-input-thing").val() == savedThing) {
                         $("#node-input-item").val(savedItem);
                     }
+                    $("#node-input-item").trigger('change');
                 }
-            });         
+            });
+
+            $("#node-input-item").change(function() {
+                $("#row-item-notes").hide();
+                if ($("#node-input-typeSel").val() == 'hal2ThingType') {
+                    var thingType = RED.nodes.node($("#node-input-thing").val());
+                } else {
+                    var thing = RED.nodes.node($("#node-input-thing").val());
+                    var thingType = RED.nodes.node(thing.thingType);
+                }
+                var item = $("#node-input-item").val();
+                for (let d in thingType.items) {
+                    if (thingType.items[d].id == item) {
+                        if (thingType.items[d].notes) {
+                            $("#row-item-notes").show();
+                            $("#item-notes").val(thingType.items[d].notes);
+                        }
+                        break;
+                    }
+                }                                     
+            });
 
             //Add filter types
             $("#thing-filter").append($("<option></option>").val(0).text("<All types>"));
@@ -348,14 +373,18 @@
         <div class="form-row" id="thing-filter-div" hidden>
             <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
             <select id="thing-filter" style="width:70%"></select>
-        </div>        
-        <div class="form-row" id="div-item">
-            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
-            <select id="node-input-item" style="width:70%"></select>
         </div>
         <div class="form-row" id="row-notes" style="width:100%" hidden>
             <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
             <textarea id="thing-notes" class="form-tips" style="width:70%"></textarea>
+        </div>
+        <div class="form-row" id="div-item">
+            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
+            <select id="node-input-item" style="width:70%"></select>
+        </div>
+        <div class="form-row" id="row-item-notes" style="width:100%" hidden>
+            <label for="item-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="item-notes" class="form-tips" style="width:70%"></textarea>
         </div>
         <div class="form-row">
             <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>

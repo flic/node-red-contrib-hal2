@@ -17,3 +17,11 @@ npm install node-red-contrib-hal2
 5. Send device commands to multiple Things using an **Action node**
 
 The documentation is somewhat lacking at the moment, but take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
+
+## History
+
+**1.4** Item filter applied to all node types
+**1.3** Dynamically set thing.id at runtime
+**1.2** Copy functions from other types
+**1.1** Item filter on gate node
+**1.0** Initial release

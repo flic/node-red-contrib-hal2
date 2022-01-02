@@ -122,6 +122,27 @@
                 if ($("#node-input-thing").val() == savedThing) {
                     $("#node-input-item").val(savedItem);
                 }
+                $("#node-input-item").trigger('change');
+            });
+
+            $("#node-input-item").change(function() {
+                $("#row-item-notes").hide();
+                if ($("#node-input-thing").val() == '0') {
+                    var thingType = RED.nodes.node($("#node-input-thingType").val());
+                } else {
+                    var thing = RED.nodes.node($("#node-input-thing").val());
+                    var thingType = RED.nodes.node(thing.thingType);
+                }
+                var item = $("#node-input-item").val();
+                for (let d in thingType.items) {
+                    if (thingType.items[d].id == item) {
+                        if (thingType.items[d].notes) {
+                            $("#row-item-notes").show();
+                            $("#item-notes").val(thingType.items[d].notes);
+                        }
+                        break;
+                    }
+                }                                     
             });
 
             $("#node-input-thingType").change(function() {
@@ -140,13 +161,9 @@
                 if ($("#node-input-thingType").val() == savedType) {
                     $("#node-input-item").val(savedItem);
                 }
+                $("#node-input-item").trigger('change');
             });            
 
-            //Add things
-            //$("#node-input-thing").append($("<option value='0'>- set by msg.thing.id -</option>"));
-            //for (var d in thingsList) {
-            //    $("#node-input-thing").append($("<option value='" + thingsList[d].id + "'> " + thingsList[d].name + "</option>"));
-            //}
             //Add types
             for (var d in thingTypeList) {
                 $("#node-input-thingType").append($("<option value='" + thingTypeList[d].id + "'> " + thingTypeList[d].name + "</option>"));
@@ -207,7 +224,11 @@
         <div class="form-row" id="thing-filter-div" hidden>
             <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
             <select id="thing-filter" style="width:70%"></select>
-        </div>         
+        </div>
+        <div class="form-row" id="row-notes" style="width:100%" hidden>
+            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="thing-notes" class="form-tips" style="width:70%"></textarea>
+        </div>
         <div class="form-row" id="div-type" hidden>
             <label for="node-input-thingType"><i class="fa fa-gears"></i> Type</label>
             <select id="node-input-thingType" style="width:70%"></select>
@@ -216,10 +237,10 @@
             <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
             <select id="node-input-item" style="width:70%"></select>
         </div>
-        <div class="form-row" id="row-notes" style="width:100%" hidden>
-            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
-            <textarea id="thing-notes" class="form-tips" style="width:70%"></textarea>
-        </div>        
+        <div class="form-row" id="row-item-notes" style="width:100%" hidden>
+            <label for="item-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="item-notes" class="form-tips" style="width:70%"></textarea>
+        </div>
         <div class="form-row">
             <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output to</label>
             <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">
