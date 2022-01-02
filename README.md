@@ -20,6 +20,8 @@ The documentation is somewhat lacking at the moment, but take a look at the exam
 
 ## History
 
+**1.5** Item notes added
+
 **1.4** Item filter applied to all node types
 
 **1.3** Dynamically set thing.id at runtime
