@@ -119,20 +119,22 @@ module.exports = function(RED) {
                     node.debug("State "+node.thingType.items[i].name+"["+node.thingType.items[i].id+"] set to value '"+result+"'");
                     node.laststate[node.thingType.items[i].id] = node.state[node.thingType.items[i].id];
                     node.state[node.thingType.items[i].id] = result;
-                    var date = Date.now();
-                    node.heartbeat[node.thingType.items[i].id] = date;
-                    node.heartbeat[node.id] = date;
-                    if (node.state['1'] === false) {
-                        node.state['1'] = true;
-                        node.laststate['1'] = false;
-                        node.heartbeat['1'] = date;
-                        node.showState();
-                    }
-
                     // Save to node context
                     nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
                     nodeContext.set("state",node.state,node.thingType.contextStore);
-                    nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
+
+                    if (node.thingType.hbType == 'ttl') {
+                        var date = Date.now();
+                        node.heartbeat[node.thingType.items[i].id] = date;
+                        node.heartbeat[node.id] = date;
+                        if (node.state['1'] === false) {
+                            node.state['1'] = true;
+                            node.laststate['1'] = false;
+                            node.heartbeat['1'] = date;
+                            node.showState();
+                        }
+                        nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
+                    }
 
                     eventmsg = {
                         _msgid: RED.util.generateId(),
