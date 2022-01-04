@@ -615,7 +615,8 @@
                                 setTimeout: true,
                                 clearTimeout: true,
                                 setInterval: true,
-                                clearInterval: true
+                                clearInterval: true,
+                                attribute: true
                             }
                     });
                     //Add editor value
@@ -623,7 +624,7 @@
                         node.editor[editorId].setValue(opt.fn);
                     } else {
                         nameProperty.val("Ingress function");
-                        node.editor[editorId].setValue("// msg object is passed to function\n\nreturn msg.payload;");
+                        node.editor[editorId].setValue("// msg & attribute objects are passed to function\n\nreturn msg.payload;");
                     }
                 },
                 removable: true,
@@ -754,7 +755,8 @@
                                 setTimeout: true,
                                 clearTimeout: true,
                                 setInterval: true,
-                                clearInterval: true
+                                clearInterval: true,
+                                attribute: true
                             }
                     });
 
@@ -762,7 +764,7 @@
                     if (Object.keys(opt).length != 0) {
                         node.editor[editorId].setValue(opt.fn);
                     } else {
-                        node.editor[editorId].setValue("// msg object is passed to function\n\nreturn msg;");
+                        node.editor[editorId].setValue("// msg & attribute objects are passed to function\n\nreturn msg;");
                     }
                 },
                 removable: true,
