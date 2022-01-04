@@ -89,24 +89,24 @@
                 0 : {
                     name: "Pass-through",
                     id: createId(),
-                    fn: "// msg & attribute objects are passed to function\n\nreturn msg.payload;"
+                    fn: "// msg & attribute objects are\n// passed to function\n\nreturn msg.payload;"
                 },
                 1 : {
                     name: "Convert to Number",
                     id: createId(),
-                    fn: "// msg & attribute objects are passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+                    fn: "// msg & attribute objects are\n// passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
                 },                
                 2 : {
                     name: "Convert to Boolean",
                     id: createId(),
-                    fn: "// msg & attribute objects are passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
+                    fn: "// msg & attribute objects are\n// passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
                 }, 
             }
             var defaultEgressFunctions = {
                 0 : {
                     name: "Pass-through",
                     id: createId(),
-                    fn: "// msg & attribute objects are passed to function\n\nreturn msg;"
+                    fn: "// msg & attribute objects are\n// passed to function\n\nreturn msg;"
                 }
             }
         var lastTab = "";
@@ -624,7 +624,7 @@
                         node.editor[editorId].setValue(opt.fn);
                     } else {
                         nameProperty.val("Ingress function");
-                        node.editor[editorId].setValue("// msg & attribute objects are passed to function\n\nreturn msg.payload;");
+                        node.editor[editorId].setValue("// msg & attribute objects are\n// passed to function\n\nreturn msg.payload;");
                     }
                 },
                 removable: true,
@@ -764,7 +764,7 @@
                     if (Object.keys(opt).length != 0) {
                         node.editor[editorId].setValue(opt.fn);
                     } else {
-                        node.editor[editorId].setValue("// msg & attribute objects are passed to function\n\nreturn msg;");
+                        node.editor[editorId].setValue("// msg & attribute objects are\n// passed to function\n\nreturn msg;");
                     }
                 },
                 removable: true,
