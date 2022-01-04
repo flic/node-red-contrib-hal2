@@ -18,7 +18,7 @@
             contextStore: {},
             nodestatus: {},
             items: { value: [], required: true },
-            //attributes: { value: [], required: false },
+            attributes: { value: [], required: false },
             ingress: {},
             egress: {},
             thingStatus: {},
@@ -88,24 +88,24 @@
                 0 : {
                     name: "Pass-through",
                     id: createId(),
-                    fn: "// msg object is passed to function\n\nreturn msg.payload;"
+                    fn: "// msg & attribute objects are passed to function\n\nreturn msg.payload;"
                 },
                 1 : {
                     name: "Convert to Number",
                     id: createId(),
-                    fn: "// msg object is passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+                    fn: "// msg & attribute objects are passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
                 },                
                 2 : {
                     name: "Convert to Boolean",
                     id: createId(),
-                    fn: "// msg object is passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
+                    fn: "// msg & attribute objects are passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
                 }, 
             }
             var defaultEgressFunctions = {
                 0 : {
                     name: "Pass-through",
                     id: createId(),
-                    fn: "// msg object is passed to function\n\nreturn msg;"
+                    fn: "// msg & attribute objects are passed to function\n\nreturn msg;"
                 }
             }
         var lastTab = "";
@@ -308,6 +308,7 @@
                     //Name property
                     var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
                         .appendTo(rowName)
+                        .prop('required',true);
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(createId())
@@ -397,6 +398,83 @@
                 addButton: "Item"
             });
 
+            $("#node-config-thingtype-list-attributes").editableList({
+                addItem: function(container,i,opt) {
+                    var item = opt;
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });
+
+                    //Add rows
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
+                    var rowDescription = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
+                    var rowRequired = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+
+                    // Show a clickable expand icon
+                    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        
+                        // Switch the icon between expand and compress
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        }
+                        else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                    
+                        // Only show the relevant widget type properties
+                        rowDetails.change();
+                    });
+
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") {
+                            rowDetails.show();
+                        } else {
+                            rowDetails.hide();
+                        }
+                    });
+
+                    //Add labels
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                        .appendTo(rowName)
+                        .append(' Attribute')
+                    var labelDescription = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowDescription)
+                        .append(' Notes')                          
+                        var labelrequired = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-check"})
+                        .appendTo(rowRequired)
+                        .append(' Required')
+                  
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-attribute-name-property",type:"text"})
+                        .appendTo(rowName)
+                        .prop('required',true);
+                    var idProperty = $('<input/>',{class:"node-config-thingtype-attribute-id-property",type:"hidden"})
+                        .appendTo(rowName)
+                        .val(createId())
+                    var notesProperty = $('<textarea/>',{class:"node-config-thingtype-attribute-notes-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowDescription)
+                        var requiredProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-attribute-required-property",type:"checkbox"})
+                        .appendTo(rowRequired)
+
+                    //Add values
+                    if (Object.keys(item).length != 0) {
+                        nameProperty.val(item.name);
+                        idProperty.val(item.id);
+                        requiredProperty.prop('checked',item.required);
+                        notesProperty.val(item.topicSuffix);
+                    }
+                },
+                removable: true,
+                sortable: true,
+                addButton: "Attribute"
+            });
 
         // Ingress
             $("#node-config-ingress-list-items").editableList({
@@ -678,31 +756,38 @@
             $('#tab-egress-copy-thing').trigger('change');            
 
         //Add items
+            //Attributes
+            if (this.attributes) {
+                for (let d in this.attributes) {
+                    let attribute = this.attributes[d];
+                    $("#node-config-thingtype-list-attributes").editableList('addItem',attribute);
+                }
+            }
            if (this.ingress) {
-                for (let i=0; i<this.ingress.length; i++) {
-                    let ingress = this.ingress[i];
+                for (let d in this.ingress) {
+                    let ingress = this.ingress[d];
                     $("#node-config-ingress-list-items").editableList('addItem',ingress);
                 }
             } else {
-                for (let i in defaultIngressFunctions) {
-                    $("#node-config-ingress-list-items").editableList('addItem',defaultIngressFunctions[i]);
+                for (let d in defaultIngressFunctions) {
+                    $("#node-config-ingress-list-items").editableList('addItem',defaultIngressFunctions[d]);
                 }
             }
 
             if (this.egress) {
-                for (let i=0; i<this.egress.length; i++) {
-                    let egress = this.egress[i];
+                for (let d in this.egress) {
+                    let egress = this.egress[d];
                     $("#node-config-egress-list-items").editableList('addItem',egress);
                 }
             } else {
-                for (let i in defaultEgressFunctions) {
-                    $("#node-config-egress-list-items").editableList('addItem',defaultEgressFunctions[i]);
+                for (let d in defaultEgressFunctions) {
+                    $("#node-config-egress-list-items").editableList('addItem',defaultEgressFunctions[d]);
                 }
             }
 
             if (this.items) {
-                for (let i=0; i<this.items.length; i++) {
-                    let item = this.items[i];
+                for (let d in this.items) {
+                    let item = this.items[d];
                     if (item.id.length > 1) {
                         $("#node-config-thingtype-list-items").editableList('addItem',item);
                     }
@@ -728,6 +813,7 @@
         oneditsave: function () {
             var node = this;
             var i;
+            node.attributes = [];
             node.items = [];
             node.ingress = [];
             node.egress = [];
@@ -735,6 +821,18 @@
             node.thingCommand = false;
 
             // Main tab
+            $("#node-config-thingtype-list-attributes")
+                .editableList('items')
+                .each(function() {
+                    let item = $(this);
+                    let r = {
+                        name:item.find(".node-config-thingtype-attribute-name-property").val(),
+                        id:item.find(".node-config-thingtype-attribute-id-property").val(),
+                        required:item.find(".node-config-thingtype-attribute-required-property").prop('checked'),
+                        notes:item.find(".node-config-thingtype-attribute-notes-property").val()
+                    }
+                    node.attributes.push(r);
+                })
             $("#node-config-thingtype-list-items")
                 .editableList('items')
                 .each(function() {
@@ -880,15 +978,13 @@
                         <div class="form-tips" id="LWTNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);"><b>Note:</b> Ingress function should return true or false.</div>
                     </div>   
                 </div>
-            </div>            
-            <div class="form-row">
-                <ol id="node-config-thingtype-list-items"></ol>
             </div>
-            <!--
             <div class="form-row">
                 <ol id="node-config-thingtype-list-attributes"></ol>
             </div>
-            -->
+            <div class="form-row">
+                <ol id="node-config-thingtype-list-items"></ol>
+            </div>
         </div>
         <!-- Ingress tab -->
         <div id="tab-ingress" style="display:none">

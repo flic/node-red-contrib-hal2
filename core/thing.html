@@ -25,6 +25,7 @@
                     return true;
                 }
             },
+            attributes:          {},
             topicFilter:        { value: "" },
             topicFilterType:    {},
             topicPrefix:        { value: "" },
@@ -39,6 +40,7 @@
         },
         paletteLabel: "thing",
         oneditprepare: function () {
+            var node = this;
             //Types
             var typeMQTT = {
                 value: "mqtt",
@@ -61,6 +63,34 @@
             if (this.topicPrefix) {
                 $("#node-input-topicPrefix").val(this.topicPrefix);                         
             }
+
+            //Attributes list
+            $("#attributes-list").editableList({
+                addItem: function(container,i,opt) {
+                    var attribute = opt;
+                    container.css({
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    });
+
+                    var rowAttrName = $('<div/>').appendTo(container);
+
+                    var labelAttrName = $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                        .appendTo(rowAttrName)
+                        .append(' '+attribute.name)
+                    var valueProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"attribute-value-property",type:"text"})
+                        .appendTo(rowAttrName)
+                        .prop('required',attribute.required)
+                        .val(attribute.val)
+                    var idProperty = $('<input/>',{class:"attribute-id-property",type:"hidden"})
+                        .appendTo(rowAttrName)
+                        .val(attribute.id)                        
+                },
+                removable: false,
+                sortable: false,
+                addButton: false
+            });
+
             $("#node-input-thingType").change( function () {
                 let thingType = RED.nodes.node($("#node-input-thingType").val());
                 if (typeof thingType == 'undefined') { return; }
@@ -69,11 +99,36 @@
                 } else {
                     $("#cmnd-prefix").hide();
                 }
+
+                // Attributes
+                $('#attributes').hide();
+                if ((typeof thingType.attributes === 'object') && (Object.keys(thingType.attributes).length != 0)) {
+                    //Show attribute list and add attribute values
+                    $('#attributes-list').editableList('empty');
+                    $("#attributes").show();
+                    for (let d in thingType.attributes) {
+                        let attribute = [];
+                        attribute.id = thingType.attributes[d].id;
+                        attribute.name = thingType.attributes[d].name;
+                        attribute.required = thingType.attributes[d].required;
+                        attribute.val = "";
+                        if ((typeof node.attributes === 'object') && (Object.keys(node.attributes).length != 0)) {
+                            for (let a in node.attributes) {
+                                if (thingType.attributes[d].id == node.attributes[a].id) {
+                                    attribute.val = node.attributes[a].val;
+                                    break;
+                                }
+                            }
+                        }
+                        $("#attributes-list").editableList('addItem',attribute);
+                    }
+                }
             });
 
             $("#node-input-thingType").trigger('change');
         },
         oneditsave: function () {
+            var node = this;
             let TT = $("#node-input-thingType").val();
             if (TT) {
                 var thingType = RED.nodes.node(TT);
@@ -83,6 +138,18 @@
                     this.outputs = 0;
                 }
             }
+
+            node.attributes = [];
+            $("#attributes-list")
+                .editableList('items')
+                .each(function() {
+                    let item = $(this);
+                    let r = {
+                        id:item.find(".attribute-id-property").val(),
+                        val:item.find(".attribute-value-property").val()
+                    }
+                    node.attributes.push(r);
+                })
         }
     });
 </script>
@@ -112,6 +179,10 @@
     <div class="form-row">
         <label for="node-input-notes"><i class="fa fa-file"></i> Notes</label>
         <textarea id="node-input-notes" style="width:70%"></textarea>
+    </div>
+    <div class="form-row" id="attributes"  style="width:95%" hidden>
+        <label><i class="fa fa-tags"></i> Attributes</label>
+        <ol id="attributes-list"></ol>
     </div>
 </script>
 

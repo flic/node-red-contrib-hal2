@@ -53,6 +53,21 @@ module.exports = function(RED) {
                 for (i in thing.thingType.items) {
                     if (thing.thingType.items[i].id == node.item) { break; }
                 }
+                var attribute = [];
+                if (typeof thing.thingType.attributes === 'object') {
+                    for (d in thing.thingType.attributes) {
+                        attribute[thing.thingType.attributes[d].name] = ""
+                        if (typeof thing.attributes === 'object') {
+                            for (let a in thing.attributes) {
+                                if (thing.attributes[a].id == thing.thingType.attributes[d].id) {
+                                    attribute[thing.thingType.attributes[d].name] = thing.attributes[a].val;
+                                    break;
+                                }
+                            }
+                        
+                        }
+                    }
+                }
                 msg.thing = {
                     name: thing.name,
                     id: thing.id,
@@ -62,6 +77,9 @@ module.exports = function(RED) {
                     name: thing.thingType.items[i].name,
                     id: thing.thingType.items[i].id,
                     last_update: thing.heartbeat[node.item]
+                }
+                if (Object.keys(attribute) != 0) {
+                    msg.thing.attributes = Object.assign({},attribute);
                 }
             }
             node.send(msg);

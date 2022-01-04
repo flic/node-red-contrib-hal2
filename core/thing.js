@@ -39,6 +39,7 @@ module.exports = function(RED) {
         this.topicPrefix = config.topicPrefix;
         this.topicFilter = config.topicFilter;
         this.topicFilterType = config.topicFilterType;
+        this.attributes = config.attributes;
         var node = this;
         var nodeContext = this.context();
 
@@ -84,6 +85,7 @@ module.exports = function(RED) {
             var result;
             var _ingressFn;
             var msgClone;
+            var attribute;
 
             if (node.topicFilter) {
                 if (topicFilter[node.topicFilterType](msg.topic,node.topicFilter) === false) { return; }
@@ -109,9 +111,24 @@ module.exports = function(RED) {
                 }
 
                 msgClone = RED.util.cloneMessage(msg);
-                _ingressFn = new Function('msg',fn);
+                attribute = [];
+                if (typeof node.thingType.attributes === 'object') {
+                    for (d in node.thingType.attributes) {
+                        attribute[node.thingType.attributes[d].name] = ""
+                        if (typeof node.attributes === 'object') {
+                            for (let a in node.attributes) {
+                                if (node.attributes[a].id == node.thingType.attributes[d].id) {
+                                    attribute[node.thingType.attributes[d].name] = node.attributes[a].val;
+                                    break;
+                                }
+                            }
+                        
+                        }
+                    }
+                }
+                _ingressFn = new Function('msg','attribute',fn);
                 try {
-                    result = _ingressFn(msgClone);
+                    result = _ingressFn(msgClone,attribute);
                 } catch (err) {
                     node.error("Error running ingress for "+node.thingType.items[i].name+": "+err);
                 }
@@ -135,7 +152,6 @@ module.exports = function(RED) {
                         }
                         nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
                     }
-
                     eventmsg = {
                         _msgid: RED.util.generateId(),
                         state: result,
@@ -156,6 +172,9 @@ module.exports = function(RED) {
                             id: node.thingType.items[i].id,
                             last_update: node.heartbeat[node.thingType.items[i].id]
                         }
+                    }
+                    if (Object.keys(attribute) != 0) {
+                        eventmsg.thing.attributes = Object.assign({},attribute);
                     }
                     node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);
                     node.eventHandler.publish('update',node.thingType.id,node.thingType.items[i].id,eventmsg);
@@ -198,6 +217,22 @@ module.exports = function(RED) {
                     payload: payload
                 }
 
+                attribute = [];
+                if (typeof node.thingType.attributes === 'object') {
+                    for (d in node.thingType.attributes) {
+                        attribute[node.thingType.attributes[d].name] = ""
+                        if (typeof node.attributes === 'object') {
+                            for (let a in node.attributes) {
+                                if (node.attributes[a].id == node.thingType.attributes[d].id) {
+                                    attribute[node.thingType.attributes[d].name] = node.attributes[a].val;
+                                    break;
+                                }
+                            }
+                        
+                        }
+                    }
+                }
+
                 for (let i in node.thingType.egress) {
                     if (node.thingType.egress[i].id == item.egress){
                         var fn = node.thingType.egress[i].fn;
@@ -205,9 +240,9 @@ module.exports = function(RED) {
                     }
                 }
              
-                let _egressFn = new Function('msg',fn);
+                let _egressFn = new Function('msg','attribute',fn);
                 try {
-                    command = _egressFn(command);
+                    command = _egressFn(command,attribute);
                 } catch (err) {
                     node.error("Error running egress for "+item.name+": "+err);
                 }
@@ -229,6 +264,9 @@ module.exports = function(RED) {
                         last_update: node.heartbeat[item.id]
                     }
                     command.logtype = 'egress';
+                    if (Object.keys(attribute) != 0) {
+                        command.thing.attributes = Object.assign({},attribute);
+                    }
                     node.eventHandler.publish('log','0',node.thingType.items[i].id,command);
                 }
             }
