@@ -57,9 +57,29 @@ module.exports = function(RED) {
         node.laststate = nodeContext.get("laststate",node.thingType.contextStore);
         node.state = nodeContext.get("state",node.thingType.contextStore);
         node.heartbeat = nodeContext.get("heartbeat",node.thingType.contextStore);
+        if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
         if (typeof node.laststate === 'undefined') { node.laststate = {}; }
         if (typeof node.state === 'undefined') { node.state = {}; }
         if (typeof node.heartbeat === 'undefined') { node.heartbeat = {}; }
+
+        function getAttributes() {
+            var attribute = [];
+            if (typeof node.thingType.attributes === 'object') {
+                for (d in node.thingType.attributes) {
+                    attribute[node.thingType.attributes[d].name] = ""
+                    if (typeof node.attributes === 'object') {
+                        for (let a in node.attributes) {
+                            if (node.attributes[a].id == node.thingType.attributes[d].id) {
+                                attribute[node.thingType.attributes[d].name] = node.attributes[a].val;
+                                break;
+                            }
+                        }
+                    
+                    }
+                }
+            }
+            return attribute;
+        }
 
         node.showState = function () {
             var statusMsg = [];
@@ -107,6 +127,25 @@ module.exports = function(RED) {
                 return;
             }
 
+            if (node.thingType.filterFunction != '0') {
+                for (let n in node.thingType.ingress) {
+                    if (node.thingType.ingress[n].id == node.thingType.filterFunction){
+                        var fn = node.thingType.ingress[n].fn;
+                        break;
+                    }
+                }
+                var attribute = getAttributes();
+                msgClone =  RED.util.cloneMessage(msg);
+                _ingressFn = new Function('msg','attribute',fn);
+                try {
+                    result = _ingressFn(msgClone,attribute);
+                } catch (err) {
+                    node.error("Error running filter ingress: "+err);
+                    return;
+                }
+                if (result != true) { return; }
+            }
+
             for (var i in node.thingType.items) {
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'ttl')) { continue; }
 
@@ -126,21 +165,7 @@ module.exports = function(RED) {
                 }
 
                 msgClone = RED.util.cloneMessage(msg);
-                attribute = [];
-                if (typeof node.thingType.attributes === 'object') {
-                    for (d in node.thingType.attributes) {
-                        attribute[node.thingType.attributes[d].name] = ""
-                        if (typeof node.attributes === 'object') {
-                            for (let a in node.attributes) {
-                                if (node.attributes[a].id == node.thingType.attributes[d].id) {
-                                    attribute[node.thingType.attributes[d].name] = node.attributes[a].val;
-                                    break;
-                                }
-                            }
-                        
-                        }
-                    }
-                }
+                attribute = getAttributes();
                 _ingressFn = new Function('msg','attribute',fn);
                 try {
                     result = _ingressFn(msgClone,attribute);
@@ -232,22 +257,7 @@ module.exports = function(RED) {
                     payload: payload
                 }
 
-                attribute = [];
-                if (typeof node.thingType.attributes === 'object') {
-                    for (d in node.thingType.attributes) {
-                        attribute[node.thingType.attributes[d].name] = ""
-                        if (typeof node.attributes === 'object') {
-                            for (let a in node.attributes) {
-                                if (node.attributes[a].id == node.thingType.attributes[d].id) {
-                                    attribute[node.thingType.attributes[d].name] = node.attributes[a].val;
-                                    break;
-                                }
-                            }
-                        
-                        }
-                    }
-                }
-
+                attribute = getAttributes();
                 for (let i in node.thingType.egress) {
                     if (node.thingType.egress[i].id == item.egress){
                         var fn = node.thingType.egress[i].fn;

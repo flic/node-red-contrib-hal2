@@ -15,20 +15,21 @@
                     return true;
                 }
             },
-            contextStore: {},
-            nodestatus: {},
-            items: { value: [], required: true },
-            attributes: { value: [], required: false },
-            ingress: {},
-            egress: {},
-            thingStatus: {},
-            thingCommand: {},
-            hbCheck: { value:false },
-            hbType: { value:"lwt" },
-            hbTTL: {},
-            hbLWT: {},
-            hbFilterVal: {},
-            hbFilterType: {}
+            contextStore:   {},
+            nodestatus:     {},
+            items:          { value: [], required: true },
+            attributes:     { value: [], required: false },
+            ingress:        {},
+            egress:         {},
+            thingStatus:    {},
+            thingCommand:   {},
+            hbCheck:        { value:false },
+            hbType:         { value:'lwt' },
+            hbTTL:          {},
+            hbLWT:          {},
+            hbFilterVal:    {},
+            hbFilterType:   {},
+            filterFunction: {}
         },
         label: function () {
             return this.name || "Thing type";
@@ -167,6 +168,47 @@
                 });                     
         }
 
+        function updateHbFunctions(savedFn) {
+            // Add ingress items to heartbeat
+            selectedFn = $("#node-config-input-hbLWT").val()
+            $("#node-config-input-hbLWT").children().remove();
+            $("#node-config-ingress-list-items")
+                .editableList('items')
+                .each(function() {
+                    var item = $(this);
+                    let name = item.find(".node-config-ingress-name-property").val();
+                    let id = item.find(".node-config-ingress-id-property").val();
+                    $("#node-config-input-hbLWT").append($("<option></option>").val(id).text(name));
+                })
+            if (savedFn) {
+                $("#node-config-input-hbLWT").val(savedFn);
+            } else {
+                $("#node-config-input-hbLWT").val(selectedFn);
+            }
+            $("#node-config-input-hbType").trigger('change');
+        }
+
+        function updateFilterFunctions(savedFn) {
+            // Add ingress items to filter functions
+            selectedFn = $("#node-config-input-filterFunction").val()
+            $("#node-config-input-filterFunction").children().remove();
+            $("#node-config-input-filterFunction").append($("<option></option>").val('0').text("<<No filter>>"));
+            $("#node-config-ingress-list-items")
+                .editableList('items')
+                .each(function() {
+                    var item = $(this);
+                    let name = item.find(".node-config-ingress-name-property").val();
+                    let id = item.find(".node-config-ingress-id-property").val();
+                    $("#node-config-input-filterFunction").append($("<option></option>").val(id).text(name));
+                })
+            if (savedFn) {
+                $("#node-config-input-filterFunction").val(savedFn);
+            } else {
+                $("#node-config-input-filterFunction").val(selectedFn);
+            }
+            $("#node-config-input-filterFunction").trigger('change');
+        }
+
         // Create tabs
             var tabs = RED.tabs.create({
                 id: "tabs",
@@ -177,6 +219,8 @@
                     switch (lastTab) {
                         case 'tab-ingress':
                             updateMainTab('ingress');
+                            updateHbFunctions();
+                            updateFilterFunctions();
                             break;
                         case 'tab-egress':
                             updateMainTab('egress')
@@ -211,6 +255,15 @@
                 $("#node-config-input-contextStore").val(this.contextStore);
                 $("#node-config-input-contextStore").trigger("change");
             }
+
+            // Filter function
+            $("#node-config-input-filterFunction").change( function () {
+                if ($("#node-config-input-filterFunction").val() == '0') {
+                    $("#filterFunctionNote").hide();
+                } else {
+                    $("#filterFunctionNote").show();
+                }
+            });
 
             // Heartbeat
             $("#node-config-input-hbCheck").change( function () {
@@ -797,18 +850,11 @@
             }
 
             // Add ingress items to heartbeat
-            $("#node-config-ingress-list-items")
-                .editableList('items')
-                .each(function() {
-                    var item = $(this);
-                    let name = item.find(".node-config-ingress-name-property").val();
-                    let id = item.find(".node-config-ingress-id-property").val();
-                    $("#node-config-input-hbLWT").append($("<option></option>").val(id).text(name));
-                })
-            if (this.hbLWT) {
-                $("#node-config-input-hbLWT").val(this.hbLWT);
+            updateHbFunctions(node.hbLWT);
+            if (typeof node.filterFunction == 'undefined') {
+                node.filterFunction = '0';
             }
-            $("#node-config-input-hbType").trigger('change');
+            updateFilterFunctions(node.filterFunction);
         },
         oneditsave: function () {
             var node = this;
@@ -949,6 +995,11 @@
                 <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0%" style="width: calc(100% - 185px)">
             </div>
             <div class="form-row">
+                <label for="node-config-input-filterFunction" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Filter function</label>
+                <select id="node-config-input-filterFunction" style="width: calc(100% - 185px)"></select>
+                <div class="form-tips" id="filterFunctionNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);" hidden><b>Note:</b> Filter function should return true or false.</div>
+            </div>
+            <div class="form-row">
                 <label for="node-config-input-hbCheck" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Check alive</label>
                 <input type="checkbox" id="node-config-input-hbCheck" style="display: inline-block; width: auto; vertical-align: top">
             </div>
@@ -1038,9 +1089,9 @@
     <li><strong>Name</strong>: A describing name for the specific device type. For example, 'Shelly Dimmer'.</li>
     <li><strong>Context store</strong>: The Node-RED context store used to store device values. Please see <a href="https://nodered.org/docs/user-guide/context" target="_blank">Node-RED documentation</a> for more information about different types of context stores. Use file-based storage for persistent context.</li>
     <li><strong>Show state</strong>: A string defining how to show information about state on the node in the Node-RED GUI. Use <code>%Item_name%</code> (case sensitive) to show a specific item value. Leave blank if not wanted.</li>
+    <li><strong>Filter function</strong>: It's possible to use an ingress function to filter all incoming messages. If the function returns false the message is dropped.</li>
     <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific <i>Alive</i> Item is automatically create. Possible values: true/false.</li>    
     <li><strong>Attributes</strong>: Thing specific attributes. Define the attribute name and if it's mandatory or not, and define attribute values in the Thing configuration. Attributes can be used in ingress or egress functions as <code>attribute.name</code> or <code>attribute["name"]</code>.</li>
     <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>
     <li><strong>Item <i>Topic filter</i> & <i>Topic</i></strong>: <i>Topic filter</i> is used to filter incoming messages and <i>Topic</i> is added to outgoing messages. Topic is also included as <code>msg.topic</code> in egress functions. If <i>Topic filter</i> or <i>Topic</i> is of type string and starts with '.' the dot is replaced by the topic value configured for the Thing. If it starts with '/' the topic value is prepended.</li>
-
 </script>

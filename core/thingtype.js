@@ -16,7 +16,7 @@ module.exports = function(RED) {
         this.hbLWT = config.hbLWT;
         this.hbFilterVal = config.hbFilterVal;
         this.hbFilterType = config.hbFiltertype;
-
+        this.filterFunction = config.filterFunction;
     }
     RED.nodes.registerType("hal2ThingType",hal2ThingType);
 }
