@@ -20,6 +20,8 @@ The documentation is somewhat lacking at the moment, but take a look at the exam
 
 ## History
 
+**1.6** Item attributes & Thing filter function added. Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
+
 **1.5** Item notes added
 
 **1.4** Item filter applied to all node types
