@@ -1,0 +1,200 @@
+[
+    {
+        "id": "4da6f25bee878782",
+        "type": "http in",
+        "z": "797bdc9088052f14",
+        "name": "Locative",
+        "url": "/locative",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 100,
+        "y": 480,
+        "wires": [
+            [
+                "3a905f0e3776cc0d",
+                "96b3b177bdacc3a3"
+            ]
+        ]
+    },
+    {
+        "id": "3a905f0e3776cc0d",
+        "type": "hal2Thing",
+        "z": "797bdc9088052f14",
+        "eventHandler": "e228014191d14be6",
+        "thingType": "a89c17426c70c999",
+        "name": "Locative Geofence",
+        "attributes": [
+            {
+                "id": "6662b59c.a9349c",
+                "val": "65C2786D-916F-4B59-ADFD-B1963D3C84AF"
+            },
+            {
+                "id": "df35269e.9b48a",
+                "val": "hemma"
+            }
+        ],
+        "topicFilter": "",
+        "topicFilterType": "str",
+        "topicPrefix": "",
+        "notes": "",
+        "outputs": 0,
+        "x": 310,
+        "y": 480,
+        "wires": []
+    },
+    {
+        "id": "96b3b177bdacc3a3",
+        "type": "http response",
+        "z": "797bdc9088052f14",
+        "name": "",
+        "statusCode": "200",
+        "headers": {},
+        "x": 280,
+        "y": 440,
+        "wires": []
+    },
+    {
+        "id": "e228014191d14be6",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "maxlisteners": "50",
+        "heartbeat": "10"
+    },
+    {
+        "id": "a89c17426c70c999",
+        "type": "hal2ThingType",
+        "name": "Locative geofence",
+        "contextStore": "filesystem",
+        "nodestatus": "🏡 %Presence% 🗓 %Timestamp%",
+        "items": [
+            {
+                "name": "Presence",
+                "id": "3a13ed9e.76652a",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "f0753181.c4f728",
+                "egress": null,
+                "notes": ""
+            },
+            {
+                "name": "Timestamp",
+                "id": "af8fe9e9.ad158",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "704a487a.cf016",
+                "egress": null,
+                "notes": "UTC timezone"
+            },
+            {
+                "name": "Longitude",
+                "id": "ff7f63c8.31ea98",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "75bfe222.8b1a3c",
+                "egress": null,
+                "notes": ""
+            },
+            {
+                "name": "Latitude",
+                "id": "91dab413.e0b958",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "243ae897.df4d88",
+                "egress": null,
+                "notes": ""
+            },
+            {
+                "name": "Device type",
+                "id": "cf33060.a0fda78",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "d09f009b.e0397",
+                "egress": null,
+                "notes": ""
+            },
+            {
+                "name": "Device model",
+                "id": "8386bf93.0fd898",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "status",
+                "ingress": "f3255654.157e78",
+                "egress": null,
+                "notes": ""
+            }
+        ],
+        "attributes": [
+            {
+                "name": "Device ID",
+                "id": "6662b59c.a9349c",
+                "required": true,
+                "notes": ""
+            },
+            {
+                "name": "Location ID",
+                "id": "df35269e.9b48a",
+                "required": true,
+                "notes": ""
+            }
+        ],
+        "ingress": [
+            {
+                "name": "Device & Location Filter",
+                "id": "b27c5755.7d43a",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (typeof msg.payload == 'object') {\n    msg.payload = ((msg.payload.id.toLowerCase() == attribute[\"Location ID\"].toLowerCase()) && (msg.payload.device == attribute[\"Device ID\"]));\n} else {\n    msg.payload = false;\n}\nreturn msg.payload;"
+            },
+            {
+                "name": "Locative presence",
+                "id": "f0753181.c4f728",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (\"trigger\" in msg.payload) {\n    msg.payload = (msg.payload.trigger == \"enter\");\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Locative longitude",
+                "id": "75bfe222.8b1a3c",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (\"longitude\" in msg.payload) {\n    msg.payload = Number(msg.payload.longigude);\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Locative latitude",
+                "id": "243ae897.df4d88",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (\"latitude\" in msg.payload) {\n    msg.payload = Number(msg.payload.latitude);\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Locative ISO timestamp",
+                "id": "704a487a.cf016",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (\"timestamp\" in msg.payload) {\n    var timestamp = Number(msg.payload.timestamp);\n    var myDate = new Date(timestamp * 1000);\n    msg.payload = myDate.toISOString();\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Locative device type",
+                "id": "d09f009b.e0397",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (\"device_type\" in msg.payload) {\n    msg.payload = msg.payload.device_type;\n    return msg.payload;\n}"
+            },
+            {
+                "name": "Locative device model",
+                "id": "f3255654.157e78",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nif (\"device_model\" in msg.payload) {\n    msg.payload = msg.payload.device_model;\n    return msg.payload;\n}"
+            }
+        ],
+        "egress": [],
+        "thingStatus": true,
+        "thingCommand": false,
+        "hbCheck": false,
+        "hbType": "ttl",
+        "hbTTL": "3600",
+        "hbLWT": "6519b99e.9a0bc8",
+        "hbFilterVal": "",
+        "hbFilterType": "StrEnd",
+        "filterFunction": "b27c5755.7d43a"
+    }
+]
