@@ -230,7 +230,7 @@
                 }
             });
             $('#node-config-input-hbFilterVal').typedInput({
-                default: 'StrEnd',
+                default: 'str',
                 typeField: $("#node-config-input-hbFilterType"),
                 types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
             });              
@@ -300,7 +300,7 @@
                         .append(" Egress")
                     var labelTopicSuffix = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-tasks"})
                         .appendTo(rowTopicSuffix)
-                        .append(' Cmnd suffix')
+                        .append(' Topic')
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
@@ -316,7 +316,7 @@
                     var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
                     .appendTo(rowTopicFilter)
                     .typedInput({
-                        default:'StrEnd',
+                        default:'str',
                         types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
                     });
                     // Item type
@@ -468,7 +468,7 @@
                         nameProperty.val(item.name);
                         idProperty.val(item.id);
                         requiredProperty.prop('checked',item.required);
-                        notesProperty.val(item.topicSuffix);
+                        notesProperty.val(item.notes);
                     }
                 },
                 removable: true,
@@ -1039,5 +1039,8 @@
     <li><strong>Context store</strong>: The Node-RED context store used to store device values. Please see <a href="https://nodered.org/docs/user-guide/context" target="_blank">Node-RED documentation</a> for more information about different types of context stores. Use file-based storage for persistent context.</li>
     <li><strong>Show state</strong>: A string defining how to show information about state on the node in the Node-RED GUI. Use <code>%Item_name%</code> (case sensitive) to show a specific item value. Leave blank if not wanted.</li>
     <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific <i>Alive</i> Item is automatically create. Possible values: true/false.</li>    
-    <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>    
+    <li><strong>Attributes</strong>: Thing specific attributes. Define the attribute name and if it's mandatory or not, and define attribute values in the Thing configuration. Attributes can be used in ingress or egress functions as <code>attribute.name</code> or <code>attribute["name"]</code>.</li>
+    <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>
+    <li><strong>Item <i>Topic filter</i> & <i>Topic</i></strong>: <i>Topic filter</i> is used to filter incoming messages and <i>Topic</i> is added to outgoing messages. Topic is also included as <code>msg.topic</code> in egress functions. If <i>Topic filter</i> or <i>Topic</i> is of type string and starts with '.' the dot is replaced by the topic value configured for the Thing. If it starts with '/' the topic value is prepended.</li>
+
 </script>

@@ -74,17 +74,30 @@
                     });
 
                     var rowAttrName = $('<div/>').appendTo(container);
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
 
-                    var labelAttrName = $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                    var labelAttrName = $('<div/>',{style:"display:inline-block;text-align:left; width: 100px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
                         .appendTo(rowAttrName)
                         .append(' '+attribute.name)
-                    var valueProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"attribute-value-property",type:"text"})
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:100px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes)
+                        .append(' Notes') 
+
+                    var valueProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 105px)",class:"attribute-value-property",type:"text"})
                         .appendTo(rowAttrName)
                         .prop('required',attribute.required)
                         .val(attribute.val)
                     var idProperty = $('<input/>',{class:"attribute-id-property",type:"hidden"})
                         .appendTo(rowAttrName)
-                        .val(attribute.id)                        
+                        .val(attribute.id)
+                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 105px)"})
+                        .appendTo(rowNotes)
+                        .val(attribute.notes)
+                    if (attribute.notes) {
+                        rowNotes.show();
+                    }
                 },
                 removable: false,
                 sortable: false,
@@ -94,11 +107,6 @@
             $("#node-input-thingType").change( function () {
                 let thingType = RED.nodes.node($("#node-input-thingType").val());
                 if (typeof thingType == 'undefined') { return; }
-                if (thingType.thingCommand) {
-                    $("#cmnd-prefix").show();
-                } else {
-                    $("#cmnd-prefix").hide();
-                }
 
                 // Attributes
                 $('#attributes').hide();
@@ -111,6 +119,7 @@
                         attribute.id = thingType.attributes[d].id;
                         attribute.name = thingType.attributes[d].name;
                         attribute.required = thingType.attributes[d].required;
+                        attribute.notes = thingType.attributes[d].notes;
                         attribute.val = "";
                         if ((typeof node.attributes === 'object') && (Object.keys(node.attributes).length != 0)) {
                             for (let a in node.attributes) {
@@ -168,8 +177,8 @@
         <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:70%;">
         <input type="hidden" id="node-input-topicFilterType">
     </div>
-    <div class="form-row" id="cmnd-prefix">
-        <label for="node-input-topicPrefix"><i class="fa fa-tasks"></i> Cmnd prefix</label>
+    <div class="form-row">
+        <label for="node-input-topicPrefix"><i class="fa fa-tasks"></i> Topic</label>
         <input type="text" id="node-input-topicPrefix" style="width=70%">
     </div>
     <div class="form-row">
@@ -190,7 +199,7 @@
     <p>The Thing node is a virtual representation of a physical device, like a switch or a sensor. The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor<i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
     <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
     <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
-    <li><strong>Cmnd prefix</strong>: The command prefix is added to the item command suffix to create the item specific command <code>msg.topic</code>.</li>
+    <li><strong>Topic</strong>: Used for filtering and creating item specific command topics. Will become <code>msg.topic</code> for outgoing messages.</li>
     <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Action</i> and <i>Event</i> nodes.</li>    
     <li><strong>Notes</strong>: Thing specific notes.</li>    
 </script>

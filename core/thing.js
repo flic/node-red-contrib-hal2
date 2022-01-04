@@ -19,6 +19,17 @@ module.exports = function(RED) {
         return re.test(t);
     }
 
+    function fixTopic(topicstring,configuredTopic) {
+        var topic = topicstring;
+        if (topic.startsWith('.')) {
+            topic = topic.replace('.',configuredTopic);
+        }
+        if (topic.startsWith('/')) {
+            topic = configuredTopic + topic;
+        }
+        return topic;
+    }
+
     //a=msg.topic, b=filter
     var topicFilter = {
         'str': function (a, b) { return a === b; },
@@ -100,7 +111,11 @@ module.exports = function(RED) {
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'ttl')) { continue; }
 
                 if (node.thingType.items[i].topicFilterValue) {
-                    if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,node.thingType.items[i].topicFilterValue) == false) { continue; }
+                    var topic = node.thingType.items[i].topicFilterValue;
+                    if (node.thingType.items[i].topicFilterType == 'str') {
+                        topic = fixTopic(topic,node.topicPrefix);
+                    }
+                    if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,topic) == false) { continue; }
                 }
 
                 for (let n in node.thingType.ingress) {
@@ -213,7 +228,7 @@ module.exports = function(RED) {
 
                 var command = {
                     _msgid: RED.util.generateId(),
-                    topic: node.topicPrefix + item.topicSuffix,
+                    topic: fixTopic(item.topicSuffix,node.topicPrefix),
                     payload: payload
                 }
 
