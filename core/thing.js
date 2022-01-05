@@ -251,9 +251,14 @@ module.exports = function(RED) {
                     return;
                 }
 
+                if (item.topicSuffix != '') {
+                    var topic = fixTopic(item.topicSuffix,node.topicPrefix);
+                } else {
+                    var topic = node.topicPrefix;
+                }
                 var command = {
                     _msgid: RED.util.generateId(),
-                    topic: fixTopic(item.topicSuffix,node.topicPrefix),
+                    topic: topic,
                     payload: payload
                 }
 
