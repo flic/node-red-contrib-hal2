@@ -224,6 +224,7 @@
 
             $("#node-input-item").change(function() {
                 $("#row-item-notes").hide();
+                if ($("#node-input-thing").val() == null) { return }
                 if ($("#node-input-typeSel").val() == 'hal2ThingType') {
                     var thingType = RED.nodes.node($("#node-input-thing").val());
                 } else {
@@ -255,6 +256,7 @@
             } else {
                 $("#node-input-typeSel").val('hal2Thing');
             }
+
             $("#node-input-typeSel").trigger('change');
             $('#node-input-thing').trigger('change');
 
@@ -283,6 +285,7 @@
             $("<option value='0'>on update</option>").appendTo("#node-input-change");
             $("<option value='1'>on change</option>").appendTo("#node-input-change");
             $("<option value='2'>on change (ignore initial value)</option>").appendTo("#node-input-change");
+
 
             $("#node-input-change").val(this.change);
             $('#node-input-change').trigger('change');  
