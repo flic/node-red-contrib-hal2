@@ -1,6 +1,8 @@
 # node-red-contrib-hal2 [![npm version](https://badge.fury.io/js/node-red-contrib-hal2.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
 A set of nodes to help with basic home automation logic.
 
+**Note:** I've added a few new examples to demonstrate the new functionality in 1.6 and 1.7.
+
 ## Install
 ```bash
 cd ~/.node-red
@@ -19,6 +21,8 @@ npm install node-red-contrib-hal2
 The documentation is somewhat lacking at the moment, but take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
 
 ## History
+
+**1.7** Command loopback for virtual Things
 
 **1.6** Thing attributes & filter function added. Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
 
