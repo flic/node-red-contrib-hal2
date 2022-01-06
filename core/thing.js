@@ -81,37 +81,7 @@ module.exports = function(RED) {
             return attribute;
         }
 
-        node.showState = function () {
-            var statusMsg = [];
-
-            // Heartbeat
-            if (node.thingType.hbCheck) {
-                statusMsg["shape"] = "dot";
-
-                if (node.state[1] === 'undefined') { statusMsg["fill"] = "gray"; }
-                if (node.state[1] === true) { statusMsg["fill"] = "green"; }
-                if (node.state[1] === false) { statusMsg["fill"] = "red"; }
-            }
-
-            if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { 
-                node.status(statusMsg);
-            } else {            
-                var stateStr = node.thingType.nodestatus;
-                for (let i in node.thingType.items) {
-                    if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
-                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",'no value');
-                    } else {
-                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",node.state[node.thingType.items[i].id]);
-                    }
-                }
-                statusMsg["text"] = stateStr;
-                node.status(statusMsg);
-            }
-        }
-            
-        node.showState();
-
-        node.on('input', function(msg) {
+        function statusUpdate(msg) {
             var eventmsg;
             var result;
             var _ingressFn;
@@ -223,8 +193,36 @@ module.exports = function(RED) {
                     node.showState();
                 }
             }
-        });
+        }
 
+        node.showState = function () {
+            var statusMsg = [];
+
+            // Heartbeat
+            if (node.thingType.hbCheck) {
+                statusMsg["shape"] = "dot";
+
+                if (node.state[1] === 'undefined') { statusMsg["fill"] = "gray"; }
+                if (node.state[1] === true) { statusMsg["fill"] = "green"; }
+                if (node.state[1] === false) { statusMsg["fill"] = "red"; }
+            }
+
+            if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { 
+                node.status(statusMsg);
+            } else {            
+                var stateStr = node.thingType.nodestatus;
+                for (let i in node.thingType.items) {
+                    if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
+                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",'no value');
+                    } else {
+                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",node.state[node.thingType.items[i].id]);
+                    }
+                }
+                statusMsg["text"] = stateStr;
+                node.status(statusMsg);
+            }
+        }
+            
         if (node.eventHandler) {
             node.listener = function(thingid, itemid, payload) {
                 var item;
@@ -277,7 +275,11 @@ module.exports = function(RED) {
                     node.error("Error running egress for "+item.name+": "+err);
                 }
                 if (command != null) {
-                    node.send(command);
+                    if ((item.type == 'both') || (item.type == 'command')) {
+                        node.send(command);
+                    } else {
+                        statusUpdate(command);
+                    }
 
                     command.type = {
                         name: node.thingType.name,
@@ -310,6 +312,11 @@ module.exports = function(RED) {
             if ((node.thingType.hbCheck) && (node.thingType.hbType == "ttl")) {
                 node.eventHandler.registerHeartbeat(node.id,node.thingType.hbTTL);
             }
+
+            node.showState();
+            node.on('input',function(msg) {
+                statusUpdate(msg);
+            });
         }
         
         node.on("close",function() { 

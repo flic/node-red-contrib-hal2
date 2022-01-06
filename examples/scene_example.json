@@ -1,0 +1,216 @@
+[
+    {
+        "id": "cfbce2bd6869d231",
+        "type": "hal2Thing",
+        "z": "797bdc9088052f14",
+        "eventHandler": "e228014191d14be6",
+        "thingType": "578f0393e0b0d0e8",
+        "name": "Example Scene",
+        "attributes": [],
+        "topicFilter": "",
+        "topicFilterType": "mqtt",
+        "topicPrefix": "",
+        "notes": "",
+        "outputs": 0,
+        "x": 380,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "bafa01a846452d00",
+        "type": "inject",
+        "z": "797bdc9088052f14",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 170,
+        "y": 220,
+        "wires": [
+            [
+                "cfbce2bd6869d231"
+            ]
+        ]
+    },
+    {
+        "id": "43b4d028f8b1ea69",
+        "type": "inject",
+        "z": "797bdc9088052f14",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 170,
+        "y": 260,
+        "wires": [
+            [
+                "cfbce2bd6869d231"
+            ]
+        ]
+    },
+    {
+        "id": "c85dcb159251667c",
+        "type": "hal2Action",
+        "z": "797bdc9088052f14",
+        "eventHandler": "e228014191d14be6",
+        "name": "Change scene with Action",
+        "commandset": [
+            {
+                "category": "hal2Thing",
+                "thing": "cfbce2bd6869d231",
+                "item": "9087924e.bea2d",
+                "value": "payload",
+                "type": "msg"
+            }
+        ],
+        "ratelimit": 0,
+        "x": 420,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "57d69b6d755774f4",
+        "type": "inject",
+        "z": "797bdc9088052f14",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 170,
+        "y": 320,
+        "wires": [
+            [
+                "c85dcb159251667c"
+            ]
+        ]
+    },
+    {
+        "id": "a5cec0cf20d7bc97",
+        "type": "inject",
+        "z": "797bdc9088052f14",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 170,
+        "y": 360,
+        "wires": [
+            [
+                "c85dcb159251667c"
+            ]
+        ]
+    },
+    {
+        "id": "e228014191d14be6",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "maxlisteners": "50",
+        "heartbeat": "10"
+    },
+    {
+        "id": "578f0393e0b0d0e8",
+        "type": "hal2ThingType",
+        "name": "Scene",
+        "contextStore": "memory",
+        "nodestatus": "🌅 %Active%",
+        "items": [
+            {
+                "name": "Active",
+                "id": "9087924e.bea2d",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "loopback_command",
+                "ingress": "f3fe20ab.f47128",
+                "egress": "eaaa9c36.014c68",
+                "notes": ""
+            }
+        ],
+        "attributes": [],
+        "ingress": [
+            {
+                "name": "Pass-through",
+                "id": "afcc808d.f9a44",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nreturn msg.payload;"
+            },
+            {
+                "name": "Convert to Number",
+                "id": "4170710e.59ebf8",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+            },
+            {
+                "name": "Convert to Boolean",
+                "id": "f3fe20ab.f47128",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nswitch(typeof msg.payload) {\n    case 'number':\n        msg.payload = (msg.payload==1);\n        break;\n    case 'string':\n        msg.payload = (msg.payload == 'true');\n        break;\n}\nreturn msg.payload;"
+            }
+        ],
+        "egress": [
+            {
+                "name": "Pass-through",
+                "id": "eaaa9c36.014c68",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nreturn msg;"
+            }
+        ],
+        "thingStatus": false,
+        "thingCommand": true,
+        "thingOutput": false,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": "",
+        "hbFilterVal": "",
+        "hbFilterType": "str",
+        "filterFunction": "0"
+    }
+]

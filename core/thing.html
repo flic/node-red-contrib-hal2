@@ -141,7 +141,8 @@
             let TT = $("#node-input-thingType").val();
             if (TT) {
                 var thingType = RED.nodes.node(TT);
-                if (thingType.thingCommand) {
+                if (typeof thingType.thingOutput == 'undefined') { thingType.thingOutput = thingType.thingCommand; }
+                if (thingType.thingOutput) {
                     this.outputs = 1;
                 } else {
                     this.outputs = 0;

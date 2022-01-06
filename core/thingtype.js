@@ -10,6 +10,7 @@ module.exports = function(RED) {
         this.egress = config.egress;
         this.thingStatus = config.thingStatus;
         this.thingCommand = config.thingCommand;
+        this.thingOutput = config.thingOutput;
         this.hbCheck= config.hbCheck;
         this.hbType = config.hbType;
         this.hbTTL = config.hbTTL;

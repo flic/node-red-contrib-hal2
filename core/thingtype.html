@@ -23,6 +23,7 @@
             egress:         {},
             thingStatus:    {},
             thingCommand:   {},
+            thingOutput:    {},
             hbCheck:        { value:false },
             hbType:         { value:'lwt' },
             hbTTL:          {},
@@ -344,7 +345,7 @@
                         .append(' Topic filter')
                     var labelItemType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
                         .appendTo(rowItemType)
-                        .append(' Type')                          
+                        .append(' Type')
                     var labelIngress = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-in"})
                         .appendTo(rowIngress)
                         .append(" Ingress")
@@ -375,9 +376,11 @@
                     // Item type
                     var itemTypeProperty = $('<select/>',{class:"node-config-thingtype-itemtype-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowItemType)
-                        .append($("<option></option>").val('both').text('Command & Status'))
+                        .append($("<option></option>").val('both').text('Status & Command'))
                         .append($("<option></option>").val('status').text('Status only'))
-                        .append($("<option></option>").val('command').text('Command only'))                     
+                        .append($("<option></option>").val('command').text('Command only'))
+                        .append($("<option></option>").val('loopback_command').text('Status & Loopback Command'))
+                        .append($("<option></option>").val('loopback_both').text('Loopback Command only'))
                     //MQTT topic suffix
                     var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
                     .appendTo(rowTopicSuffix)
@@ -867,6 +870,7 @@
             node.egress = [];
             node.thingStatus = false;
             node.thingCommand = false;
+            node.thingOutput = false;
 
             // Main tab
             $("#node-config-thingtype-list-attributes")
@@ -900,11 +904,20 @@
                         case 'both':
                             node.thingStatus = true;
                             node.thingCommand = true;
+                            node.thingOutput = true;
                             break;
                         case 'status':
                             node.thingStatus = true;
                             break;
                         case 'command':
+                            node.thingCommand = true;
+                            node.thingOutput = true;
+                            break;
+                        case 'loopback_command':
+                            node.thingCommand = true;
+                            break;
+                        case 'loopback_both':
+                            node.thingStatus = true;
                             node.thingCommand = true;
                             break;
                     }
@@ -1095,6 +1108,7 @@
     <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific <i>Alive</i> Item is automatically created. Possible values: true/false.</li>    
     <li><strong>Attributes</strong>: Thing specific attributes. Define the attribute name and if it's mandatory or not, and define attribute values in the Thing configuration. Attributes can be used in ingress or egress functions as <code>attribute.name</code> or <code>attribute["name"]</code>.</li>
     <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>
+    <li><strong>Items <i>Loopback Command</i></strong>: If the <i>item type</i> is set to Loopback Command no output msg will be sent, the command will instead be routed to the node input. Standard ingress and egress rules apply.</li>
     <li><strong>Item <i>Topic filter</i></strong>: <i>Topic filter</i> is used to filter incoming messages. If <i>Topic filter</i> is of type string and starts with '.' the dot is replaced by the topic value configured for the <i>Thing</i>. If it starts with '/' the topic value is prepended.</li>
     <li><strong>Item <i>Topic</i></strong>: <i>Topic</i> is added to outgoing messages as <code>msg.topic</code>. It's possible to modify the value of <code>msg.topic</code> in the egress function. Topics starting with '.' and '/' works just the same as it does in <i>Topic filter</i>. If <i>Topic</i> is left empty the topic configured for the <i>Thing</i> is used unmodified.</li>
 
