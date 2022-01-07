@@ -34,9 +34,13 @@
             const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
             var thingsList = [];
             for (let t in completeThingsList) {
-                let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                if (thingType.thingStatus) {
-                    thingsList.push(completeThingsList[t]);
+                try {
+                    let thingType = RED.nodes.node(completeThingsList[t].thingType);
+                    if (thingType.thingStatus) {
+                        thingsList.push(completeThingsList[t]);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
                 }
             }            
             thingsList.sort(function(a, b) {
