@@ -22,6 +22,8 @@ The documentation is somewhat lacking at the moment, but take a look at the exam
 
 ## History
 
+**1.8** Value node can update Item values
+
 **1.7** Command loopback for virtual Things
 
 **1.6** Thing attributes & filter function added. Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
