@@ -273,9 +273,10 @@
 </script>
 
 <script type="text/x-red" data-help-name="hal2Value">
-    <p>The Value node queries a specific <i>Item</i> and sends the <i>Item</i> value on to the next node.</p>
+    <p>The Value node is used to either query a specific <i>Item</i> and send the <i>Item</i> value on to the next node, or to update an <i>Item</i> value. In the latter case the ingress function as well as all topic filters are bypassed, the value is updated directly as is. Events are triggered as usual.</p>
+    <li><strong>Action</strong>: Get value from <i>Item</i> or set value to <i>Item</i>.</li>
     <li><strong>Item</strong>: Select the <i>Item</i>.</li>
-    <li><strong>Output to</strong>: Select where the value should be output to.</li>
+    <li><strong>Property</strong>: Source or destination for <i>Item</i> value.</li>
     <li><strong>Item info</strong>: Output <code>msg.thing</code> and <code>msg.item</code> information. Only works when <code>msg</code> is used for output.</li>
     <li><strong>Name</strong>: Node name.</li>  
 </script>
