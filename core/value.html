@@ -4,6 +4,7 @@
         color: '#b3b3ff',
         defaults: {
             name:           {},
+            action:         {},
             thing:          {},
             thingType:      {},   
             item:           { required: true   },           
@@ -166,7 +167,7 @@
                     $("#node-input-item").val(savedItem);
                 }
                 $("#node-input-item").trigger('change');
-            });            
+            });
 
             //Add types
             for (var d in thingTypeList) {
@@ -210,6 +211,9 @@
             if (this.outputValue) {
                 $("#node-input-outputValue").typedInput('value',this.outputValue);
             }
+            if (typeof this.action == 'undefined') {
+                $("#node-input-action").val('get');
+            }
         }
     });
 </script>
@@ -220,6 +224,13 @@
         <p>No items found. Start by creating some Things.</p>
     </div>
     <div class="form-row" id="div-main">
+        <div class="form-row">
+            <label for="node-input-action"><i class="fa fa-exchange"></i> Action</label>
+            <select id="node-input-action" style="width:70%">
+                <option value='get' selected>Get value</option>
+                <option value='set'>Set value</option>
+            </select>
+        </div>
         <div class="form-row">
             <label for="node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
             <select id="node-input-thing" style="width:70%"></select>
@@ -246,7 +257,7 @@
             <textarea id="item-notes" class="form-tips" style="width:70%"></textarea>
         </div>
         <div class="form-row">
-            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output to</label>
+            <label for="node-input-outputValue"><i class="fa fa-ellipsis-h"></i> Property</label>
             <input type="text" id="node-input-outputValue" placeholder="payload" style="width:70%">
             <input type="hidden" id="node-input-outputType">
         </div>

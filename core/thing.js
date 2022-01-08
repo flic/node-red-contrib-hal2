@@ -143,13 +143,10 @@ module.exports = function(RED) {
                     node.error("Error running ingress for "+node.thingType.items[i].name+": "+err);
                 }
                 if (result != null) {
-                    node.debug("State "+node.thingType.items[i].name+"["+node.thingType.items[i].id+"] set to value '"+result+"'");
-                    node.laststate[node.thingType.items[i].id] = node.state[node.thingType.items[i].id];
-                    node.state[node.thingType.items[i].id] = result;
-                    // Save to node context
-                    nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
-                    nodeContext.set("state",node.state,node.thingType.contextStore);
+                    node.debug("Ingress for "+node.thingType.items[i].name+"["+node.thingType.items[i].id+"] returns value: '"+result+"'");
+                    node.updateState(msg,node.thingType.items[i].id,result,'ingress');
 
+                    // Refresh heartbeat
                     if (node.thingType.hbType == 'ttl') {
                         var date = Date.now();
                         node.heartbeat[node.thingType.items[i].id] = date;
@@ -158,42 +155,66 @@ module.exports = function(RED) {
                             node.state['1'] = true;
                             node.laststate['1'] = false;
                             node.heartbeat['1'] = date;
-                            node.showState();
                         }
                         nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
                     }
-                    eventmsg = {
-                        _msgid: RED.util.generateId(),
-                        state: result,
-                        laststate: node.laststate[node.thingType.items[i].id],
-                        topic: msg.topic,
-                        payload: result,
-                        type: {
-                            name: node.thingType.name,
-                            id: node.thingType.id
-                        },
-                        thing: {
-                            name: node.name,
-                            id: node.id,
-                            last_update: node.heartbeat[node.id]
-                        },
-                        item: {
-                            name: node.thingType.items[i].name,
-                            id: node.thingType.items[i].id,
-                            last_update: node.heartbeat[node.thingType.items[i].id]
-                        }
-                    }
-                    if (Object.keys(attribute) != 0) {
-                        eventmsg.thing.attributes = Object.assign({},attribute);
-                    }
-                    node.eventHandler.publish('update',node.id,node.thingType.items[i].id,eventmsg);
-                    node.eventHandler.publish('update',node.thingType.id,node.thingType.items[i].id,eventmsg);
-                    eventmsg.logtype = 'ingress';
-                    node.eventHandler.publish('log','0',node.thingType.items[i].id,eventmsg);
                     node.showState();
                 }
             }
         }
+
+        node.updateState = function (msg,itemId, state, logtype) {
+            var item = "";
+
+            if (itemId == '1') { return; }
+
+            for (var i in node.thingType.items) {
+                if (node.thingType.items[i].id == itemId) { 
+                    item = i;
+                    break;
+                }
+            }
+
+            if (item == "") { return; }
+
+            node.debug("State "+node.thingType.items[item].name+"["+node.thingType.items[item].id+"] set to value '"+state+"'");
+            node.laststate[node.thingType.items[item].id] = node.state[node.thingType.items[item].id];
+            node.state[node.thingType.items[item].id] = state;
+            // Save to node context
+            nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
+            nodeContext.set("state",node.state,node.thingType.contextStore);
+
+            var attribute = getAttributes();
+            eventmsg = {
+                _msgid: RED.util.generateId(),
+                state: state,
+                laststate: node.laststate[node.thingType.items[item].id],
+                topic: msg.topic,
+                payload: state,
+                type: {
+                    name: node.thingType.name,
+                    id: node.thingType.id
+                },
+                thing: {
+                    name: node.name,
+                    id: node.id,
+                    last_update: node.heartbeat[node.id]
+                },
+                item: {
+                    name: node.thingType.items[item].name,
+                    id: node.thingType.items[item].id,
+                    last_update: node.heartbeat[node.thingType.items[item].id]
+                }
+            }
+            if (Object.keys(attribute) != 0) {
+                eventmsg.thing.attributes = Object.assign({},attribute);
+            }
+            node.eventHandler.publish('update',node.id,node.thingType.items[item].id,eventmsg);
+            node.eventHandler.publish('update',node.thingType.id,node.thingType.items[item].id,eventmsg);
+            eventmsg.logtype = logtype;
+            node.eventHandler.publish('log','0',node.thingType.items[item].id,eventmsg);
+            node.showState();            
+        }        
 
         node.showState = function () {
             var statusMsg = [];

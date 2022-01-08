@@ -1,6 +1,7 @@
 module.exports = function(RED) {
     function hal2Value(config) {
         RED.nodes.createNode(this,config);
+        this.action = config.action;
         this.thing = config.thing;
         this.thingType = config.thingType;
         this.item = config.item;
@@ -8,6 +9,8 @@ module.exports = function(RED) {
         this.outputType = config.outputType;
         this.info = config.info;
         var node = this;
+
+        if (typeof node.action == 'undefined') { node.action = 'get' }
 
         node.on('input', function(msg) {
             var thing;
@@ -32,22 +35,40 @@ module.exports = function(RED) {
                 thing = RED.nodes.getNode(node.thing);
             }
 
-            if (!thing.state.hasOwnProperty(node.item)) {
-                // No value stored in item
-                return;
+            if (node.action == 'get') {
+                if (!thing.state.hasOwnProperty(node.item)) {
+                    // No value stored in item
+                    return;
+                }
+
+                switch (node.outputType) {
+                    case 'flow':
+                        node.context().flow.set(node.outputValue,thing.state[node.item]);
+                        break;
+                    case 'global':
+                        node.context().global.set(node.outputValue,thing.state[node.item]);
+                        break;
+                    case 'msg':
+                        msg[node.outputValue] = thing.state[node.item];
+                        break;
+                }
+            } else {
+                var value = "";
+                switch (node.outputType) {
+                    case 'flow':
+                        value = node.context().flow.get(node.outputValue);
+                        break;
+                    case 'global':
+                        value = node.context().global.get(node.outputValue);
+                        break;
+                    case 'msg':
+                        value = RED.util.getMessageProperty(msg,node.outputValue);
+                        break;
+                }
+                thing.updateState(msg,node.item,value,'set_value');
+                thing.showState();
             }
 
-            switch (node.outputType) {
-                case 'flow':
-                    node.context().flow.set(node.outputValue,thing.state[node.item]);
-                    break;
-                case 'global':
-                    node.context().global.set(node.outputValue,thing.state[node.item]);
-                    break;
-                case 'msg':
-                    msg[node.outputValue] = thing.state[node.item];
-                    break;
-            }
             if (node.info) {
                 var i;
                 for (i in thing.thingType.items) {
