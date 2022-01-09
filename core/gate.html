@@ -26,7 +26,7 @@
                 { v: "gt", t: ">" },
                 { v: "gte", t: ">=" },
                 { v: "cont", t: "contains" },
-                { v: "regex", t: "matches regex" },
+                { v: "regex", t: "regex" },
                 { v: "true", t: "is true" },
                 { v: "false", t: "is false" }
             ];
@@ -102,32 +102,32 @@
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
 
                     //Add labels
-                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
+                    var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowName)
                         .append(' Thing')
-                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')                         
-                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowFilter)
                         .append(' Filter')
-                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
+                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowItem)
                         .append(' Item')
-                    var labelItemNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                    var labelItemNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowItemNotes)
                         .append(' Notes')
-                    var labelRule = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;"})
+                    var labelRule = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;"})
                         .appendTo(rowRule)
                         .append(' Rule')   
 
-                    var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 90px)"}).appendTo(rowName);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowNotes);
+                    var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 110px)"}).appendTo(rowName);
+                    var notesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowNotes);
                     var thingsFilter = $('<button type="button"/>').appendTo(rowName);
                     $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
-                    var filterField = $('<select/>',{style:"width:calc(100% - 90px)"}).appendTo(rowFilter);
-                    var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 90px)"}).appendTo(rowItem);
-                    var itemNotesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowItemNotes);
+                    var filterField = $('<select/>',{style:"width:calc(100% - 110px)"}).appendTo(rowFilter);
+                    var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 110px)"}).appendTo(rowItem);
+                    var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowItemNotes);
 
                     thingsField.change(function() {
                         itemsField.children().remove();
@@ -220,16 +220,16 @@
                     operatorField.change( function() {
                         var type = $(this).children("option:selected").val();
                         if (type.length < 4) {
-                            $(this).css({ "width": "60px" });
-                            valueField.typedInput('width','calc(100% - 60px - 90px)')
+                            $(this).css({ "width": "50px" });
+                            valueField.typedInput('width','calc(100% - 160px)')
                         } else {
-                            $(this).css({ "width": "120px" });
-                            valueField.typedInput('width','calc(100% - 120px - 90px)')
+                            $(this).css({ "width": "90px" });
+                            valueField.typedInput('width','calc(100% - 200px)')
 
                         }
-                        if (type == "full" || type == "update" || type == "change" || type === "true" || type === "false") {
+                        if (type === "true" || type === "false") {
                             valueField.typedInput('hide');
-                            $(this).css({ "width": "40%" });
+                            $(this).css({ "width": "calc(100% - 110px)" });
                         } else {
                             valueField.typedInput('show');
                         }
@@ -304,20 +304,20 @@
 
 <script type="text/x-red" data-template-name="hal2Gate">
     <div class="form-row">
-        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
         <ol id="node-input-rule-container"</ol>
     </div>
     <div class="form-row">
-        <select id="node-input-checkall" style="width:100%; margin-right:5px;">
+        <select id="node-input-checkall" style="width:calc(100% - 65px)">
             <option value="true">all rules must be true</option>
             <option value="false">minimum one rule must be true</option>
         </select>
     </div>
     <div class="form-row">
-        <label for="node-input-if" style="width:40%">Set msg.payload to result</label>
+        <label for="node-input-if" style="width:165px">Set msg.payload to result</label>
         <input type="checkbox" id="node-input-if" style="display: inline-block; width: auto; vertical-align: top;">
     </div>
 

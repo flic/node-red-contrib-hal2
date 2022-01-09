@@ -95,29 +95,29 @@
                         .hide()
 
                     //Add labels
-                    var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
+                    var labelThing = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowThing)
                         .append(' Thing')
-                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
-                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowFilter)
                         .append(' Filter')                         
-                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
+                    var labelItem = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowItem)
                         .append(' Item')
-                    var labelItemNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:60px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                    var labelItemNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowItemNotes)
                         .append(' Notes')
 
-                    var thingsField = $('<select/>',{class:"node-input-group-thing",style:"width:calc(100% - 90px)"}).appendTo(rowThing);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowNotes);                    
+                    var thingsField = $('<select/>',{class:"node-input-group-thing",style:"width:calc(100% - 110px)"}).appendTo(rowThing);
+                    var notesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowNotes);                    
                     var thingsFilter = $('<button type="button"/>').appendTo(rowThing);
                         $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
-                    var filterField = $('<select/>',{style:"width:calc(100% - 90px)"}).appendTo(rowFilter);
-                    var itemsField = $('<select/>',{class:"node-input-group-item",style:"width:calc(100% - 90px)"}).appendTo(rowItem);
-                    var itemNotesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 90px)"}).appendTo(rowItemNotes);
+                    var filterField = $('<select/>',{style:"width:calc(100% - 110px)"}).appendTo(rowFilter);
+                    var itemsField = $('<select/>',{class:"node-input-group-item",style:"width:calc(100% - 110px)"}).appendTo(rowItem);
+                    var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowItemNotes);
 
                     thingsField.change(function() {
                         let thing = RED.nodes.node(thingsField.val());
@@ -250,12 +250,12 @@
 
 <script type="text/x-red" data-template-name="hal2Group">
     <div class="form-row">
-        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
     </div>
     <div class="form-row">
-        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
             <ol id="node-input-group-container"</ol>

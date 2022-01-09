@@ -37,7 +37,7 @@
                 { v: "gt", t: ">" },
                 { v: "gte", t: ">=" },
                 { v: "cont", t: "contains" },
-                { v: "regex", t: "matches regex" },
+                { v: "regex", t: "regex" },
                 { v: "true", t: "is true" },
                 { v: "false", t: "is false" }
             ];
@@ -321,16 +321,16 @@
             $("#node-input-operator").change( function() {
                 var type = $("#node-input-operator").children("option:selected").val();
                 if (type.length < 4) {
-                        $("#node-input-operator").css({ "width": "60px" });
-                        $("#node-input-compareValue").typedInput('width','calc(70% - 60px)')
+                        $("#node-input-operator").css({ "width": "50px" });
+                        $("#node-input-compareValue").typedInput('width','calc(100% - 225px)')
                     } else {
-                        $("#node-input-operator").css({ "width": "120px" });
-                        $("#node-input-compareValue").typedInput('width','calc(70% - 120px)')
+                        $("#node-input-operator").css({ "width": "90px" });
+                        $("#node-input-compareValue").typedInput('width','calc(100% - 265px)')
 
                     }
                 if (type == "always" || type === "true" || type === "false") {
                     $("#node-input-compareValue").typedInput('hide');
-                    $("#node-input-operator").css({ "width": "40%" });
+                    $("#node-input-operator").css({ "width":"calc(100% - 170px)" });
                 } else {
                     $("#node-input-compareValue").typedInput('show');
                 }
@@ -361,60 +361,60 @@
     </div>
     <div class="form-row" id="div-main">
         <div class="form-row">
-            <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-            <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+            <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
         </div>
         <div class="form-row">
-            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Category</label>
-            <select id="node-input-typeSel" style="width:70%">
+            <label for="node-input-typeSel" style="width:95px; padding-right:10px;"><i class="fa fa-folder"></i> Category</label>
+            <select id="node-input-typeSel" style="width:calc(100% - 170px)">
                 <option value='hal2Thing'>Thing</option>
                 <option value='hal2Group'>Group</option>
                 <option value='hal2ThingType'>Type</option>
             </select>
         </div>
         <div class="form-row">
-            <label for="node-input-thing" id="label-node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
-            <select id="node-input-thing" style="width:70%"></select>
+            <label for="node-input-thing" id="label-node-input-thing" style="width:95px; padding-right:10px;"><i class="fa fa-microchip"></i> Thing</label>
+            <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
         <div class="form-row" id="thing-filter-div" hidden>
-            <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
-            <select id="thing-filter" style="width:70%"></select>
+            <label for="thing-filter" id="label-thing-filter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filter</label>
+            <select id="thing-filter" style="width:calc(100% - 170px)"></select>
         </div>
         <div class="form-row" id="row-notes" style="width:100%" hidden>
-            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
-            <textarea id="thing-notes" class="form-tips" style="width:70%"></textarea>
+            <label for="thing-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="thing-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
         </div>
         <div class="form-row" id="div-item">
-            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
-            <select id="node-input-item" style="width:70%"></select>
+            <label for="node-input-item" style="width:95px; padding-right:10px;"><i class="fa fa-sitemap"></i> Item</label>
+            <select id="node-input-item" style="width:calc(100% - 170px)"></select>
         </div>
         <div class="form-row" id="row-item-notes" style="width:100%" hidden>
-            <label for="item-notes"><i class="fa fa-file"></i> Notes</label>
-            <textarea id="item-notes" class="form-tips" style="width:70%"></textarea>
+            <label for="item-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="item-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
         </div>
         <div class="form-row">
-            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
-            <select id="node-input-operator" style="width:10%"></select>
-            <input type="text" id="node-input-compareValue" style="width:60%">
+            <label for="node-input-operator" style="width:95px; padding-right:10px;"><i class="fa fa-play-circle"></i> Trigger</label>
+            <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
+            <input type="text" id="node-input-compareValue" style="width:calc(100% - 220px)>
             <input type="hidden" id="node-input-compareType">
         </div>
         <div class="form-row">
-            <label for="node-input-change">&nbsp;</label>
-            <select id="node-input-change" style="width:40%;"></select>
+            <label for="node-input-change" style="width:95px; padding-right:10px;">&nbsp;</label>
+            <select id="node-input-change" style="width:calc(100% - 170px)"></select>
         </div>
         <div class="form-row">
-            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
-            <input type="text" id="node-input-outputValue" style="width:70%">
+            <label for="node-input-outputValue" style="width:95px; padding-right:10px;"><i class="fa fa-sign-out"></i> Output</label>
+            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
             <input type="hidden" id="node-input-outputType">
         </div>
         <div class="form-row">
-            <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
-            <input type="text" id="node-input-topic" placeholder="Topic" style="width=70%">
+            <label for="node-input-topic" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
+            <input type="text" id="node-input-topic" placeholder="Topic" style="width:calc(100% - 170px)">
         </div>        
         <div class="form-row">
-            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-            <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+            <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+            <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
         </div>
     </div>
 </script>

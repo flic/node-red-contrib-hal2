@@ -78,21 +78,21 @@
                         .appendTo(container)
                         .hide()
 
-                    var labelAttrName = $('<div/>',{style:"display:inline-block;text-align:left; width: 100px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
+                    var labelAttrName = $('<div/>',{style:"display:inline-block;text-align:left; width:102px; padding-right:10px; box-sizing:border-box;",class:"fa fa-tag"})
                         .appendTo(rowAttrName)
                         .append(' '+attribute.name)
-                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:100px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                    var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:102px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes') 
 
-                    var valueProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 105px)",class:"attribute-value-property",type:"text"})
+                    var valueProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 158px)",class:"attribute-value-property",type:"text"})
                         .appendTo(rowAttrName)
                         .prop('required',attribute.required)
                         .val(attribute.val)
                     var idProperty = $('<input/>',{class:"attribute-id-property",type:"hidden"})
                         .appendTo(rowAttrName)
                         .val(attribute.id)
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 105px)"})
+                    var notesField = $('<textarea/>',{style:"width:calc(100% - 158px); background-color:#ffe;"})
                         .appendTo(rowNotes)
                         .val(attribute.notes)
                     if (attribute.notes) {
@@ -166,31 +166,31 @@
 
 <script type="text/x-red" data-template-name="hal2Thing">
     <div class="form-row">
-        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
     </div>
     <div class="form-row">
-        <label for="node-input-thingType"><i class="fa fa-bookmark"></i> Type</label>
-        <input type="text" id="node-input-thingType" style="width:70%" placeholder="Type">
+        <label for="node-input-thingType" style="width:95px; padding-right:10px;"><i class="fa fa-bookmark"></i> Type</label>
+        <input type="text" id="node-input-thingType" style="width:calc(100% - 125px)" placeholder="Type">
     </div>
     <div class="form-row">
-        <label for="node-input-topicFilter"><i class="fa fa-filter"></i> Topic filter</label>
-        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:70%;">
+        <label for="node-input-topicFilter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Topic filter</label>
+        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:calc(100% - 170px)">
         <input type="hidden" id="node-input-topicFilterType">
     </div>
     <div class="form-row">
-        <label for="node-input-topicPrefix"><i class="fa fa-tasks"></i> Topic</label>
-        <input type="text" id="node-input-topicPrefix" style="width=70%">
+        <label for="node-input-topicPrefix" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
+        <input type="text" id="node-input-topicPrefix" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
-        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
-        <label for="node-input-notes"><i class="fa fa-file"></i> Notes</label>
-        <textarea id="node-input-notes" style="width:70%"></textarea>
+        <label for="node-input-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
+        <textarea id="node-input-notes" style="width:calc(100% - 170px)"></textarea>
     </div>
-    <div class="form-row" id="attributes"  style="width:95%" hidden>
+    <div class="form-row" id="attributes"  style="width:100%" hidden>
         <label><i class="fa fa-tags"></i> Attributes</label>
         <ol id="attributes-list"></ol>
     </div>

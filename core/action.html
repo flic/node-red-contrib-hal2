@@ -126,14 +126,14 @@
                         .append($("<option></option>").val('dynamic').text('Thing - set by msg.thing.id -'))
                     var thingsField = $('<select/>',{class:"node-input-command-thing",style:"width:calc(100% - 110px)"})
                         .appendTo(rowThing);
-                    var notesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 110px)"})
+                    var notesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"})
                         .appendTo(rowNotes);
                     var thingsFilter = $('<button type="button"/>').appendTo(rowThing);
                         $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
                     var filterField = $('<select/>',{style:"width:calc(100% - 110px)"}).appendTo(rowFilter);
                     var itemsField = $('<select/>',{class:"node-input-command-item",style:"width:calc(100% - 110px)"})
                         .appendTo(rowItem);
-                    var itemNotesField = $('<textarea/>',{class:"form-tips",style:"width:calc(100% - 110px)"})
+                    var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"})
                         .appendTo(rowItemNotes);
 
                     thingsField.change(function() {
@@ -351,12 +351,12 @@
 
 <script type="text/x-red" data-template-name="hal2Action">
     <div class="form-row">
-        <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:70%" placeholder="Event handler">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
     </div>
     <div class="form-row">
-        <label for="node-input-name"><i class="icon-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:70%">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
             <ol id="node-input-command-container"</ol>
