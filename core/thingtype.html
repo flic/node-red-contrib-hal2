@@ -304,8 +304,8 @@
                         .appendTo(container)
                         .hide()
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
-                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
+                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
@@ -435,30 +435,35 @@
                         let val = itemTypeProperty.val();
                         switch(val) {
                             case 'both':
+                                rowTopicFilter.show();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.show();
                                 rowOutput.show();
                                 break;
                             case 'status':
+                                rowTopicFilter.show();
                                 rowTopicSuffix.hide();
                                 rowEgress.hide();
                                 rowIngress.show();
                                 rowOutput.hide();
                                 break;
                             case 'command':
+                                rowTopicFilter.hide();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.hide();
                                 rowOutput.show();
                                 break;
                             case 'loopback_command':
+                                rowTopicFilter.hide();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.hide();
                                 rowOutput.hide();
                                 break;
                             case 'loopback_both':
+                                rowTopicFilter.show();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.show();
