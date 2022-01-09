@@ -22,6 +22,8 @@ The documentation is somewhat lacking at the moment, but take a look at the exam
 
 ## History
 
+**1.9** It's now possible to configure multiple outputs on the Thing node and use a specific output per command.
+
 **1.8** Value node can update Item values
 
 **1.7** Command loopback for virtual Things
