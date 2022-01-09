@@ -142,8 +142,9 @@
             if (TT) {
                 var thingType = RED.nodes.node(TT);
                 if (typeof thingType.thingOutput == 'undefined') { thingType.thingOutput = thingType.thingCommand; }
+                if (typeof thingType.outputs == 'undefined') { thingType.outputs = 1; }
                 if (thingType.thingOutput) {
-                    this.outputs = 1;
+                    this.outputs = thingType.outputs;
                 } else {
                     this.outputs = 0;
                 }

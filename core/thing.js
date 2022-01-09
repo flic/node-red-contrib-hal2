@@ -81,6 +81,12 @@ module.exports = function(RED) {
             return attribute;
         }
 
+        function createSendarray(msg,output,outputs) {
+            var sendArray = Array.apply(null, Array(outputs-1)).map(function () { return null; });
+            sendArray[output-1] = msg;
+            return sendArray;
+        }
+
         function statusUpdate(msg) {
             var eventmsg;
             var result;
@@ -297,7 +303,12 @@ module.exports = function(RED) {
                 }
                 if (command != null) {
                     if ((item.type == 'both') || (item.type == 'command')) {
-                        node.send(command);
+                        if (typeof item.output == 'undefined') {
+                            item.output = 1;
+                            node.thingType.outputs = 1;
+                        }
+                        var commands = createSendarray(command,item.output,node.thingType.outputs)
+                        node.send(commands);
                     } else {
                         statusUpdate(command);
                     }

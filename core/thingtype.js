@@ -11,6 +11,7 @@ module.exports = function(RED) {
         this.thingStatus = config.thingStatus;
         this.thingCommand = config.thingCommand;
         this.thingOutput = config.thingOutput;
+        this.outputs = config.outputs;
         this.hbCheck= config.hbCheck;
         this.hbType = config.hbType;
         this.hbTTL = config.hbTTL;
