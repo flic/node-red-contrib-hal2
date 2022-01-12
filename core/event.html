@@ -16,7 +16,7 @@
             operator:       { value: "", required: true },
             change:         { value: "1" },
             compareValue:   { value: "" },
-            compareType:    {},
+            compareType:    { value: "num" },
             outputValue:    { value: "" },
             outputType:     { required: true }
         },
@@ -112,7 +112,7 @@
                         for (var t in thingsList) {
                             $("<option value='" + thingsList[t].id + "'> " + thingsList[t].name + "</option>").appendTo("#node-input-thing");
                         }
-                        if (savedTypeSel == 'hal2Thing') {
+                        if ((typeof savedTypeSel != 'undefined') && (savedTypeSel == 'hal2Thing')) {
                             $("#node-input-thing").val(savedThing);
                         }
                         $("#node-input-thing").trigger('change');
@@ -130,7 +130,7 @@
                         for (let d in groupsList) {
                             $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>").appendTo("#node-input-thing");
                         }
-                        if (savedTypeSel == 'hal2Group') {
+                        if ((typeof savedTypeSel != 'undefined') && (savedTypeSel == 'hal2Group')) {
                             $("#node-input-thing").val(savedThing);
                         }
                         $("#node-input-thing").trigger('change');
@@ -147,7 +147,7 @@
                         for (let d in thingTypeList) {
                             $("<option value='" + thingTypeList[d].id + "'>" + thingTypeList[d].name + "</option>").appendTo("#node-input-thing");
                         }
-                        if (savedTypeSel == 'hal2ThingType') {
+                        if ((typeof savedTypeSel != 'undefined') && (savedTypeSel == 'hal2ThingType')) {
                             $("#node-input-thing").val(savedThing);
                         }
                         $("#node-input-thing").trigger('change');
@@ -321,13 +321,13 @@
             $("#node-input-operator").change( function() {
                 var type = $("#node-input-operator").children("option:selected").val();
                 if (type.length < 4) {
-                        $("#node-input-operator").css({ "width": "50px" });
-                        $("#node-input-compareValue").typedInput('width','calc(100% - 225px)')
-                    } else {
-                        $("#node-input-operator").css({ "width": "90px" });
-                        $("#node-input-compareValue").typedInput('width','calc(100% - 265px)')
+                    $("#node-input-operator").css({ "width": "50px" });
+                    $("#node-input-compareValue").typedInput('width','calc(100% - 225px)')
+                } else {
+                    $("#node-input-operator").css({ "width": "90px" });
+                    $("#node-input-compareValue").typedInput('width','calc(100% - 265px)')
 
-                    }
+                }
                 if (type == "always" || type === "true" || type === "false") {
                     $("#node-input-compareValue").typedInput('hide');
                     $("#node-input-operator").css({ "width":"calc(100% - 170px)" });
@@ -344,13 +344,14 @@
                     }
                 } else {
                     $('#node-input-compareValue').typedInput('types',['str','num','json']);
-                    $('#node-input-compareValue').typedInput('type',this.compareType);
                 }
             });
         },
         oneditsave: function () {
             this.typeSel = $("#node-input-typeSel").val();
             this.thing =   $("#node-input-thing").val();
+            this.compareType = $('#node-input-compareValue').typedInput('type');
+            this.compareValue =  $('#node-input-compareValue').typedInput('value');
         }
     });
 </script>
