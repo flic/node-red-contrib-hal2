@@ -172,7 +172,7 @@ module.exports = function(RED) {
         node.updateState = function (msg,itemId, state, logtype) {
             var item = "";
 
-            if (itemId == '1') { return; }
+            if ((itemId == '1') && (node.thingType.hbType == 'ttl')) { return; }
 
             for (var i in node.thingType.items) {
                 if (node.thingType.items[i].id == itemId) { 
