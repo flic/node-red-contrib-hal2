@@ -119,7 +119,7 @@
                 }
                 //Add items
                 for (let d in thingType.items) {
-                    if (thingType.items[d].type != 'command') {
+                    if ((thingType.items[d].type != 'command') && (thingType.items[d].type != 'loopback_command')) {
                         $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                     }
                 }
@@ -158,7 +158,7 @@
                 let thingType = RED.nodes.node($("#node-input-thingType").val());
                 //Add items
                 for (let d in thingType.items) {
-                    if (thingType.items[d].type != 'command') {
+                    if ((thingType.items[d].type != 'command') && (thingType.items[d].type != 'loopback_command')) {
                         $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                     }
                 }

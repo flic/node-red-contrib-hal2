@@ -195,7 +195,7 @@
                     let thingType = RED.nodes.node(thing.thingType);
                     //Add items
                     for (let d in thingType.items) {
-                        if (thingType.items[d].type != 'command') {
+                        if ((thingType.items[d].type != 'command') && (thingType.items[d].type != 'loopback_command')) {
                             $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                         }
                     }
