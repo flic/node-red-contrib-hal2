@@ -11,6 +11,9 @@
     "home-automation",
     "iot"
   ],
+  "engines": {
+    "node": ">=12.0.0"
+  },  
   "author": "Fredrik Furtenbach",
   "license": "ISC",
   "bugs": {
@@ -28,9 +31,6 @@
       "hal2Action": "core/action.js",
       "hal2Group": "core/group.js",
       "hal2Log": "core/log.js"
-    },
-    "engines": {
-      "node": ">=12.0.0"
     }
   },
   "dependencies": {}
