@@ -72,17 +72,24 @@
 
             //get all groups and sort them alphabetically
             const groupsList = RED.nodes.filterNodes({type: "hal2Group"});
-            groupsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-
+            try {
+                groupsList.sort(function(a, b) {
+                    var textA = a.name.toUpperCase();
+                    var textB = b.name.toUpperCase();
+                    return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
+                });
+            } catch (error) {
+                console.log('Error: '+error.message);
+            }
             //get all Thingtypes and sort them alphabetically
             var thingTypeId = [];
             for (let i in thingsList) {
-                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                    thingTypeId.push(thingsList[i].thingType);
+                try {
+                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                        thingTypeId.push(thingsList[i].thingType);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
                 }
             }
             var thingTypeList = [];

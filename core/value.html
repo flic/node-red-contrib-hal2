@@ -51,9 +51,13 @@
             //get all Thingtypes and sort them alphabetically
             var thingTypeId = [];
             for (let i in thingsList) {
-                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                    thingTypeId.push(thingsList[i].thingType);
-                }
+                try {
+                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                        thingTypeId.push(thingsList[i].thingType);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
+                }                    
             }
             var thingTypeList = [];
             for (let i in thingTypeId) {
