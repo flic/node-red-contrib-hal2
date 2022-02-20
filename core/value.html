@@ -20,6 +20,21 @@
         },
         paletteLabel: "value",
         oneditprepare: function () {
+
+            // Check if Thing has been deleted
+            if (this.thing != 0) {
+                try {
+                    let thing = RED.nodes.node(this.thing);
+                    if (typeof thing === 'undefined') {
+                        console.error('Thing ID '+this.thing+' is missing.');
+                        this.thing = void 0;
+                        this.thingType = void 0;
+                        this.item = void 0;
+                    }
+                } catch (error) {
+                        console.log('Error: '+error.message);
+                }  
+            }
             var savedThing = this.thing;
             var savedType = this.thingType;
             var savedItem = this.item;

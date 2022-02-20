@@ -271,7 +271,16 @@
             if (this.rules) {
                 for (var i=0; i<this.rules.length; i++) {
                     var rule = this.rules[i];
-                    $("#node-input-rule-container").editableList('addItem',rule);
+                    try {
+                        let thing = RED.nodes.node(rule.thing);
+                        if (typeof thing !== 'undefined') {
+                            $("#node-input-rule-container").editableList('addItem',rule);
+                        } else {
+                            console.error('Thing ID '+rule.thing+' is missing.');
+                        }
+                    } catch (error) {
+                        console.log('Error: '+error.message);
+                    }  
                 }
             } else {
                 $("#node-input-rule-container").editableList('addItem',null);              

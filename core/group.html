@@ -213,7 +213,16 @@
             if (this.group) {
                 for (var i=0; i<this.group.length; i++) {
                     var group = this.group[i];
-                    $("#node-input-group-container").editableList('addItem',group);
+                    try {
+                        let thing = RED.nodes.node(group.thing);
+                        if (typeof thing !== 'undefined') {
+                            $("#node-input-group-container").editableList('addItem',group);
+                        } else {
+                            console.error('Thing ID '+group.thing+' is missing.');
+                        }
+                    } catch (error) {
+                        console.log('Error: '+error.message);
+                    }  
                 }
             } else {
                 $("#node-input-group-container").editableList('addItem',null);              

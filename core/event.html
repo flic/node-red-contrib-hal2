@@ -42,6 +42,21 @@
                 { v: "false", t: "is false" }
             ];
 
+            // Check if Thing has been deleted
+            if (this.thing != 0) {
+                try {
+                    let thing = RED.nodes.node(this.thing);
+                    if (typeof thing === 'undefined') {
+                        console.error('Thing ID '+this.thing+' is missing.');
+                        this.thing = void 0;
+                        this.item = void 0;
+                        this.typeSel = void 0;
+                    }
+                } catch (error) {
+                        console.log('Error: '+error.message);
+                }  
+            }
+
             var savedThing = this.thing;
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;

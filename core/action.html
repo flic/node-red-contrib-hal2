@@ -323,7 +323,16 @@
             if (this.commandset) {
                 for (var i=0; i<this.commandset.length; i++) {
                     var command = this.commandset[i];
-                    $("#node-input-command-container").editableList('addItem',command);
+                    try {
+                        let thing = RED.nodes.node(command.thing);
+                        if (typeof thing !== 'undefined') {
+                            $("#node-input-command-container").editableList('addItem',command);
+                        } else {
+                            console.error('Thing ID '+command.thing+' is missing.');
+                        }
+                    } catch (error) {
+                        console.log('Error: '+error.message);
+                    } 
                 }
             } else {
                 $("#node-input-command-container").editableList('addItem',null);              

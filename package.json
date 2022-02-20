@@ -11,11 +11,11 @@
     "home-automation",
     "iot"
   ],
-  "engines": {
-    "node": ">=12"
-  },  
   "author": "Fredrik Furtenbach",
   "license": "ISC",
+  "engines": {
+    "node": ">=12"
+  },
   "bugs": {
     "url": "https://github.com/flic/node-red-contrib-hal2/issues"
   },
