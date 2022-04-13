@@ -68,10 +68,14 @@
             }
             var thingTypeList = [];
             for (let i in thingTypeId) {
-                var thingType = RED.nodes.node(thingTypeId[i]);
-                if (thingType.thingStatus) {
-                    thingTypeList.push(thingType);
-                }
+                try {
+                    var thingType = RED.nodes.node(thingTypeId[i]);
+                    if (thingType.thingStatus) {
+                        thingTypeList.push(thingType);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
+                }                      
             }
             thingTypeList.sort(function(a, b) {
                 var textA = a.name.toUpperCase();
@@ -147,7 +151,7 @@
                         }
                         //Add items                            
                         for (let d in thingType.items) {
-                            if (thingType.items[d].type != 'command') {
+                            if ((thingType.items[d].type == 'both') || (thingType.items[d].type == 'status') || (thingType.items[d].type == 'loopback_both')) { 
                                 itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                             }
                         }

@@ -24,9 +24,13 @@
             var completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
             var thingsList=[];
             for (let t in completeThingsList) {
-                let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                if (thingType.thingCommand) {
-                    thingsList.push(completeThingsList[t]);
+                try {
+                    let thingType = RED.nodes.node(completeThingsList[t].thingType);
+                    if (thingType.thingCommand) {
+                        thingsList.push(completeThingsList[t]);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
                 }
             }
             thingsList.sort(function(a, b) {
@@ -51,16 +55,24 @@
             //get all Thingtypes and sort them alphabetically
             var thingTypeId = [];
             for (let i in thingsList) {
-                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                    thingTypeId.push(thingsList[i].thingType);
-                }
+                try {
+                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
+                        thingTypeId.push(thingsList[i].thingType);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
+                }                
             }
             var thingTypeList = [];
             for (let i in thingTypeId) {
-                var thingType = RED.nodes.node(thingTypeId[i]);
-                if (thingType.thingStatus) {
-                    thingTypeList.push(thingType);
-                }
+                try {
+                    var thingType = RED.nodes.node(thingTypeId[i]);
+                    if (thingType.thingCommand) {
+                        thingTypeList.push(thingType);
+                    }
+                } catch (error) {
+                    console.log('Error: '+error.message);
+                }                    
             }
             thingTypeList.sort(function(a, b) {
                 var textA = a.name.toUpperCase();
@@ -152,7 +164,7 @@
                                 let thingType = RED.nodes.node(thing.thingType);
                                 //Add items                            
                                 for (let d in thingType.items) {
-                                    if (thingType.items[d].id != '1') {
+                                    if ((thingType.items[d].id != '1') && (thingType.items[d].type != 'status')) { 
                                         itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                                     }
                                 }
