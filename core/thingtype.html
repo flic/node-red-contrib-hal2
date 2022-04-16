@@ -841,15 +841,15 @@
             });
 
             // RED.library needs an editor object. Not used anywhere.
-            editors['0'] = RED.editor.createEditor({
-                            id: '0',
+            editors['editor-not-used'] = RED.editor.createEditor({
+                            id: 'editor-not-used',
                             value: ""
                         });            
 
             RED.library.create({
                 url:"hal2ThingType", 
                 type:"hal2ThingType",
-                editor:editors['0'],
+                editor:editors['editor-not-used'],
                 fields:[
                     {
                         name: 'name',
