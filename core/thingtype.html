@@ -980,7 +980,6 @@
         },
         oneditsave: function () {
             var node = this;
-            var i;
             node.attributes = [];
             node.items = [];
             node.ingress = [];
@@ -993,9 +992,9 @@
             node.attributes = getAttributes();
             node.items = getItems();
 
-            for (let r in node.items) {
-                if (r.output > node.outputs) { node.outputs = r.output; }
-                switch(r.type) {
+            for (let d in node.items) {
+                if (node.items[d].output > node.outputs) { node.outputs = node.items[d].output; }
+                switch(node.items[d].type) {
                     case 'both':
                         node.thingStatus = true;
                         node.thingCommand = true;
