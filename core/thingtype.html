@@ -841,15 +841,15 @@
             });
 
             // RED.library needs an editor object. Not used anywhere.
-            editors['editor-not-used'] = RED.editor.createEditor({
-                            id: 'editor-not-used',
+            editors['hidden-editor-not-used'] = RED.editor.createEditor({
+                            id: 'hidden-editor-not-used',
                             value: ""
                         });            
 
             RED.library.create({
                 url:"hal2ThingType", 
                 type:"hal2ThingType",
-                editor:editors['editor-not-used'],
+                editor:editors['hidden-editor-not-used'],
                 fields:[
                     {
                         name: 'name',
@@ -1066,8 +1066,9 @@
             <div class="form-row">
                 <label for="node-config-input-name" style="width: 125px; padding-left: 10px;"><i class="fa fa-tag"></i> Name</label>
                 <input type="text" id="node-config-input-name" placeholder="Name" style="width: calc(100% - 185px - 55px)">
-                <!-- RED.library needs #node-input-name to exist to function. Create it hidden, keep it in sync with #node-config-input-name -->
+                <!-- RED.library needs #node-input-name and an editor to function -->
                 <input type="hidden" id="node-input-name">
+                <div id="hidden-editor-not-used" hidden></div>
             </div>
             <div class="form-row">
                 <label for="node-config-input-contextStore" style="width: 125px; padding-left: 10px;"><i class="fa fa-database"></i> Context store</label>
