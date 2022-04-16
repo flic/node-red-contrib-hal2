@@ -67,7 +67,7 @@
     }
 
     function addAttributes(attributes) {
-        $("#node-config-thingtype-list-attributes").children().remove();
+        $("#node-config-thingtype-list-attributes").editableList().children().remove();
         if (attributes) {
             for (let d in attributes) {
                 let attribute = attributes[d];
@@ -77,7 +77,7 @@
     }
 
     function addItems(items) {
-        $("#node-config-thingtype-list-items").children().remove();
+        $("#node-config-thingtype-list-items").editableList().children().remove();
         if (items) {
             for (let d in items) {
                 let item = items[d];
@@ -666,7 +666,7 @@
                 addButton: "Attribute"
             });
 
-        // Ingress & Egress
+            // Ingress & Egress
             function createFunctionTab(fn_type,fn_default) {
                 $('#node-config-'+fn_type+'-list-items').editableList({
                     addItem: function(container,i,opt) {
@@ -840,10 +840,16 @@
                 $("#node-input-name").val($('#node-config-input-name').val());
             });
 
+            // RED.library needs an editor object. Not used anywhere.
+            editors['0'] = RED.editor.createEditor({
+                            id: '0',
+                            value: ""
+                        });            
+
             RED.library.create({
                 url:"hal2ThingType", 
                 type:"hal2ThingType",
-                editor:RED.editor.createEditor(),
+                editor:editors['0'],
                 fields:[
                     {
                         name: 'name',
