@@ -863,7 +863,7 @@
                     {
                         name: 'context_store',
                         get: function() {
-                            return $("#node-config-input-contextStore").val();
+                            return contextStore = $("#node-config-input-contextStore").val();
                         },
                         set: function(v) {
                             $("#node-config-input-contextStore").val(v)
@@ -966,14 +966,14 @@
                     {
                         name: 'heartbeat_ingress',
                         get: function() {
-                            return $("#node-config-input-hbLWT").val();
+                            let hbLWT = $("#node-config-input-hbLWT").val();
+                            if (hbLWT === null) { hbLWT = '' }
+                            return hbLWT;
                         },
                         set: function(v) {
                             $("#node-config-input-hbLWT").val(v)
                         }
                     }
-
-
                 ],
                 ext: "template"
             });
