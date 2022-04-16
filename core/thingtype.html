@@ -175,7 +175,7 @@
                     //Check for name collisions
                     const thingsList = RED.nodes.filterNodes({type: "hal2ThingType"});
                     if(thingsList.length===0){ return true; }
-                    for (var d in thingsList) {
+                    for (let d in thingsList) {
                         if (v == thingsList[d].name && thingsList[d].id !== this.id) { return false; }
                     }
                     return true;
@@ -782,7 +782,7 @@
                 $('#tab-'+fn_type+'-copy-button').on('click', function () {
                     var thingType = RED.nodes.node($('#tab-'+fn_type+'-copy-thing').val());
                     var selectedFn = $('#tab-'+fn_type+'-copy-'+fn_type).val();
-                    for (n in thingType[fn_type]) {
+                    for (let n in thingType[fn_type]) {
                         if (thingType[fn_type][n].id == selectedFn) {
                             $('#node-config-'+fn_type+'-list-items').editableList('addItem',thingType[fn_type][n]);
                             $('#node-config-'+fn_type+'-list-items').trigger('change');
@@ -1040,14 +1040,14 @@
             node.egress = getFunctions('egress');
 
             // Remove editors
-            for (n in editors) {
+            for (let n in editors) {
                 editors[n].destroy();
                 delete editors[n];
             }
         },
         oneditcancel: function() {
             // Remove editors
-            for (n in editors) {
+            for (let n in editors) {
                 editors[n].destroy();
                 delete editors[n];
             }
