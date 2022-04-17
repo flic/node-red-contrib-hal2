@@ -22,7 +22,7 @@ The documentation is somewhat lacking at the moment, but take a look at the exam
 
 ## History
 
-**1.10** Export and import Thingtypes using the Node-RED Library function. Minimum node version bumped to >=14. 
+**1.10** Export and import Thingtypes using the Node-RED Library function. Minimum node version bumped to >=14, minimum Node-RED version bumped to >= 2.2.0. 
 
 **1.9** It's now possible to configure multiple outputs on the Thing node and use a specific output per command.
 
