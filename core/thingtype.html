@@ -842,9 +842,9 @@
 
             // RED.library needs an editor object. Not used anywhere.
             editors['hidden-editor-not-used'] = RED.editor.createEditor({
-                            id: 'hidden-editor-not-used',
-                            value: ""
-                        });            
+                id: 'hidden-editor-not-used',
+                value: ""
+            });            
 
             RED.library.create({
                 url:"hal2ThingType", 
@@ -853,36 +853,22 @@
                 fields:[
                     {
                         name: 'name',
-                        get: function() {
-                            return $("#node-config-input-name").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-name").val(v+' (template copy)');
-                        }
+                        get: function() { return $("#node-config-input-name").val(); },
+                        set: function(v) { $("#node-config-input-name").val(v+' (template copy)'); }
                     },                    
                     {
                         name: 'context_store',
-                        get: function() {
-                            return contextStore = $("#node-config-input-contextStore").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-contextStore").val(v)
-                        }
+                        get: function() { return contextStore = $("#node-config-input-contextStore").val(); },
+                        set: function(v) { $("#node-config-input-contextStore").val((contextStores.includes(v)) ? v : contextStores[0]) }
                     },
                     {
                         name: 'show_state',
-                        get: function() {
-                            return $("#node-config-input-nodestatus").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-nodestatus").val(v)
-                        }
+                        get: function() { return $("#node-config-input-nodestatus").val(); },
+                        set: function(v) { $("#node-config-input-nodestatus").val(v) }
                     },
                     {
                         name: 'ingress',
-                        get: function() {
-                            return JSON.stringify(getFunctions('ingress'));
-                        },
+                        get: function() { return JSON.stringify(getFunctions('ingress')); },
                         set: function(v) {
                             addFunctions('ingress',JSON.parse(v));
                             updateMainTab('ingress');
@@ -892,9 +878,7 @@
                     },
                     {
                         name: 'egress',
-                        get: function() {
-                            return JSON.stringify(getFunctions('egress'));
-                        },
+                        get: function() { return JSON.stringify(getFunctions('egress')); },
                         set: function(v) {
                             addFunctions('egress',JSON.parse(v));
                             updateMainTab('egress');
@@ -902,77 +886,43 @@
                     },
                     {
                         name: 'filter_function',
-                        get: function() {
-                            return $("#node-config-input-filterFunction").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-filterFunction").val(v)
-                        }
+                        get: function() { return $("#node-config-input-filterFunction").val(); },
+                        set: function(v) { $("#node-config-input-filterFunction").val(v) }
                     },
                     {
                         name: 'attributes',
-                        get: function() {
-                            return JSON.stringify(getAttributes());
-                        },
-                        set: function(v) {
-                            addAttributes(JSON.parse(v));
-                        }
+                        get: function() { return JSON.stringify(getAttributes()); },
+                        set: function(v) { addAttributes(JSON.parse(v)); }
                     },
                     {
                         name: 'items',
-                        get: function() {
-                            return JSON.stringify(getItems());
-                        },
-                        set: function(v) {
-                            addItems(JSON.parse(v));
-                        }
+                        get: function() { return JSON.stringify(getItems()); },
+                        set: function(v) { addItems(JSON.parse(v)); }
                     },                    
                     {
                         name: 'check_alive',
-                        get: function() {
-                            return $("#node-config-input-hbCheck").is(":checked") ? 'true' : 'false';
-                        },
-                        set: function(v) {
-                            $("#node-config-input-hbCheck").prop("checked",(v == 'true')).trigger('change');
-                        }
+                        get: function() { return $("#node-config-input-hbCheck").is(":checked") ? 'true' : 'false'; },
+                        set: function(v) { $("#node-config-input-hbCheck").prop("checked",(v == 'true')).trigger('change'); }
                     },
                     {
                         name: 'heartbeat_type',
-                        get: function() {
-                            return $("#node-config-input-hbType").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-hbType").val(v)
-                        }
+                        get: function() { return $("#node-config-input-hbType").val(); },
+                        set: function(v) { $("#node-config-input-hbType").val(v) }
                     },
                     {
                         name: 'heartbeat_ttl',
-                        get: function() {
-                            return $("#node-config-input-hbTTL").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-hbTTL").val(v)
-                        }
+                        get: function() { return $("#node-config-input-hbTTL").val(); },
+                        set: function(v) { $("#node-config-input-hbTTL").val(v) }
                     },
                     {
                         name: 'heartbeat_topicfilter',
-                        get: function() {
-                            return $("#node-config-input-hbFilterVal").val();
-                        },
-                        set: function(v) {
-                            $("#node-config-input-hbFilterVal").val(v)
-                        }
+                        get: function() { return $("#node-config-input-hbFilterVal").val(); },
+                        set: function(v) { $("#node-config-input-hbFilterVal").val(v) }
                     },
                     {
                         name: 'heartbeat_ingress',
-                        get: function() {
-                            let hbLWT = $("#node-config-input-hbLWT").val();
-                            if (hbLWT === null) { hbLWT = '' }
-                            return hbLWT;
-                        },
-                        set: function(v) {
-                            $("#node-config-input-hbLWT").val(v)
-                        }
+                        get: function() { return ($("#node-config-input-hbLWT").val() === null) ? '' : $("#node-config-input-hbLWT").val(); },
+                        set: function(v) { $("#node-config-input-hbLWT").val(v) }
                     }
                 ],
                 ext: "template"
