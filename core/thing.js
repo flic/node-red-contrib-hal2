@@ -81,6 +81,14 @@ module.exports = function(RED) {
             return attribute;
         }
 
+        function getItems() {
+            var item = [];
+            for (n in node.thingType.items) {
+                item[node.thingType.items[n].name] = (typeof node.state[node.thingType.items[n].id] === 'undefined') ? 'no value' : node.state[node.thingType.items[n].id];
+            }
+            return item;
+        }
+
         function createSendarray(msg,output,outputs) {
             var sendArray = Array.apply(null, Array(outputs-1)).map(function () { return null; });
             sendArray[output-1] = msg;
@@ -234,16 +242,31 @@ module.exports = function(RED) {
                 if (node.state[1] === false) { statusMsg["fill"] = "red"; }
             }
 
-            if ((typeof node.thingType.nodestatus === 'undefined') || (node.thingType.nodestatus == '')) { 
+            if ((typeof node.thingType.nodestatus === 'undefined') || ((node.thingType.nodestatus == '') && (node.thingType.nodestatusType == 'str'))) { 
                 node.status(statusMsg);
             } else {            
-                var stateStr = node.thingType.nodestatus;
-                for (let i in node.thingType.items) {
-                    if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
-                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",'no value');
-                    } else {
-                        stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",node.state[node.thingType.items[i].id]);
+                if ((typeof node.thingType.nodestatusType === 'undefined') || (node.thingType.nodestatusType == 'str')) {
+                    var stateStr = node.thingType.nodestatus;
+                    for (let i in node.thingType.items) {
+                        if (typeof node.state[node.thingType.items[i].id] === 'undefined') {
+                            stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",'no value');
+                        } else {
+                            stateStr = stateStr.replace("%"+node.thingType.items[i].name+"%",node.state[node.thingType.items[i].id]);
+                        }
                     }
+                } else if (node.thingType.statusFn !== '') {
+                    let attribute = getAttributes();
+                    let item = getItems();
+                    let _egressFn = new Function('item','attribute',node.thingType.statusFn);
+                    try {
+                        var command = _egressFn(item,attribute);
+                    } catch (err) {
+                        node.error("Error running status function for "+node.name+": "+err);
+                    }
+                    if (command != null) {
+                        stateStr = command;
+                    }
+    
                 }
                 statusMsg["text"] = stateStr;
                 node.status(statusMsg);

@@ -183,6 +183,8 @@
             },
             contextStore:   {},
             nodestatus:     {},
+            nodestatusType: {},
+            statusFn:        {},
             items:          { value: [], required: true },
             attributes:     { value: [], required: false },
             ingress:        {},
@@ -221,9 +223,9 @@
             }
             var functionType = {
                 value: "function",
-                label: "func",
-                icon: "function.svg",
-                hasValue: true
+                label: "function",
+                icon: "/icons/node-red-contrib-hal2/function.png",
+                hasValue: false
             }
             var MQTTType = {
                 value: "mqtt",
@@ -352,6 +354,44 @@
                 $("#node-config-input-contextStore").val(this.contextStore);
                 $("#node-config-input-contextStore").trigger("change");
             }
+
+            //Show state
+            $('#node-config-input-nodestatus').typedInput({
+                default: 'str',
+                typeField: $("#node-config-input-nodestatusType"),
+                types:['str',functionType]
+            });
+
+            editors['statusFn'] = RED.editor.createEditor({
+                id: 'statusFn-editor',
+                mode: "ace/mode/nrjavascript",
+                value: "// item & attribute objects are\n// passed to function as objects\n\nreturn '';", 
+                globals: {
+                        msg:false,
+                        context:true,
+                        RED: true,
+                        util: true,
+                        flow: true,
+                        global: true,
+                        console: true,
+                        Buffer: true,
+                        setTimeout: true,
+                        clearTimeout: true,
+                        setInterval: true,
+                        clearInterval: true,
+                        attribute: true
+                    }
+            });
+
+            if (node.statusFn) { editors['statusFn'].setValue(node.statusFn); }
+
+            $('#node-config-input-nodestatus').change( function () {
+                if ($("#node-config-input-nodestatus").typedInput('type') == 'str') {
+                    $('#statusFn-editor').hide();                        
+                } else {
+                    $('#statusFn-editor').show();
+                }
+            });
 
             // Filter function
             $("#node-config-input-filterFunction").change( function () {
@@ -840,16 +880,10 @@
                 $("#node-input-name").val($('#node-config-input-name').val());
             });
 
-            // RED.library needs an editor object. Not used anywhere.
-            editors['hidden-editor-not-used'] = RED.editor.createEditor({
-                id: 'hidden-editor-not-used',
-                value: ""
-            });            
-
             RED.library.create({
                 url:"hal2ThingType", 
                 type:"hal2ThingType",
-                editor:editors['hidden-editor-not-used'],
+                editor:editors['statusFn'],
                 fields:[
                     {
                         name: 'name',
@@ -863,8 +897,13 @@
                     },
                     {
                         name: 'show_state',
-                        get: function() { return $("#node-config-input-nodestatus").val(); },
-                        set: function(v) { $("#node-config-input-nodestatus").val(v) }
+                        get: function() { return $("#node-config-input-nodestatus").typedInput('value'); },
+                        set: function(v) { $("#node-config-input-nodestatus").typedInput('value',v) }
+                    },
+                    {
+                        name: 'show_statetype',
+                        get: function() { return $("#node-config-input-nodestatus").typedInput('type'); },
+                        set: function(v) { if (typeof v != 'undefined') { $("#node-config-input-nodestatus").typedInput('type',v); }}
                     },
                     {
                         name: 'ingress',
@@ -938,6 +977,8 @@
             node.thingCommand = false;
             node.thingOutput = false;
             node.outputs = 0;
+            
+            node.statusFn = editors['statusFn'].getValue();
 
             node.attributes = getAttributes();
             node.items = getItems();
@@ -1026,6 +1067,8 @@
             <div class="form-row">
                 <label for="node-config-input-nodestatus" style="width: 125px; padding-left: 10px;"><i class="fa fa-quote-right"></i> Show state</label>
                 <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0%" style="width: calc(100% - 185px)">
+                <input type="hidden" id="node-config-input-nodestatusType">
+                <div id="statusFn-editor" style="padding-left: 140px; padding-bottom: 3px; height: 150px; min-height:150px;width: calc(100% - 185px);" hidden></div>
             </div>
             <div class="form-row">
                 <label for="node-config-input-filterFunction" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Filter function</label>
