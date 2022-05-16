@@ -1,7 +1,7 @@
 # node-red-contrib-hal2 [![npm version](https://badge.fury.io/js/node-red-contrib-hal2.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
 A set of nodes to help with basic home automation logic.
 
-**Note:** I've added a few new examples to demonstrate the new functionality in 1.6 and 1.7.
+**Note:** Even more new examples added
 
 ## Install
 ```bash
@@ -18,47 +18,47 @@ npm install node-red-contrib-hal2
 4. Output the value to another flow with a **Value node**
 5. Send device commands to multiple Things using an **Action node**
 
-The documentation is somewhat lacking at the moment, but take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
+Take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
 
 ## History
 
-**1.11**
-New options for Gate rules: Time Since Update and Time Since Change.
-It's now possible to use a function to create dynamic status text strings for Items.
-Value and Item node output includes last_update and last_change epoch date.
+**1.11**<br>
+New options for Gate rules: Time Since Update and Time Since Change.<br>
+It's now possible to use a function to create dynamic status text strings for Items.<br>
+Value and Item node output includes last_update and last_change epoch date.<br>
 New examples.
 
-**1.10**
-Export and import Thingtypes using the Node-RED Library function.
+**1.10**<br>
+Export and import Thingtypes using the Node-RED Library function.<br>
 Minimum node version bumped to >=14, minimum Node-RED version bumped to >= 2.2.0. 
 
-**1.9**
+**1.9**<br>
 It's now possible to configure multiple outputs on the Thing node and use a specific output per command.
 
-**1.8**
+**1.8**<br>
 Value node can update Item values
 
-**1.7**
+**1.7**<br>
 Command loopback for virtual Things
 
-**1.6**
-Thing attributes & filter function added.
+**1.6**<br>
+Thing attributes & filter function added.<br>
 Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
 
-**1.5**
+**1.5**<br>
 Item notes added
 
-**1.4**
+**1.4**<br>
 Item filter applied to all node types
 
-**1.3**
+**1.3**<br>
 Dynamically set thing.id at runtime
 
-**1.2**
+**1.2**<br>
 Copy functions from other types
 
-**1.1**
+**1.1**<br>
 Item filter on gate node
 
-**1.0**
+**1.0**<br>
 Initial release
