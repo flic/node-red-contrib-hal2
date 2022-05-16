@@ -12,6 +12,8 @@ npm install node-red-contrib-hal2
 ## What is it?
 **node-red-contrib-hal2** is a set of Node-RED nodes useful for creating home automation flows. The basic component is the Thing node, a virtual representation of a (usually) physical IoT device. This can then be used to trigger events, route traffic based on rules and more.
 
+![Skärmavbild 2022-05-16 kl  21 11 34](https://user-images.githubusercontent.com/400673/168665494-db5c244e-6225-4ae0-beed-fab3131e1b0a.png)
+
 1. Store a device state in a **Thing node**
 2. Fire an event when the value changes using an **Event node**
 3. One or more rules will compare the value and that of other Items in a **Gate node**
@@ -19,7 +21,11 @@ npm install node-red-contrib-hal2
 5. Send device commands to multiple Things using an **Action node**
 6. Log changes using the **Log node**
 
+![Skärmavbild 2022-05-16 kl  21 11 01](https://user-images.githubusercontent.com/400673/168665539-3984681b-5059-4ed6-b350-683a431841d8.png)
+
 Take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
+
+![Skärmavbild 2022-05-16 kl  21 15 11](https://user-images.githubusercontent.com/400673/168665807-aa3aba8f-8b06-4292-bcad-7374e508f59a.png)
 
 ## History
 
