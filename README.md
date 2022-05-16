@@ -22,24 +22,43 @@ The documentation is somewhat lacking at the moment, but take a look at the exam
 
 ## History
 
-**1.10** Export and import Thingtypes using the Node-RED Library function. Minimum node version bumped to >=14, minimum Node-RED version bumped to >= 2.2.0. 
+**1.11**
+New options for Gate rules: Time Since Update and Time Since Change.
+It's now possible to use a function to create dynamic status text strings for Items.
+Value and Item node output includes last_update and last_change epoch date.
+New examples.
 
-**1.9** It's now possible to configure multiple outputs on the Thing node and use a specific output per command.
+**1.10**
+Export and import Thingtypes using the Node-RED Library function.
+Minimum node version bumped to >=14, minimum Node-RED version bumped to >= 2.2.0. 
 
-**1.8** Value node can update Item values
+**1.9**
+It's now possible to configure multiple outputs on the Thing node and use a specific output per command.
 
-**1.7** Command loopback for virtual Things
+**1.8**
+Value node can update Item values
 
-**1.6** Thing attributes & filter function added. Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
+**1.7**
+Command loopback for virtual Things
 
-**1.5** Item notes added
+**1.6**
+Thing attributes & filter function added.
+Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
 
-**1.4** Item filter applied to all node types
+**1.5**
+Item notes added
 
-**1.3** Dynamically set thing.id at runtime
+**1.4**
+Item filter applied to all node types
 
-**1.2** Copy functions from other types
+**1.3**
+Dynamically set thing.id at runtime
 
-**1.1** Item filter on gate node
+**1.2**
+Copy functions from other types
 
-**1.0** Initial release
+**1.1**
+Item filter on gate node
+
+**1.0**
+Initial release
