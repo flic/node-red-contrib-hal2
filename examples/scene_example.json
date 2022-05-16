@@ -1,156 +1,166 @@
 [
     {
-        "id": "cfbce2bd6869d231",
-        "type": "hal2Thing",
-        "z": "797bdc9088052f14",
+        "id": "74c534bd8cc69625",
+        "type": "comment",
+        "z": "ff01eccb16bd7d24",
+        "name": "Example scene with the status string formatted by a function",
+        "info": "",
+        "x": 300,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "228414d95e2700d6",
+        "type": "inject",
+        "z": "ff01eccb16bd7d24",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 150,
+        "y": 140,
+        "wires": [
+            [
+                "af5bc58655b4e1e8"
+            ]
+        ]
+    },
+    {
+        "id": "f6aba32daf9e2368",
+        "type": "inject",
+        "z": "ff01eccb16bd7d24",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 150,
+        "y": 180,
+        "wires": [
+            [
+                "af5bc58655b4e1e8"
+            ]
+        ]
+    },
+    {
+        "id": "b8018e0c98c0cf09",
+        "type": "hal2Action",
+        "z": "ff01eccb16bd7d24",
         "eventHandler": "e228014191d14be6",
-        "thingType": "578f0393e0b0d0e8",
-        "name": "Example Scene",
+        "name": "Change scene with Action",
+        "commandset": [
+            {
+                "category": "hal2Thing",
+                "thing": "af5bc58655b4e1e8",
+                "item": "159e7a28.f5e3d6",
+                "value": "payload",
+                "type": "msg"
+            }
+        ],
+        "ratelimit": 0,
+        "x": 400,
+        "y": 260,
+        "wires": []
+    },
+    {
+        "id": "18073de99cdbd179",
+        "type": "inject",
+        "z": "ff01eccb16bd7d24",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 150,
+        "y": 240,
+        "wires": [
+            [
+                "b8018e0c98c0cf09"
+            ]
+        ]
+    },
+    {
+        "id": "987b7d9e8f8f5754",
+        "type": "inject",
+        "z": "ff01eccb16bd7d24",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 150,
+        "y": 280,
+        "wires": [
+            [
+                "b8018e0c98c0cf09"
+            ]
+        ]
+    },
+    {
+        "id": "af5bc58655b4e1e8",
+        "type": "hal2Thing",
+        "z": "ff01eccb16bd7d24",
+        "eventHandler": "e228014191d14be6",
+        "thingType": "2deaab8390cf4ea9",
+        "name": "Example scene",
         "attributes": [],
         "topicFilter": "",
         "topicFilterType": "mqtt",
         "topicPrefix": "",
         "notes": "",
         "outputs": 0,
-        "x": 380,
-        "y": 240,
+        "x": 360,
+        "y": 160,
         "wires": []
-    },
-    {
-        "id": "bafa01a846452d00",
-        "type": "inject",
-        "z": "797bdc9088052f14",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "true",
-        "payloadType": "bool",
-        "x": 170,
-        "y": 220,
-        "wires": [
-            [
-                "cfbce2bd6869d231"
-            ]
-        ]
-    },
-    {
-        "id": "43b4d028f8b1ea69",
-        "type": "inject",
-        "z": "797bdc9088052f14",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "false",
-        "payloadType": "bool",
-        "x": 170,
-        "y": 260,
-        "wires": [
-            [
-                "cfbce2bd6869d231"
-            ]
-        ]
-    },
-    {
-        "id": "c85dcb159251667c",
-        "type": "hal2Action",
-        "z": "797bdc9088052f14",
-        "eventHandler": "e228014191d14be6",
-        "name": "Change scene with Action",
-        "commandset": [
-            {
-                "category": "hal2Thing",
-                "thing": "cfbce2bd6869d231",
-                "item": "9087924e.bea2d",
-                "value": "payload",
-                "type": "msg"
-            }
-        ],
-        "ratelimit": 0,
-        "x": 420,
-        "y": 340,
-        "wires": []
-    },
-    {
-        "id": "57d69b6d755774f4",
-        "type": "inject",
-        "z": "797bdc9088052f14",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "true",
-        "payloadType": "bool",
-        "x": 170,
-        "y": 320,
-        "wires": [
-            [
-                "c85dcb159251667c"
-            ]
-        ]
-    },
-    {
-        "id": "a5cec0cf20d7bc97",
-        "type": "inject",
-        "z": "797bdc9088052f14",
-        "name": "",
-        "props": [
-            {
-                "p": "payload"
-            },
-            {
-                "p": "topic",
-                "vt": "str"
-            }
-        ],
-        "repeat": "",
-        "crontab": "",
-        "once": false,
-        "onceDelay": 0.1,
-        "topic": "",
-        "payload": "false",
-        "payloadType": "bool",
-        "x": 170,
-        "y": 360,
-        "wires": [
-            [
-                "c85dcb159251667c"
-            ]
-        ]
     },
     {
         "id": "e228014191d14be6",
@@ -160,57 +170,84 @@
         "heartbeat": "10"
     },
     {
-        "id": "578f0393e0b0d0e8",
+        "id": "2deaab8390cf4ea9",
         "type": "hal2ThingType",
         "name": "Scene",
-        "contextStore": "memory",
-        "nodestatus": "🌅 %Active%",
+        "contextStore": "filesystem",
+        "nodestatus": "",
+        "nodestatusType": "function",
+        "statusFn": "// item & attribute objects are\n// passed to function as objects\n\nreturn item['Active'] ? '🟢 Scene is active' : '🔴 Scene is inactive';",
         "items": [
             {
                 "name": "Active",
-                "id": "9087924e.bea2d",
+                "id": "159e7a28.f5e3d6",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "loopback_both",
+                "ingress": "ec279681.0060a8",
+                "egress": "4976b249.e2879c",
+                "notes": "",
+                "output": "1"
+            },
+            {
+                "name": "Deactivate",
+                "id": "7d1e045f.1d07fc",
                 "topicFilterType": "str",
                 "topicFilterValue": "",
                 "topicSuffix": "",
                 "type": "loopback_command",
-                "ingress": "f3fe20ab.f47128",
-                "egress": "eaaa9c36.014c68",
-                "notes": ""
+                "ingress": "2d956987.ef2ce6",
+                "egress": "bbf54a60.e24928",
+                "notes": "",
+                "output": "1"
             }
         ],
         "attributes": [],
         "ingress": [
             {
                 "name": "Pass-through",
-                "id": "afcc808d.f9a44",
-                "fn": "// msg & attribute objects are\n// passed to function\n\nreturn msg.payload;"
+                "id": "2d956987.ef2ce6",
+                "fn": "// msg object is passed to function\n\nreturn msg.payload;"
             },
             {
                 "name": "Convert to Number",
-                "id": "4170710e.59ebf8",
-                "fn": "// msg & attribute objects are\n// passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+                "id": "81c4ed2e.d9dcc",
+                "fn": "// msg object is passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
             },
             {
                 "name": "Convert to Boolean",
-                "id": "f3fe20ab.f47128",
-                "fn": "// msg & attribute objects are\n// passed to function\n\nswitch(typeof msg.payload) {\n    case 'number':\n        msg.payload = (msg.payload==1);\n        break;\n    case 'string':\n        msg.payload = (msg.payload == 'true');\n        break;\n}\nreturn msg.payload;"
+                "id": "ec279681.0060a8",
+                "fn": "// msg object is passed to function\nswitch(typeof msg.payload) {\n    case 'number':\n        msg.payload = (msg.payload==1);\n        break;\n    case 'string':\n        msg.payload = (msg.payload == 'true');\n        break;\n}\nreturn msg.payload;"
             }
         ],
         "egress": [
             {
                 "name": "Pass-through",
-                "id": "eaaa9c36.014c68",
-                "fn": "// msg & attribute objects are\n// passed to function\n\nreturn msg;"
+                "id": "4976b249.e2879c",
+                "fn": "// msg object is passed to function\n\nreturn msg;"
+            },
+            {
+                "name": "Convert to Boolean",
+                "id": "3fb2df57.db66e",
+                "fn": "// msg object is passed to function\n\nmsg.payload = (msg.payload == 'true');\nreturn msg;"
+            },
+            {
+                "name": "Reverse",
+                "id": "bbf54a60.e24928",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nmsg.payload = (msg.payload === false);\nreturn msg;"
             }
         ],
-        "thingStatus": false,
+        "thingStatus": true,
         "thingCommand": true,
         "thingOutput": false,
         "hbCheck": false,
         "hbType": "lwt",
         "hbTTL": "",
+        "hbLWT": "2d956987.ef2ce6",
         "hbFilterVal": "",
-        "hbFilterType": "str",
-        "filterFunction": "0"
+        "hbFilterType": "StrEnd",
+        "filterFunction": "0",
+        "outputs": "1"
     }
 ]

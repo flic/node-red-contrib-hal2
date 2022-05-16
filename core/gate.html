@@ -28,7 +28,11 @@
                 { v: "cont", t: "contains" },
                 { v: "regex", t: "regex" },
                 { v: "true", t: "is true" },
-                { v: "false", t: "is false" }
+                { v: "false", t: "is false" },
+                { v: "last_update_gte", t: "TSU >=" },
+                { v: "last_update_lte", t: "TSU <=" },
+                { v: "last_change_gte", t: "TSC >=" },
+                { v: "last_change_lte", t: "TSC <=" }
             ];
             //get all thing nodes and sort them alphabetically
             const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
@@ -249,6 +253,9 @@
                                 valueField.typedInput('types',['num']);
                                 valueField.typedInput('type','num');                        
                             }
+                        } else if (type == "last_update_gte" || type == "last_update_lte" || type == "last_change_gte" || type == "last_change_lte") {
+                            valueField.typedInput('types',['num','msg','flow','global','env']);
+                            valueField.typedInput('type',rule.ct);
                         } else {
                             valueField.typedInput('types',['msg','flow','global','str','num','env']);
                             valueField.typedInput('type',rule.ct);
@@ -343,6 +350,8 @@
 <script type="text/x-red" data-help-name="hal2Gate">
     <p>The Gate node is used to redirect the flow depending on if certain <i>Item</i> conditions are met.</p>
     <li><strong>Name</strong>: Node name.</li> 
-    <li><strong>Rules</strong>: Add one or more conditions to be met. Select if all rules or just one rule needs to be true.</li>
-    <li><strong>Set<code>msg.payload</code> to result</strong>: Sends true or false.</li>
+    <li><strong>Rules</strong>: Add one or more conditions to be met.</li>
+    <li><strong>TSU</strong>: Time since last update (in seconds)</li>
+    <li><strong>TSC</strong>: Time since last change (in seconds)</li>
+    <li><strong>Set <code>msg.payload</code> to result</strong>: Sends true or false.</li>
 </script>

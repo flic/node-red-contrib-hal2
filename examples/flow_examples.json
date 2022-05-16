@@ -2,7 +2,7 @@
     {
         "id": "d1986cf2c539f9db",
         "type": "inject",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Show values",
         "props": [
             {
@@ -19,8 +19,8 @@
         "onceDelay": 0.1,
         "topic": "",
         "payloadType": "date",
-        "x": 150,
-        "y": 460,
+        "x": 110,
+        "y": 600,
         "wires": [
             [
                 "c6a8e82124c369a0"
@@ -30,7 +30,7 @@
     {
         "id": "c6a8e82124c369a0",
         "type": "hal2Value",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Get temperature",
         "action": "get",
         "thing": "8e75f7f622f2c016",
@@ -39,8 +39,8 @@
         "outputValue": "temperature",
         "outputType": "msg",
         "info": false,
-        "x": 320,
-        "y": 460,
+        "x": 280,
+        "y": 600,
         "wires": [
             [
                 "8914ab7c636e0df7"
@@ -50,7 +50,7 @@
     {
         "id": "8e75f7f622f2c016",
         "type": "hal2Thing",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "thingType": "91f12b937636f697",
         "name": "Example sensor",
@@ -69,14 +69,14 @@
         "topicPrefix": "",
         "notes": "",
         "outputs": 0,
-        "x": 380,
-        "y": 120,
+        "x": 340,
+        "y": 100,
         "wires": []
     },
     {
         "id": "8914ab7c636e0df7",
         "type": "hal2Value",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Get light level",
         "action": "get",
         "thing": "8e75f7f622f2c016",
@@ -85,8 +85,8 @@
         "outputValue": "lux",
         "outputType": "msg",
         "info": false,
-        "x": 500,
-        "y": 460,
+        "x": 460,
+        "y": 600,
         "wires": [
             [
                 "8a7a3a2b090c95df"
@@ -96,7 +96,7 @@
     {
         "id": "8a7a3a2b090c95df",
         "type": "template",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Format output",
         "field": "payload",
         "fieldType": "msg",
@@ -104,8 +104,8 @@
         "syntax": "mustache",
         "template": "Temperature is {{temperature}} C°, light level is {{lux}} lux",
         "output": "str",
-        "x": 680,
-        "y": 460,
+        "x": 640,
+        "y": 600,
         "wires": [
             [
                 "039960bfd5272eba"
@@ -115,7 +115,7 @@
     {
         "id": "039960bfd5272eba",
         "type": "debug",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Show values",
         "active": true,
         "tosidebar": true,
@@ -125,14 +125,14 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 850,
-        "y": 460,
+        "x": 810,
+        "y": 600,
         "wires": []
     },
     {
         "id": "1b8d6e17337cea9d",
         "type": "inject",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Emulate values",
         "props": [
             {
@@ -165,8 +165,8 @@
         "once": true,
         "onceDelay": 0.1,
         "topic": "zigbee2mqtt/example_sensor",
-        "x": 160,
-        "y": 120,
+        "x": 120,
+        "y": 100,
         "wires": [
             [
                 "8e75f7f622f2c016"
@@ -176,7 +176,7 @@
     {
         "id": "e3a7e6c326341d66",
         "type": "hal2Event",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "name": "Movement detected",
         "topic": "",
@@ -189,58 +189,58 @@
         "compareType": "num",
         "outputValue": "",
         "outputType": "state",
-        "x": 170,
-        "y": 740,
+        "x": 130,
+        "y": 940,
         "wires": [
             [
-                "a6e313471a4b3316"
+                "d02e40bab20477f4"
             ]
         ]
     },
     {
         "id": "c973cf03bb5b99d8",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Example sensor",
         "info": "",
-        "x": 160,
-        "y": 80,
+        "x": 120,
+        "y": 60,
         "wires": []
     },
     {
         "id": "761ed927d8363448",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Show some current sensor values",
         "info": "",
-        "x": 220,
-        "y": 420,
+        "x": 180,
+        "y": 560,
         "wires": []
     },
     {
         "id": "4cae6704227750b5",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Trigger event",
         "info": "",
-        "x": 150,
-        "y": 700,
+        "x": 110,
+        "y": 840,
         "wires": []
     },
     {
         "id": "bae2b030c87832cc",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Conditions",
         "info": "",
-        "x": 360,
-        "y": 700,
+        "x": 300,
+        "y": 840,
         "wires": []
     },
     {
         "id": "a6e313471a4b3316",
         "type": "hal2Gate",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "...and it's a bit dark",
         "rules": [
             {
@@ -254,8 +254,8 @@
         "checkall": "true",
         "if": false,
         "outputs": 2,
-        "x": 390,
-        "y": 740,
+        "x": 330,
+        "y": 880,
         "wires": [
             [
                 "1ea5e8184291acd3"
@@ -266,7 +266,7 @@
     {
         "id": "b926682edf660d08",
         "type": "hal2Thing",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "thingType": "a74aeedea5f96fd5",
         "name": "Example Relay",
@@ -276,8 +276,8 @@
         "topicPrefix": "shellies/example-relay",
         "notes": "Shelly 2.5 Double Relay",
         "outputs": 1,
-        "x": 560,
-        "y": 280,
+        "x": 520,
+        "y": 260,
         "wires": [
             [
                 "22338508bb8b110b"
@@ -287,7 +287,7 @@
     {
         "id": "1ea5e8184291acd3",
         "type": "hal2Action",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "name": "...so lets turn on the lights",
         "commandset": [
@@ -300,34 +300,34 @@
             }
         ],
         "ratelimit": "0",
-        "x": 630,
-        "y": 740,
+        "x": 830,
+        "y": 880,
         "wires": []
     },
     {
         "id": "75cf2f9a96597fa5",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Take action",
         "info": "",
-        "x": 590,
-        "y": 700,
+        "x": 790,
+        "y": 840,
         "wires": []
     },
     {
         "id": "4e2e57808187c894",
         "type": "comment",
-        "z": "cd21672cc7947af3",
-        "name": "Home automation flow example",
+        "z": "27d24b130bc78b78",
+        "name": "Home automation flow examples",
         "info": "",
-        "x": 210,
-        "y": 660,
+        "x": 170,
+        "y": 800,
         "wires": []
     },
     {
         "id": "14bb92e74ff2c329",
         "type": "hal2Thing",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "thingType": "bff3c634d71725f3",
         "name": "Example Dimmer",
@@ -337,8 +337,8 @@
         "topicPrefix": "shellies/example-dimmer",
         "notes": "Shelly Example Dimmer",
         "outputs": 1,
-        "x": 570,
-        "y": 340,
+        "x": 530,
+        "y": 320,
         "wires": [
             [
                 "22338508bb8b110b"
@@ -348,7 +348,7 @@
     {
         "id": "0f70d712949e4336",
         "type": "hal2Group",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "name": "All the lights in Example room",
         "group": [
@@ -366,29 +366,29 @@
         "input": false,
         "outputs": 0,
         "inputs": 0,
-        "x": 200,
-        "y": 580,
+        "x": 160,
+        "y": 720,
         "wires": []
     },
     {
         "id": "2a9664b208d86d2e",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Group example",
         "info": "",
-        "x": 160,
-        "y": 540,
+        "x": 120,
+        "y": 680,
         "wires": []
     },
     {
         "id": "5293e1ef01a7b401",
         "type": "hal2Log",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "eventHandler": "e228014191d14be6",
         "name": "Log all changes",
         "onchange": true,
-        "x": 160,
-        "y": 860,
+        "x": 120,
+        "y": 1060,
         "wires": [
             [
                 "218024bd22537bbc"
@@ -398,17 +398,17 @@
     {
         "id": "3f5d8570260f2b9c",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Logging",
         "info": "",
-        "x": 140,
-        "y": 820,
+        "x": 100,
+        "y": 1020,
         "wires": []
     },
     {
         "id": "218024bd22537bbc",
         "type": "template",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Format log message",
         "field": "payload",
         "fieldType": "msg",
@@ -416,8 +416,8 @@
         "syntax": "mustache",
         "template": "{{logtype}},{{topic}},\"{{thing.name}}\",\"{{item.name}}\",\"{{state}}\",\"{{laststate}}\",\"{{payload}}\"",
         "output": "str",
-        "x": 370,
-        "y": 860,
+        "x": 330,
+        "y": 1060,
         "wires": [
             [
                 "9692da67730f8f39"
@@ -427,17 +427,17 @@
     {
         "id": "ae8fd3caeba06e6d",
         "type": "comment",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Example relay and dimmer",
         "info": "",
-        "x": 190,
-        "y": 240,
+        "x": 150,
+        "y": 220,
         "wires": []
     },
     {
         "id": "818265ae59730fc8",
         "type": "inject",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Init",
         "props": [
             {
@@ -454,8 +454,8 @@
         "onceDelay": 0.1,
         "topic": "",
         "payloadType": "date",
-        "x": 130,
-        "y": 280,
+        "x": 90,
+        "y": 260,
         "wires": [
             [
                 "c0f71df538730045"
@@ -465,7 +465,7 @@
     {
         "id": "c0f71df538730045",
         "type": "function",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Emulate values from MQTT",
         "func": "// Emulate values\nlet relay0 = {\n    payload: \"off\",\n    topic: \"shellies/example-relay/relay/0\"\n}\nlet power0 = {\n    payload: 0,\n    topic: \"shellies/example-relay/relay/0/power\"\n}\nlet relay1 = {\n    payload: \"off\",\n    topic: \"shellies/example-relay/relay/1\"\n}\nlet power1 = {\n    payload: 0,\n    topic: \"shellies/example-relay/relay/1/power\"\n}\nlet temperature = {\n    payload: 58,\n    topic: \"shellies/example-relay/temperature\"\n}\nlet online = {\n    payload: \"true\",\n    topic: \"shellies/example-relay/online\"\n}\n\nreturn [[relay0,relay1,power0,power1,temperature,online]];\n",
         "outputs": 1,
@@ -473,8 +473,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 320,
-        "y": 280,
+        "x": 280,
+        "y": 260,
         "wires": [
             [
                 "b926682edf660d08"
@@ -484,7 +484,7 @@
     {
         "id": "c7fd70142497bed7",
         "type": "inject",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Init",
         "props": [
             {
@@ -501,8 +501,8 @@
         "onceDelay": 0.1,
         "topic": "",
         "payloadType": "date",
-        "x": 130,
-        "y": 340,
+        "x": 90,
+        "y": 320,
         "wires": [
             [
                 "646d5b3879c3b80c"
@@ -512,7 +512,7 @@
     {
         "id": "646d5b3879c3b80c",
         "type": "function",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Emulate values from MQTT",
         "func": "// Emulate values\nlet light0 = {\n    payload: '{\"brightness\":0}',\n    topic: \"shellies/example-dimmer/light/0/status\"\n}\nlet power0 = {\n    payload: 0,\n    topic: \"shellies/example-dimmer/light/0/power\"\n}\nlet temperature = {\n    payload: 63,\n    topic: \"shellies/example-dimmer/temperature\"\n}\nlet online = {\n    payload: \"true\",\n    topic: \"shellies/example-dimmer/online\"\n}\n\nreturn [[light0,power0,temperature,online]];\n",
         "outputs": 1,
@@ -520,8 +520,8 @@
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 320,
-        "y": 340,
+        "x": 280,
+        "y": 320,
         "wires": [
             [
                 "14bb92e74ff2c329"
@@ -531,7 +531,7 @@
     {
         "id": "301637cacf9c491f",
         "type": "inject",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Emulate motion",
         "props": [
             {
@@ -549,8 +549,8 @@
         "once": false,
         "onceDelay": 0.1,
         "topic": "zigbee2mqtt/example_sensor",
-        "x": 160,
-        "y": 160,
+        "x": 120,
+        "y": 140,
         "wires": [
             [
                 "8e75f7f622f2c016"
@@ -560,7 +560,7 @@
     {
         "id": "22338508bb8b110b",
         "type": "debug",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Emulate publishing message to MQTT",
         "active": true,
         "tosidebar": true,
@@ -570,14 +570,14 @@
         "targetType": "full",
         "statusVal": "",
         "statusType": "auto",
-        "x": 930,
-        "y": 280,
+        "x": 890,
+        "y": 260,
         "wires": []
     },
     {
         "id": "9692da67730f8f39",
         "type": "debug",
-        "z": "cd21672cc7947af3",
+        "z": "27d24b130bc78b78",
         "name": "Emulate logging to file",
         "active": true,
         "tosidebar": true,
@@ -587,8 +587,161 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 620,
-        "y": 860,
+        "x": 580,
+        "y": 1060,
+        "wires": []
+    },
+    {
+        "id": "91da8861f24b5af8",
+        "type": "hal2Thing",
+        "z": "27d24b130bc78b78",
+        "eventHandler": "e228014191d14be6",
+        "thingType": "2deaab8390cf4ea9",
+        "name": "Example scene",
+        "attributes": [],
+        "topicFilter": "",
+        "topicFilterType": "mqtt",
+        "topicPrefix": "",
+        "notes": "",
+        "outputs": 0,
+        "x": 280,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "8c4d57f3db2d2864",
+        "type": "hal2Event",
+        "z": "27d24b130bc78b78",
+        "eventHandler": "e228014191d14be6",
+        "name": "Light level change",
+        "topic": "",
+        "thing": "8e75f7f622f2c016",
+        "typeSel": "hal2Thing",
+        "item": "5d5424be.d7c0cc",
+        "operator": "always",
+        "change": "1",
+        "compareValue": "",
+        "compareType": "num",
+        "outputValue": "payload",
+        "outputType": "state",
+        "x": 130,
+        "y": 880,
+        "wires": [
+            [
+                "a6e313471a4b3316"
+            ]
+        ]
+    },
+    {
+        "id": "d02e40bab20477f4",
+        "type": "hal2Gate",
+        "z": "27d24b130bc78b78",
+        "name": "Depending on if the scene has been active for at least 10min...",
+        "rules": [
+            {
+                "thing": "91da8861f24b5af8",
+                "item": "159e7a28.f5e3d6",
+                "operator": "true",
+                "value": "",
+                "type": "num"
+            },
+            {
+                "thing": "91da8861f24b5af8",
+                "item": "159e7a28.f5e3d6",
+                "operator": "last_change_gte",
+                "value": "600",
+                "type": "num"
+            }
+        ],
+        "checkall": "true",
+        "if": true,
+        "outputs": 1,
+        "x": 470,
+        "y": 940,
+        "wires": [
+            [
+                "3f756209017fd42a"
+            ]
+        ]
+    },
+    {
+        "id": "9b1956be6b35b620",
+        "type": "inject",
+        "z": "27d24b130bc78b78",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 90,
+        "y": 440,
+        "wires": [
+            [
+                "91da8861f24b5af8"
+            ]
+        ]
+    },
+    {
+        "id": "4ee55e8d88400fe7",
+        "type": "inject",
+        "z": "27d24b130bc78b78",
+        "name": "",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 90,
+        "y": 480,
+        "wires": [
+            [
+                "91da8861f24b5af8"
+            ]
+        ]
+    },
+    {
+        "id": "2ae47ff7d074ebdc",
+        "type": "comment",
+        "z": "27d24b130bc78b78",
+        "name": "Example scene with the status string formatted by a function",
+        "info": "",
+        "x": 260,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "3f756209017fd42a",
+        "type": "hal2Action",
+        "z": "27d24b130bc78b78",
+        "eventHandler": "e228014191d14be6",
+        "name": "...turn the relay on or off",
+        "commandset": [
+            {
+                "category": "hal2Thing",
+                "thing": "b926682edf660d08",
+                "item": "45880dc6.a24df4",
+                "value": "payload",
+                "type": "msg"
+            }
+        ],
+        "ratelimit": "0",
+        "x": 830,
+        "y": 940,
         "wires": []
     },
     {
@@ -1241,5 +1394,86 @@
         "hbFilterType": "str",
         "filterFunction": "0",
         "outputs": 1
+    },
+    {
+        "id": "2deaab8390cf4ea9",
+        "type": "hal2ThingType",
+        "name": "Scene",
+        "contextStore": "filesystem",
+        "nodestatus": "",
+        "nodestatusType": "function",
+        "statusFn": "// item & attribute objects are\n// passed to function as objects\n\nreturn item['Active'] ? '🟢 Scene is active' : '🔴 Scene is inactive';",
+        "items": [
+            {
+                "name": "Active",
+                "id": "159e7a28.f5e3d6",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "loopback_both",
+                "ingress": "ec279681.0060a8",
+                "egress": "4976b249.e2879c",
+                "notes": "",
+                "output": "1"
+            },
+            {
+                "name": "Deactivate",
+                "id": "7d1e045f.1d07fc",
+                "topicFilterType": "str",
+                "topicFilterValue": "",
+                "topicSuffix": "",
+                "type": "loopback_command",
+                "ingress": "2d956987.ef2ce6",
+                "egress": "bbf54a60.e24928",
+                "notes": "",
+                "output": "1"
+            }
+        ],
+        "attributes": [],
+        "ingress": [
+            {
+                "name": "Pass-through",
+                "id": "2d956987.ef2ce6",
+                "fn": "// msg object is passed to function\n\nreturn msg.payload;"
+            },
+            {
+                "name": "Convert to Number",
+                "id": "81c4ed2e.d9dcc",
+                "fn": "// msg object is passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+            },
+            {
+                "name": "Convert to Boolean",
+                "id": "ec279681.0060a8",
+                "fn": "// msg object is passed to function\nswitch(typeof msg.payload) {\n    case 'number':\n        msg.payload = (msg.payload==1);\n        break;\n    case 'string':\n        msg.payload = (msg.payload == 'true');\n        break;\n}\nreturn msg.payload;"
+            }
+        ],
+        "egress": [
+            {
+                "name": "Pass-through",
+                "id": "4976b249.e2879c",
+                "fn": "// msg object is passed to function\n\nreturn msg;"
+            },
+            {
+                "name": "Convert to Boolean",
+                "id": "3fb2df57.db66e",
+                "fn": "// msg object is passed to function\n\nmsg.payload = (msg.payload == 'true');\nreturn msg;"
+            },
+            {
+                "name": "Reverse",
+                "id": "bbf54a60.e24928",
+                "fn": "// msg & attribute objects are\n// passed to function\n\nmsg.payload = (msg.payload === false);\nreturn msg;"
+            }
+        ],
+        "thingStatus": true,
+        "thingCommand": true,
+        "thingOutput": false,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": "",
+        "hbLWT": "2d956987.ef2ce6",
+        "hbFilterVal": "",
+        "hbFilterType": "StrEnd",
+        "filterFunction": "0",
+        "outputs": "1"
     }
 ]

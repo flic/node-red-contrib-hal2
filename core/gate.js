@@ -26,6 +26,16 @@ module.exports = function(RED) {
             'true':     function (a)        { return a === true; },
             'false':    function (a)        { return a === false; }
         };
+
+        //a=item value, b=comparison value
+        var time_since = {
+            'last_update_gte': function (a, b)     { return a === b; },
+            'last_update_lte': function (a, b)     { return a !== b; },
+            'last_change_gte': function (a, b)     { return ((typeof a == 'number') && (a < b)); },
+            'last_change_lte': function (a, b)     { return ((typeof a == 'number') && (a <= b)); }
+        };
+
+
         var ruleMatch = 0;
         for (var i = 0; i < node.rules.length; i += 1) {
             var rule = node.rules[i];
@@ -35,7 +45,25 @@ module.exports = function(RED) {
 
             // Check if item has state
             if (thing.state.hasOwnProperty(rule.item)) {
-                if (compare[rule.operator](thing.state[rule.item],cv,thing.laststate[rule.item])){
+                if (rule.operator.includes('last_')) {
+                    let now = Date.now();
+                    let last_update = Math.trunc((now - thing.heartbeat[rule.item])/1000);
+                    let last_change = Math.trunc((now - thing.last_change[rule.item])/1000);
+                    switch (rule.operator) {
+                        case 'last_update_gte':
+                            if (last_update >= Number(cv)) { ruleMatch++; }
+                            break;
+                        case 'last_update_lte':
+                            if (last_update <= Number(cv)) { ruleMatch++; }
+                            break;
+                        case 'last_change_gte':
+                            if (last_change >= Number(cv)) { ruleMatch++; }
+                            break;
+                        case 'last_change_lte':
+                            if (last_change <= Number(cv)) { ruleMatch++; }
+                            break;
+                    }
+                } else if (compare[rule.operator](thing.state[rule.item],cv,thing.laststate[rule.item])){
                     ruleMatch ++;
                 }
             }

@@ -92,12 +92,15 @@ module.exports = function(RED) {
                 msg.thing = {
                     name: thing.name,
                     id: thing.id,
-                    last_update: thing.heartbeat[node.item]
+                    last_update: thing.heartbeat[node.item],
+                    last_change: thing.last_change[node.item]
+
                 }
                 msg.item = {
                     name: thing.thingType.items[i].name,
                     id: thing.thingType.items[i].id,
-                    last_update: thing.heartbeat[node.item]
+                    last_update: thing.heartbeat[thing.thingType.items[i].id],
+                    last_change: thing.last_change[thing.thingType.items[i].id]
                 }
                 if (Object.keys(attribute) != 0) {
                     msg.thing.attributes = Object.assign({},attribute);

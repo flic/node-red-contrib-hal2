@@ -53,14 +53,17 @@ module.exports = function(RED) {
         this.attributes = config.attributes;
         var node = this;
         var nodeContext = this.context();
+        var date;
 
         node.laststate = nodeContext.get("laststate",node.thingType.contextStore);
         node.state = nodeContext.get("state",node.thingType.contextStore);
         node.heartbeat = nodeContext.get("heartbeat",node.thingType.contextStore);
+        node.last_change = nodeContext.get("last_change",node.thingType.contextStore);
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
         if (typeof node.laststate === 'undefined') { node.laststate = {}; }
         if (typeof node.state === 'undefined') { node.state = {}; }
         if (typeof node.heartbeat === 'undefined') { node.heartbeat = {}; }
+        if (typeof node.last_change === 'undefined') { node.last_change = {}; }
 
         function getAttributes() {
             var attribute = [];
@@ -159,19 +162,6 @@ module.exports = function(RED) {
                 if (result != null) {
                     node.debug("Ingress for "+node.thingType.items[i].name+"["+node.thingType.items[i].id+"] returns value: '"+result+"'");
                     node.updateState(msg,node.thingType.items[i].id,result,'ingress');
-
-                    // Refresh heartbeat
-                    if (node.thingType.hbType == 'ttl') {
-                        var date = Date.now();
-                        node.heartbeat[node.thingType.items[i].id] = date;
-                        node.heartbeat[node.id] = date;
-                        if (node.state['1'] === false) {
-                            node.state['1'] = true;
-                            node.laststate['1'] = false;
-                            node.heartbeat['1'] = date;
-                        }
-                        nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
-                    }
                     node.showState();
                 }
             }
@@ -194,9 +184,27 @@ module.exports = function(RED) {
             node.debug("State "+node.thingType.items[item].name+"["+node.thingType.items[item].id+"] set to value '"+state+"'");
             node.laststate[node.thingType.items[item].id] = node.state[node.thingType.items[item].id];
             node.state[node.thingType.items[item].id] = state;
+            
+            // Refresh heartbeat
+            node.heartbeat[node.thingType.items[item].id] = date;
+            node.heartbeat[node.id] = date;
+            if (node.thingType.hbType == 'ttl') {
+                if (node.state['1'] === false) {
+                    node.state['1'] = true;
+                    node.laststate['1'] = false;
+                    node.heartbeat['1'] = date;
+                }
+            }
+            if (node.state[node.thingType.items[item].id] != node.laststate[node.thingType.items[item].id]) {
+                node.last_change[node.thingType.items[item].id] = date;
+                node.last_change[node.id] = date;
+            }
+
             // Save to node context
             nodeContext.set("laststate",node.laststate,node.thingType.contextStore);
-            nodeContext.set("state",node.state,node.thingType.contextStore);
+            nodeContext.set("state",node.state,node.thingType.contextStore);           
+            nodeContext.set("heartbeat",node.heartbeat,node.thingType.contextStore);
+            nodeContext.set("last_change",node.last_change,node.thingType.contextStore);            
 
             var attribute = getAttributes();
             eventmsg = {
@@ -212,12 +220,14 @@ module.exports = function(RED) {
                 thing: {
                     name: node.name,
                     id: node.id,
-                    last_update: node.heartbeat[node.id]
+                    last_update: node.heartbeat[node.id],
+                    last_change: node.last_change[node.id]
                 },
                 item: {
                     name: node.thingType.items[item].name,
                     id: node.thingType.items[item].id,
-                    last_update: node.heartbeat[node.thingType.items[item].id]
+                    last_update: node.heartbeat[node.thingType.items[item].id],
+                    last_change: node.last_change[node.thingType.items[item].id]
                 }
             }
             if (Object.keys(attribute) != 0) {
@@ -370,6 +380,7 @@ module.exports = function(RED) {
 
             node.showState();
             node.on('input',function(msg) {
+                date = Date.now();
                 statusUpdate(msg);
             });
         }
