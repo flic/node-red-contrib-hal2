@@ -17,6 +17,7 @@ npm install node-red-contrib-hal2
 3. One or more rules will compare the value and that of other Items in a **Gate node**
 4. Output the value to another flow with a **Value node**
 5. Send device commands to multiple Things using an **Action node**
+6. Log changes using the **Log node**
 
 Take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
 
