@@ -54,16 +54,31 @@ module.exports = function(RED) {
         var node = this;
         var nodeContext = this.context();
         var date;
+        var timestampId;
 
-        node.laststate = nodeContext.get("laststate",node.thingType.contextStore);
-        node.state = nodeContext.get("state",node.thingType.contextStore);
-        node.heartbeat = nodeContext.get("heartbeat",node.thingType.contextStore);
-        node.last_change = nodeContext.get("last_change",node.thingType.contextStore);
+        node.laststate      = nodeContext.get("laststate",node.thingType.contextStore);
+        node.state          = nodeContext.get("state",node.thingType.contextStore);
+        node.heartbeat      = nodeContext.get("heartbeat",node.thingType.contextStore);
+        node.last_change    = nodeContext.get("last_change",node.thingType.contextStore);
+        node.hbTimestamp    = nodeContext.get("hbTimestamp",node.thingType.contextStore);
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
         if (typeof node.laststate === 'undefined') { node.laststate = {}; }
         if (typeof node.state === 'undefined') { node.state = {}; }
         if (typeof node.heartbeat === 'undefined') { node.heartbeat = {}; }
         if (typeof node.last_change === 'undefined') { node.last_change = {}; }
+        if (typeof node.hbTimestamp === 'undefined') { node.hbTimestamp = 0; }
+
+        function checkTimestamp() {
+            if (node.thingType.hbCheck == false) { return; }
+            if (node.thingType.hbType != 'timestamp') { return; }
+            if (node.hbTimestamp == 0) { return; }
+            if (typeof timestampId != 'undefined') { clearTimeout(timestampId); }
+            date = Date.now();
+            let timestamp = new Date(node.hbTimestamp).getTime() + Number(node.thingType.hbTTL)*1000;
+            let alive = date <= timestamp;
+            if (alive) { setTimeout(() => { checkTimestamp(); },timestamp-date) }
+            node.updateState([],'1',alive,'heartbeat');
+        }
 
         function getAttributes() {
             var attribute = [];
@@ -104,6 +119,7 @@ module.exports = function(RED) {
             var _ingressFn;
             var msgClone;
             var attribute;
+            var item;
 
             if (node.topicFilter) {
                 if (topicFilter[node.topicFilterType](msg.topic,node.topicFilter) === false) { return; }
@@ -122,10 +138,11 @@ module.exports = function(RED) {
                     }
                 }
                 var attribute = getAttributes();
+                var item = getItems();
                 msgClone =  RED.util.cloneMessage(msg);
-                _ingressFn = new Function('msg','attribute',fn);
+                _ingressFn = new Function('msg','attribute','item',fn);
                 try {
-                    result = _ingressFn(msgClone,attribute);
+                    result = _ingressFn(msgClone,attribute,item);
                 } catch (err) {
                     node.error("Error running filter ingress: "+err);
                     return;
@@ -144,6 +161,29 @@ module.exports = function(RED) {
                     if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,topic) == false) { continue; }
                 }
 
+                if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'timestamp')) {
+                    let timestamp;
+                    switch (node.thingType.hbPropType) {
+                        case 'msg':
+                            timestamp = RED.util.getMessageProperty(msg,node.thingType.hbPropVal);
+                            break;
+                        case 'flow':
+                            timestamp = node.context().flow.get(node.thingType.hbPropVal);
+                            break;
+                        case 'global':
+                            timestamp = node.context().global.get(node.thingType.hbPropVal);
+                            break;
+                    }
+                    try {
+                        node.hbTimestamp = new Date(timestamp).getTime();
+                    } catch (error) {
+                       node.error('Error interpreting timestamp: '+error.message);
+                    }  
+                    nodeContext.set("hbTimestamp",node.hbTimestamp,node.thingType.contextStore);
+                    checkTimestamp();
+                    continue;
+                }                
+
                 for (let n in node.thingType.ingress) {
                     if (node.thingType.ingress[n].id == node.thingType.items[i].ingress){
                         var fn = node.thingType.ingress[n].fn;
@@ -153,9 +193,10 @@ module.exports = function(RED) {
 
                 msgClone = RED.util.cloneMessage(msg);
                 attribute = getAttributes();
-                _ingressFn = new Function('msg','attribute',fn);
+                item = getItems();
+                _ingressFn = new Function('msg','attribute','item',fn);
                 try {
-                    result = _ingressFn(msgClone,attribute);
+                    result = _ingressFn(msgClone,attribute,item);
                 } catch (err) {
                     node.error("Error running ingress for "+node.thingType.items[i].name+": "+err);
                 }
@@ -169,8 +210,9 @@ module.exports = function(RED) {
 
         node.updateState = function (msg,itemId, state, logtype) {
             var item = "";
+            if (typeof msg.topic === 'undefined') { msg.topic = ""; }
 
-            if ((itemId == '1') && (node.thingType.hbType == 'ttl')) { return; }
+            //if ((itemId == '1') && (node.thingType.hbType == 'ttl')) { return; }
 
             for (var i in node.thingType.items) {
                 if (node.thingType.items[i].id == itemId) { 
@@ -188,13 +230,8 @@ module.exports = function(RED) {
             // Refresh heartbeat
             node.heartbeat[node.thingType.items[item].id] = date;
             node.heartbeat[node.id] = date;
-            if (node.thingType.hbType == 'ttl') {
-                if (node.state['1'] === false) {
-                    node.state['1'] = true;
-                    node.laststate['1'] = false;
-                    node.heartbeat['1'] = date;
-                }
-            }
+            if ((node.thingType.hbType == 'ttl') && (node.thingType.items[item].id != '1')) { node.updateState([],'1',true,'heartbeat'); }
+
             if (node.state[node.thingType.items[item].id] != node.laststate[node.thingType.items[item].id]) {
                 node.last_change[node.thingType.items[item].id] = date;
                 node.last_change[node.id] = date;
@@ -247,9 +284,9 @@ module.exports = function(RED) {
             if (node.thingType.hbCheck) {
                 statusMsg["shape"] = "dot";
 
-                if (node.state[1] === 'undefined') { statusMsg["fill"] = "gray"; }
-                if (node.state[1] === true) { statusMsg["fill"] = "green"; }
-                if (node.state[1] === false) { statusMsg["fill"] = "red"; }
+                if (node.state['1'] === 'undefined') { statusMsg["fill"] = "gray"; }
+                if (node.state['1'] === true) { statusMsg["fill"] = "green"; }
+                if (node.state['1'] === false) { statusMsg["fill"] = "red"; }
             }
 
             if ((typeof node.thingType.nodestatus === 'undefined') || ((node.thingType.nodestatus == '') && (node.thingType.nodestatusType == 'str'))) { 
@@ -320,7 +357,8 @@ module.exports = function(RED) {
                     payload: payload
                 }
 
-                attribute = getAttributes();
+                let attribute = getAttributes();
+                let items = getItems();
                 for (let i in node.thingType.egress) {
                     if (node.thingType.egress[i].id == item.egress){
                         var fn = node.thingType.egress[i].fn;
@@ -328,9 +366,9 @@ module.exports = function(RED) {
                     }
                 }
              
-                let _egressFn = new Function('msg','attribute',fn);
+                let _egressFn = new Function('msg','attribute','item',fn);
                 try {
-                    command = _egressFn(command,attribute);
+                    command = _egressFn(command,attribute,items);
                 } catch (err) {
                     node.error("Error running egress for "+item.name+": "+err);
                 }
@@ -395,6 +433,8 @@ module.exports = function(RED) {
             }
 
         });
+
+        checkTimestamp();
     }
     RED.nodes.registerType("hal2Thing",hal2Thing);
 }

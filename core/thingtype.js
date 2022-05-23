@@ -19,7 +19,9 @@ module.exports = function(RED) {
         this.hbTTL = config.hbTTL;
         this.hbLWT = config.hbLWT;
         this.hbFilterVal = config.hbFilterVal;
-        this.hbFilterType = config.hbFiltertype;
+        this.hbFilterType = config.hbFilterType;
+        this.hbPropVal = config.hbPropVal;
+        this.hbPropType = config.hbPropType;
         this.filterFunction = config.filterFunction;
     }
     RED.nodes.registerType("hal2ThingType",hal2ThingType);

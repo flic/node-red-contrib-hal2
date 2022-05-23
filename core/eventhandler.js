@@ -15,12 +15,12 @@ module.exports = function(RED) {
             // Check all Things for heartbeat
             node.debug("Check heartbeat");
             var thing;
-            const date = Date.now();
+            let date = Date.now();
             var online;
             for (let n in hbList) {
                 thing = RED.nodes.getNode(hbList[n].id);
                 if (thing.id in thing.heartbeat) {
-                    if (date < (thing.thingType.hbTTL*1000)+thing.heartbeat[thing.id]) {
+                    if (date < (Number(thing.thingType.hbTTL)*1000)+thing.heartbeat[thing.id]) {
                         online=true;
                     } else {
                         online=false;
@@ -33,10 +33,7 @@ module.exports = function(RED) {
                     if (!online) {
                         node.debug("Heartbeat: "+thing.name+" offline")
                     }
-                    thing.state['1'] = online;
-                    thing.laststate['1'] = !online;
-                    thing.heartbeat['1'] = date;
-                    thing.showState();
+                    thing.updateState([],'1',false,'heartbeat');
                 }
             }            
         }
