@@ -29,6 +29,10 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ## History
 
+**1.12**<br>
+Ingress and egress functions can use *item* and *attribute* objects.<br>
+It's now possible to base *Alive* on a *last seen* timestamp, great for zigbee2mqtt.<br>
+
 **1.11**<br>
 New options for Gate rules: Time Since Update and Time Since Change.<br>
 It's now possible to use a function to create dynamic status text strings for Items.<br>
