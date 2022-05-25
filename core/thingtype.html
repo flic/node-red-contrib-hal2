@@ -367,7 +367,8 @@
             editors['statusFn'] = RED.editor.createEditor({
                 id: 'statusFn-editor',
                 mode: "ace/mode/nrjavascript",
-                value: "// item & attribute objects are\n// passed to function as objects\n\nreturn '';", 
+                value: "// item & attribute objects are\n// passed to function as objects\n\nreturn '';",
+                renderValidationDecorations: "on",
                 globals: {
                         msg:false,
                         context:true,
@@ -380,9 +381,7 @@
                         setTimeout: true,
                         clearTimeout: true,
                         setInterval: true,
-                        clearInterval: true,
-                        attribute: true,
-                        item: true
+                        clearInterval: true
                     }
             });
 
@@ -798,7 +797,8 @@
                         editors[editorId] = RED.editor.createEditor({
                             id: editorId,
                             mode: "ace/mode/nrjavascript",
-                            value: "", 
+                            value: "",
+                            renderValidationDecorations: "on",
                             globals: {
                                     msg:true,
                                     context:true,
@@ -811,9 +811,7 @@
                                     setTimeout: true,
                                     clearTimeout: true,
                                     setInterval: true,
-                                    clearInterval: true,
-                                    attribute: true,
-                                    item: true
+                                    clearInterval: true
                                 }
                         });
                         //Add editor value
