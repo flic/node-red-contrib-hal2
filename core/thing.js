@@ -270,10 +270,9 @@ module.exports = function(RED) {
             if (Object.keys(attribute) != 0) {
                 eventmsg.thing.attributes = Object.assign({},attribute);
             }
-            node.eventHandler.publish('update',node.id,node.thingType.items[item].id,eventmsg);
-            node.eventHandler.publish('update',node.thingType.id,node.thingType.items[item].id,eventmsg);
+            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg);
             eventmsg.logtype = logtype;
-            node.eventHandler.publish('log','0',node.thingType.items[item].id,eventmsg);
+            node.eventHandler.publishLog(eventmsg);
             node.showState();            
         }        
 
@@ -321,7 +320,7 @@ module.exports = function(RED) {
         }
             
         if (node.eventHandler) {
-            node.listener = function(thingid, itemid, payload) {
+            node.listener = function(itemid, payload) {
                 var item;
 
                 if (!node.thingType.items) {
@@ -402,7 +401,7 @@ module.exports = function(RED) {
                     if (Object.keys(attribute) != 0) {
                         command.thing.attributes = Object.assign({},attribute);
                     }
-                    node.eventHandler.publish('log','0',node.thingType.items[i].id,command);
+                    node.eventHandler.publishLog(command);
                 }
             }
 
