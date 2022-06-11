@@ -19,10 +19,13 @@
             compareType:    { value: "num" },
             outputValue:    { value: "" },
             outputType:     { required: true },
-            ratelimit:      { value:false },
+            ratelimit:      { value: false },
             ratetype:       { value:"all"},
             rate:           { value:"1" },
-            rateUnits:      { value:"hour" }
+            rateUnits:      { value:"hour" },
+            delay:          { value: false },
+            delayExtend:    { value: false },
+            delayValue:     { value: 5 }
         },
         inputs:0,
         outputs:1,
@@ -284,6 +287,13 @@
                     $("#ratelimit-details").hide();
                 }
             });
+            $("#node-input-delay").change( function () {
+                if ($("#node-input-delay").is(":checked")) {
+                    $("#delay-details").show();
+                } else {
+                    $("#delay-details").hide();
+                }
+            });
 
             //Add filter types
             $("#thing-filter").append($("<option></option>").val(0).text("<All types>"));
@@ -456,10 +466,14 @@
             <label></label>
             <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Rate limit</label>
         </div>
+        <div class="form-row">
+            <label></label>
+            <input type="checkbox" id="node-input-delay" style="width: 23px; margin:0"><label for="node-input-delay" style="margin:0;width: auto;"> Delay event</label>
+        </div>
 
-        <div id="ratelimit-details" style="border: 1px solid grey; border-radius: 5px; margin-top: 0px; margin-bottom: 13px; padding-top: 13px; padding-bottom: 0px; padding-left: 7px; padding-right: 7px;" hidden>
+        <div id="ratelimit-details" class="form-row" hidden>
             <div class="form-row">
-                <label for="node-input-rateUnits"><i class="fa fa-clock-o"></i> Rate</label>
+                <label for="node-input-rateUnits"><i class="fa fa-clock-o"></i> Rate limit</label>
                 <label>1 event per </label>
                 <input type="text" id="node-input-rate" placeholder="1" style="width:40px" value=1>
                 <select id="node-input-rateUnits" style="width:100px">
@@ -476,7 +490,19 @@
                     <option value="item">For each item</option>
                 </select>
             </div>
-        </div>  
+        </div>
+
+        <div id="delay-details" hidden>
+            <div class="form-row">
+                <label for="node-input-delayValue"><i class="fa fa-pause-circle-o"></i> Delay event</label>
+                <input type="text" id="node-input-delayValue" placeholder="5" style="width:40px" value=5> seconds
+            </div>
+            <div class="form-row">
+                <label></label>
+                <input type="checkbox" id="node-input-delayExtend" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Extend delay if new event arrives</label>
+            </div>
+        </div>
+
 
         <div class="form-row">
             <label for="node-input-outputValue" style="width:95px; padding-right:10px;"><i class="fa fa-sign-out"></i> Output</label>

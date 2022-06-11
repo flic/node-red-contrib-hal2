@@ -38,7 +38,7 @@ module.exports = function(RED) {
                     }
                 }
                 if (match) {
-                    node.eventHandler.publishUpdate(node.thingtypeid,node.id,node.id,payload);
+                    node.eventHandler.publishUpdate(null,node.id,node.id,payload);
                     node.send(payload);
                 }
             }

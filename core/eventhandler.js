@@ -91,8 +91,11 @@ module.exports = function(RED) {
 
         node.publishUpdate = function (thingtypeid, thingid, itemid, payload) {
             //Emit events for both Thing and ThingType
-            node.debug("Update event: Thingtype "+thingtypeid+" Thing "+thingid+" Item "+itemid);
-            this.emit("update_"+thingtypeid, thingtypeid, thingid, itemid, payload);
+            if (thingtypeid !== null) {
+                node.debug("Update event: Thingtype "+thingtypeid+" Item "+itemid);
+                this.emit("update_"+thingtypeid, thingtypeid, thingid, itemid, payload);
+            }
+            node.debug("Update event: Thing "+thingid+" Item "+itemid);
             this.emit("update_"+thingid, thingtypeid, thingid, itemid, payload);
         }
 
