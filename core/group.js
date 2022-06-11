@@ -43,7 +43,7 @@ module.exports = function(RED) {
                 }
             }
 
-            node.commandListener = function(thingtypeid, thingid, itemid, payload) {
+            node.commandListener = function(itemid, payload) {
                 sendCommand(payload);
             }
 
