@@ -257,14 +257,14 @@
 
             $("#node-input-item").change(function() {
                 $("#row-item-notes").hide();
-                if ($("#node-input-thing").val() == null) { return }
+                if ($("#node-input-thing").val() == null) { return; }
+                if ($("#node-input-typeSel").val() == 'hal2Group') { return; }
                 if ($("#node-input-typeSel").val() == 'hal2ThingType') {
                     var thingType = RED.nodes.node($("#node-input-thing").val());
                 } else {
                     var thing = RED.nodes.node($("#node-input-thing").val());
                     var thingType = RED.nodes.node(thing.thingType);
                 }
-                debugger
                 var item = $("#node-input-item").val();
                 for (let d in thingType.items) {
                     if (thingType.items[d].id == item) {
