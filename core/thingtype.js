@@ -23,6 +23,7 @@ module.exports = function(RED) {
         this.hbPropVal = config.hbPropVal;
         this.hbPropType = config.hbPropType;
         this.filterFunction = config.filterFunction;
+
     }
     RED.nodes.registerType("hal2ThingType",hal2ThingType);
     RED.library.register("hal2ThingType");

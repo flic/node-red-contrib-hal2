@@ -1,4 +1,6 @@
-module.exports = function(RED) {    
+module.exports = function(RED) {
+    var common = require("../lib/common");
+
     function checkRules(node,msg) {
         // Don't convert msg, flow, global. Assume same type.
         var convertTo = {
@@ -39,7 +41,21 @@ module.exports = function(RED) {
         var ruleMatch = 0;
         for (var i = 0; i < node.rules.length; i += 1) {
             var rule = node.rules[i];
-            var thing = RED.nodes.getNode(rule.thing);
+            var id;
+            if (rule.thing == 'dynamic') {
+                id = common.thingIdFromMsg(RED,node,rule.thingtype,msg);
+                if (typeof id == 'undefined') { continue; }
+            } else {
+                id = rule.thing;
+            }
+
+            var thing;
+            try {
+                thing = RED.nodes.getNode(id);
+            } catch (error) {
+                console.log('Error: '+error.message);
+            }
+            if ( typeof thing == 'undefined' ) { continue; }
 
             var cv = convertTo[rule.type](rule.value,msg);
 

@@ -74,15 +74,35 @@ module.exports = function(RED) {
             node.debug("Removed listener for event "+eventStr+", number of listeners: "+this.listenerCount(eventStr))
         }
 
-        node.publish = function (event, thingid, itemid, payload) {
-            //Events:
-            //update - item value updated
-            //command - execute command
-            let eventStr = event+"_"+thingid;
-            node.debug("Event: "+eventStr);
-            this.emit(eventStr, thingid, itemid, payload);
+//        node.publish = function (event, thingtypeid, thingid, itemid, payload) {
+//            //Events:
+//            //update - item value updated
+//            //command - execute command
+//            //Emit events for both Thing and ThingType
+//            node.debug("Event: "+eventStr);
+//            this.emit(event+"_"+thingtypeid, thingtypeid, thingid, itemid, payload);
+//            this.emit(event+"_"+thingid, thingtypeid, thingid, itemid, payload);
+//        }
+
+        node.publishCommand = function (id, itemid, payload) {
+            node.debug("Command event: Id "+id+" Item "+itemid);
+            this.emit("command_"+id, itemid, payload);
         }
 
+        node.publishUpdate = function (thingtypeid, thingid, itemid, payload) {
+            //Emit events for both Thing and ThingType
+            if (thingtypeid !== null) {
+                node.debug("Update event: Thingtype "+thingtypeid+" Item "+itemid);
+                this.emit("update_"+thingtypeid, thingtypeid, thingid, itemid, payload);
+            }
+            node.debug("Update event: Thing "+thingid+" Item "+itemid);
+            this.emit("update_"+thingid, thingtypeid, thingid, itemid, payload);
+        }
+
+        node.publishLog = function (payload) {
+            node.debug("Log event");
+            this.emit("log_", payload);
+        }
     }
     RED.nodes.registerType("hal2EventHandler",hal2EventHandler);
 }

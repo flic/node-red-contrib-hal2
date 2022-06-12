@@ -6,8 +6,8 @@ module.exports = function(RED) {
         var node = this;
 
         if (node.eventHandler) {
-            node.listener = function(thingid, itemid, event) {
-                    var msg = msgClone = RED.util.cloneMessage(event);
+            node.listener = function(event) {
+                    var msg = RED.util.cloneMessage(event);
                     msg._msgid = RED.util.generateId();
 
                     if (event.logtype == 'ingress') {
@@ -20,12 +20,12 @@ module.exports = function(RED) {
             }
 
             // Start listening for events
-            node.eventHandler.subscribe('log', '0' , node.listener);
+            node.eventHandler.subscribe('log', '' , node.listener);
         }
             
         node.on("close",function() { 
             if (node.eventHandler) {
-                node.eventHandler.unsubscribe('log', '0', node.listener);
+                node.eventHandler.unsubscribe('log', '', node.listener);
             }
         });
     }

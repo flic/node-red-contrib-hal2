@@ -29,7 +29,7 @@ module.exports = function(RED) {
         }
 
         if (node.eventHandler) {
-            node.updateListener = function(thingid, itemid, payload) {
+            node.updateListener = function(thingtypeid, thingid, itemid, payload) {
                 var match = false;
                 for (let g in node.group) {
                     if ((node.group[g].thing == thingid) && (node.group[g].item == itemid)) {
@@ -38,12 +38,12 @@ module.exports = function(RED) {
                     }
                 }
                 if (match) {
-                    node.eventHandler.publish("update",node.id,node.id,payload);
+                    node.eventHandler.publishUpdate(null,node.id,node.id,payload);
                     node.send(payload);
                 }
             }
 
-            node.commandListener = function(thingid, itemid, payload) {
+            node.commandListener = function(itemid, payload) {
                 sendCommand(payload);
             }
 

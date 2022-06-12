@@ -1,4 +1,14 @@
 <script type="text/javascript">
+    function isStatusItem(item) {
+        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id = '1'));
+    }
+
+    function isCommandItem(item) {
+        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
+    }
+</script>
+
+<script type="text/javascript">
     RED.nodes.registerType('hal2Gate',{
         category: 'Home Automation',
         color: '#b3b3ff',
@@ -93,6 +103,7 @@
                     var rule = opt;
                     var savedThing = rule.thing;
                     var savedItem = rule.item;
+                    var savedThingType = rule.thingtype;
 
                     container.css({
                         overflow: 'hidden',
@@ -101,6 +112,9 @@
 
                     //Add rows
                     var rowName = $('<div/>').appendTo(container);
+                    var rowTypes = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()  
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()                    
@@ -117,6 +131,9 @@
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
                         .appendTo(rowName)
                         .append(' Thing')
+                    var labelType = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-gears"})
+                        .appendTo(rowTypes)
+                        .append(' Type')
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')                         
@@ -134,6 +151,7 @@
                         .append(' Rule')   
 
                     var thingsField = $('<select/>',{class:"node-input-rule-thing",style:"width:calc(100% - 110px)"}).appendTo(rowName);
+                    var typesField = $('<select/>',{class:"node-input-rule-type",style:"width:calc(100% - 110px)"}).appendTo(rowTypes);
                     var notesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowNotes);
                     var thingsFilter = $('<button type="button"/>').appendTo(rowName);
                     $('<i/>',{class:"fa fa-filter"}).appendTo(thingsFilter);
@@ -142,29 +160,54 @@
                     var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowItemNotes);
 
                     thingsField.change(function() {
-                        itemsField.children().remove();
-                        //get all items and sort them alphabetically
-                        let thing = RED.nodes.node(thingsField.val());
-                        let thingType = RED.nodes.node(thing.thingType);
-                        // Show notes
-                        if (thing.notes) {
-                            rowNotes.show();
-                            notesField.val(thing.notes);
-                        } else {
+                        var thing;
+                        var thingType;
+                        if (thingsField.val() == 'dynamic') {
+                            rowTypes.show();
                             rowNotes.hide();
+                            thingsFilter.hide();
+                            try {
+                                thingType = RED.nodes.node(typesField.val());
+                            } catch (error) {
+                                console.log('Error: '+error.message);
+                            } 
+                        } else {
+                            rowTypes.hide();
+                            thingsFilter.show();
+                            //get all items and sort them alphabetically
+                            try {
+                                thing = RED.nodes.node(thingsField.val());
+                                thingType = RED.nodes.node(thing.thingType);
+                            } catch (error) {
+                                console.log('Error: '+error.message);
+                            } 
+                            // Show notes
+                            if (thing.notes) {
+                                rowNotes.show();
+                                notesField.val(thing.notes);
+                            } else {
+                                rowNotes.hide();
+                            }                            
                         }
-                        //Add items                            
+                        itemsField.children().remove();
+
+                        //Add items
                         for (let d in thingType.items) {
-                            if ((thingType.items[d].type == 'both') || (thingType.items[d].type == 'status') || (thingType.items[d].type == 'loopback_both')) { 
+                            if (isStatusItem(thingType.items[d])) {
                                 itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                             }
                         }
 
-                        if ((savedItem != null) & (thingsField.val() == savedThing)) {
-                            itemsField.val(savedItem);
+                        if (savedItem != null) {
+                            if ((thingsField.val() == 'dynamic') && (typesField.val() == savedThingType) || (thingsField.val() != 'dynamic') && (thingsField.val() == savedThing)) {
+                                itemsField.val(savedItem);
+                            }
                         }
                         itemsField.trigger('change');
                     });
+
+                    typesField.change(function() { thingsField.trigger('change'); });
+
 
                     filterField.change(function() {
                         thingsField.children().remove();
@@ -205,8 +248,16 @@
                     });
 
                     //Add things
+                    thingsField.append($("<option></option>").val('dynamic').text('Thing - set by msg.thing.id -'));
                     for (var d in thingsList) {
                         thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                    }
+                    thingsField.val(thingsList[0].id);
+                    
+
+                    //Add thingTypes
+                    for (var d in thingTypeList) {
+                        typesField.append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));
                     }
 
                     //Add filter types
@@ -268,6 +319,7 @@
                         operatorField.val(rule.operator);
                         valueField.typedInput('value',rule.value);
                         valueField.typedInput('type',rule.type);
+                        if (typeof rule.thingtype !== 'undefined') { typesField.val(rule.thingtype); }
                     }
                     operatorField.trigger('change');
                     thingsField.trigger('change');
@@ -282,21 +334,34 @@
             if (this.rules) {
                 for (var i=0; i<this.rules.length; i++) {
                     var rule = this.rules[i];
-                    try {
-                        let thing = RED.nodes.node(rule.thing);
-                        if (typeof thing !== 'undefined') {
+                    if (rule.thing == 'dynamic') {
+                        try {
+                            let thingtype = RED.nodes.node(rule.thingtype);
+                            if (typeof thingtype !== 'undefined') {
+                                $("#node-input-rule-container").editableList('addItem',rule);
+                            } else {
+                                console.error('ThingType ID '+rule.thingtype+' is missing.');
+                            }
                             $("#node-input-rule-container").editableList('addItem',rule);
-                        } else {
-                            console.error('Thing ID '+rule.thing+' is missing.');
+                        } catch (error) {
+                            console.log('Error: '+error.message);
                         }
-                    } catch (error) {
-                        console.log('Error: '+error.message);
-                    }  
+                    } else {
+                        try {
+                            let thing = RED.nodes.node(rule.thing);
+                            if (typeof thing !== 'undefined') {
+                                $("#node-input-rule-container").editableList('addItem',rule);
+                            } else {
+                                console.error('Thing ID '+rule.thing+' is missing.');
+                            }
+                        } catch (error) {
+                            console.log('Error: '+error.message);
+                        }  
+                    }
                 }
             } else {
                 $("#node-input-rule-container").editableList('addItem',null);              
-            }
-            
+            }            
         },
         oneditsave: function() {
             var rules = $("#node-input-rule-container").children();
@@ -307,12 +372,13 @@
             rules.each(function(i) {
                 var rule = $(this);
                 var thing = rule.find(".node-input-rule-thing option:selected").val();
+                var thingtype = rule.find(".node-input-rule-type option:selected").val();
                 var item = rule.find(".node-input-rule-item option:selected").val();
                 var operator = rule.find(".node-input-rule-operator option:selected").val();
                 var value = rule.find(".node-input-rule-value").typedInput('value');
                 var type  = rule.find(".node-input-rule-value").typedInput('type');
 
-                var r = {thing:thing, item:item, operator:operator, value:value, type:type};
+                var r = {thing:thing, thingtype:thingtype, item:item, operator:operator, value:value, type:type};
                 node.rules.push(r);
             });
 
