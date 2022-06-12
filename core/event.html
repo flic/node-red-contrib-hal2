@@ -1,4 +1,14 @@
 <script type="text/javascript">
+    function isStatusItem(item) {
+        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id = '1'));
+    }
+
+    function isCommandItem(item) {
+        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
+    }
+</script>
+
+<script type="text/javascript">
     RED.nodes.registerType('hal2Event',{
         category: 'Home Automation',
         color: '#b3b3ff',
@@ -224,10 +234,15 @@
                         $("#row-notes").hide();
                     }
                     //get all items and sort them alphabetically
-                    let thingType = RED.nodes.node(thing.thingType);
+                    var thingtype;
+                    try {
+                        thingType = RED.nodes.node(thing.thingType);
+                    } catch (error) {
+                        console.log('Error: '+error.message);
+                    }
                     //Add items
                     for (let d in thingType.items) {
-                        if ((thingType.items[d].type != 'command') && (thingType.items[d].type != 'loopback_command')) {
+                        if (isStatusItem(thingType.items[d])) {
                             $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                         }
                     }

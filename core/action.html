@@ -1,4 +1,14 @@
 <script type="text/javascript">
+    function isStatusItem(item) {
+        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id = '1'));
+    }
+
+    function isCommandItem(item) {
+        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
+    }
+</script>
+
+<script type="text/javascript">
     RED.nodes.registerType('hal2Action',{
         category: 'Home Automation',
         color: '#b3b3ff',
@@ -149,9 +159,13 @@
                         .appendTo(rowItemNotes);
 
                     thingsField.change(function() {
-                        var thing = RED.nodes.node(thingsField.val());
+                        var thing;
+                        try {
+                            thing = RED.nodes.node(thingsField.val());
+                        } catch (error) {
+                            console.log('Error: '+error.message);
+                        }
                         itemsField.children().remove();
-
                         switch(thing.type) {
                             case 'hal2Thing': 
                                 // Show notes
@@ -162,9 +176,9 @@
                                     rowNotes.hide();
                                 }
                                 let thingType = RED.nodes.node(thing.thingType);
-                                //Add items                            
+                                //Add items
                                 for (let d in thingType.items) {
-                                    if ((thingType.items[d].id != '1') && (thingType.items[d].type != 'status')) { 
+                                    if (isCommandItem(thingType.items[d])) {
                                         itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                                     }
                                 }
@@ -186,7 +200,7 @@
                                 rowItemNotes.hide();
                                 //Add items
                                 for (let d in thing.items) {
-                                    if (thing.items[d].it != '1') {
+                                    if (isCommandItem(thing.items[d])) {
                                         itemsField.append($("<option></option>").val(thing.items[d].id).text(thing.items[d].name));
                                     }
                                 }

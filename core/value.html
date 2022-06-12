@@ -1,4 +1,14 @@
 <script type="text/javascript">
+    function isStatusItem(item) {
+        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id = '1'));
+    }
+
+    function isCommandItem(item) {
+        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
+    }
+</script>
+
+<script type="text/javascript">
     RED.nodes.registerType('hal2Value',{
         category: 'Home Automation',
         color: '#b3b3ff',
@@ -138,7 +148,7 @@
                 }
                 //Add items
                 for (let d in thingType.items) {
-                    if ((thingType.items[d].type != 'command') && (thingType.items[d].type != 'loopback_command')) {
+                    if (isStatusItem(thingType.items[d])) {
                         $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                     }
                 }
@@ -177,7 +187,7 @@
                 let thingType = RED.nodes.node($("#node-input-thingType").val());
                 //Add items
                 for (let d in thingType.items) {
-                    if ((thingType.items[d].type != 'command') && (thingType.items[d].type != 'loopback_command')) {
+                    if (isStatusItem(thingType.items[d])) {
                         $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                     }
                 }
