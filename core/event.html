@@ -137,6 +137,16 @@
                 return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
             });
 
+            $('#node-input-rate').spinner({
+                min:1,
+                change: function(event, ui) {
+                    var value = this.value;
+                    if (!value.match(/^\d+$/)) { value = 1;  }
+                    else if (value < this.min) { value = this.min; }
+                    if (value !== this.value) { $(this).spinner("value", value); }
+                }
+            });
+
             $("#node-input-typeSel").change( function() {
                 var nodeType = $("#node-input-typeSel").val();
                 switch (nodeType) {
@@ -426,12 +436,12 @@
 
     <div class="form-row" id="div-main">
         <div class="form-row">
-            <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
+            <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 127px)" placeholder="Event handler">
         </div>
 
         <div class="form-row">
-            <label for="node-input-typeSel" style="width:95px; padding-right:10px;"><i class="fa fa-folder"></i> Category</label>
+            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Category</label>
             <select id="node-input-typeSel" style="width:calc(100% - 170px)">
                 <option value='hal2Thing'>Thing</option>
                 <option value='hal2Group'>Group</option>
@@ -440,58 +450,57 @@
         </div>
 
         <div class="form-row">
-            <label for="node-input-thing" id="label-node-input-thing" style="width:95px; padding-right:10px;"><i class="fa fa-microchip"></i> Thing</label>
+            <label for="node-input-thing" id="label-node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
             <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
 
         <div class="form-row" id="thing-filter-div" hidden>
-            <label for="thing-filter" id="label-thing-filter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filter</label>
+            <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
             <select id="thing-filter" style="width:calc(100% - 170px)"></select>
         </div>
 
         <div class="form-row" id="row-notes" style="width:100%" hidden>
-            <label for="thing-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
+            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
             <textarea id="thing-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
         </div>
 
         <div class="form-row" id="div-item">
-            <label for="node-input-item" style="width:95px; padding-right:10px;"><i class="fa fa-sitemap"></i> Item</label>
+            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
             <select id="node-input-item" style="width:calc(100% - 170px)"></select>
         </div>
 
         <div class="form-row" id="row-item-notes" style="width:100%" hidden>
-            <label for="item-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
+            <label for="item-notes"><i class="fa fa-file"></i> Notes</label>
             <textarea id="item-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
         </div>
 
         <div class="form-row">
-            <label for="node-input-operator" style="width:95px; padding-right:10px;"><i class="fa fa-play-circle"></i> Trigger</label>
+            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
             <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
-            <input type="text" id="node-input-compareValue" style="width:calc(100% - 220px)>
+            <input type="text" id="node-input-compareValue" style="width:calc(100% - 219px)>
             <input type="hidden" id="node-input-compareType">
         </div>
 
         <div class="form-row">
-            <label for="node-input-change" style="width:95px; padding-right:10px;">&nbsp;</label>
+            <label></label>
             <select id="node-input-change" style="width:calc(100% - 170px)"></select>
         </div>
 
         <div class="form-row">
             <label></label>
-            <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Rate limit</label>
+            <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"> Rate limit
         </div>
         <div class="form-row">
             <label></label>
             <input type="checkbox" id="node-input-delay" style="width: 23px; margin:0"><label for="node-input-delay" style="margin:0;width: auto;"> Delay event</label>
         </div>
 
-        <div id="ratelimit-details" class="form-row" hidden>
+        <div id="ratelimit-details" hidden>
             <div class="form-row">
                 <label for="node-input-rateUnits"><i class="fa fa-clock-o"></i> Rate limit</label>
-                <label>1 event per </label>
-                <input type="text" id="node-input-rate" placeholder="1" style="width:40px" value=1>
-                <select id="node-input-rateUnits" style="width:100px">
+                1 event per <input type="text" id="node-input-rate" placeholder="1" style="width:53px" value=1>
+                <select id="node-input-rateUnits" style="width:calc(100% - 320px)">
                   <option value="second">Second(s)</option>
                   <option value="minute">Minute(s)</option>
                   <option value="hour" selected>Hour(s)</option>
@@ -499,8 +508,8 @@
                 </select>
             </div>
             <div class="form-row" id="rate-type" hidden>
-                <label for="node-input-ratetype">Rate limit</label>
-                <select id="node-input-ratetype" style="width:calc(100% - 165px)">
+                <label></label>
+                <select id="node-input-ratetype" style="width:calc(100% - 170px)">
                     <option value="all" selected>All events</option>
                     <option value="item">For each item</option>
                 </select>
@@ -510,7 +519,7 @@
         <div id="delay-details" hidden>
             <div class="form-row">
                 <label for="node-input-delayValue"><i class="fa fa-pause-circle-o"></i> Delay event</label>
-                <input type="text" id="node-input-delayValue" placeholder="5" style="width:40px" value=5> seconds
+                <input type="text" id="node-input-delayValue" placeholder="5" style="width:70px" value=5> second(s)
             </div>
             <div class="form-row">
                 <label></label>
@@ -520,18 +529,18 @@
 
 
         <div class="form-row">
-            <label for="node-input-outputValue" style="width:95px; padding-right:10px;"><i class="fa fa-sign-out"></i> Output</label>
+            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
             <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
             <input type="hidden" id="node-input-outputType">
         </div>
 
         <div class="form-row">
-            <label for="node-input-topic" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
+            <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
             <input type="text" id="node-input-topic" placeholder="Topic" style="width:calc(100% - 170px)">
         </div>        
 
         <div class="form-row">
-            <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
             <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
         </div>
     </div>
