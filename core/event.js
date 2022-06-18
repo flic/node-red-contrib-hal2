@@ -22,11 +22,18 @@ module.exports = function(RED) {
         this.delayValue     = config.delayValue;
 
         var node = this;
+        var nodeContext = this.context();
 
-        if (typeof node.ratelimit === 'undefined') { node.ratelimit = false; }
-        if (typeof node.delay === 'undefined') { node.delay = false; }
+        try {
+            var thing = RED.nodes.getNode(this.thing);
+        } catch (err) {
+            node.error("Error getting thingType "+err);
+            return;
+        }
 
-        var eventTimestamp = [];
+        var eventTimestamp = nodeContext.get('eventTimestamp',thing.thingType.contextStore);
+        if (typeof eventTimestamp === 'undefined') { eventTimestamp = []; }
+
         var eventDelay = [];
         var rateLimited = 0;
 
@@ -122,6 +129,7 @@ module.exports = function(RED) {
 
             eventTimestamp[thingid] = now;
             eventTimestamp[node.id] = now;
+            nodeContext.set('eventTimestamp',eventTimestamp,thing.thingType.contextStore);
 
             var msg = {};
             msg._msgid = RED.util.generateId();
