@@ -23,16 +23,7 @@ module.exports = function(RED) {
 
         var node = this;
         var nodeContext = this.context();
-
-        try {
-            var contextStore = '';
-            var thing = RED.nodes.getNode(this.thing);
-            if (thing.type == 'hal2Thing') { contextStore = thing.thingType.contextStore; }
-            else if (thing.type == 'hal2ThingType') { contextStore = thing.contextStore; }
-        } catch (err) {
-            node.error("Error getting thingType "+err);
-            return;
-        }
+        var contextStore = this.eventHandler.contextStore;
 
         var eventTimestamp = nodeContext.get('eventTimestamp',contextStore);
         if (typeof eventTimestamp === 'undefined') { eventTimestamp = []; }

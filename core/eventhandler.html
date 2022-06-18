@@ -3,36 +3,50 @@
         RED.nodes.registerType('hal2EventHandler', {
             category: 'config',
             defaults: {
-                name:  {value: "Event handler"},
-                maxlisteners: {value: "50"},
+                name:           {value: "Event handler"},
+                contextStore:   {},
+                maxlisteners:   {value: "50"},
                 checkHeartbeat: {value: false},
-                heartbeat: {value: 3600}
+                heartbeat:      {value: 3600}
             },
             label: function () {
                 return this.name || "Event handler";
+            },
+            oneditprepare: function () {
+                var contextStores = RED.settings.context.stores;
+                //Context stores from setup
+                for (let c in contextStores) {
+                    $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>").appendTo("#node-config-input-contextStore");
+                }
+                if (this.contextStore) {
+                    $("#node-config-input-contextStore").val(this.contextStore);
+                    $("#node-config-input-contextStore").trigger("change");
+                }
             }
         });
     </script>
 
 
 <script type="text/x-red" data-template-name="hal2EventHandler">
-    <div class="form-row" style="width:500px">
-        <p>The configuration is used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</p>
-        <p >If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
-    </div>
-    
     <div class="form-row">
-        <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-config-input-name" placeholder="Name">
-    </div>
-
+        <p>The configuration is used for firing events between nodes.</br>
+        Use the same config for all nodes that should be able to communicate.</br>
+        If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
+    </div>   
     <div class="form-row">
-        <label for="node-config-input-maxlisteners"><i class="fa fa-sign-out"></i> Max event listeners (0 for unlimited)</label>
-        <input type="number" id="node-config-input-maxlisteners" style="display: inline-block; width: auto; vertical-align: top;" min="0" max="500" value="50">
+        <label for="node-config-input-name" style="width:150px"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-config-input-name" placeholder="Name" style="width:calc(100% - 185px)">
     </div>
-
     <div class="form-row">
-        <label for="node-config-input-heartbeat"><i class="fa fa-heartbeat"></i> Heartbeat check interval (seconds)</label>
-        <input type="number" id="node-config-input-heartbeat" style="display: inline-block; width: auto; vertical-align: top;" min="1" value="60">
+        <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
+        <select id="node-config-input-contextStore" style="width:calc(100% - 185px)"></select>
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-maxlisteners" style="width:150px"><i class="fa fa-sign-out"></i> Max event listeners</label>
+        <input type="number" id="node-config-input-maxlisteners" style="width: 80px;" min="0" max="500" value="50"> (0 for unlimited)
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-heartbeat" style="width:150px"><i class="fa fa-heartbeat"></i> Heartbeat check interval</label>
+        <input type="number" id="node-config-input-heartbeat" style="width: 80px;" min="1" value="60"> seconds
     </div>
 </script>
