@@ -25,13 +25,16 @@ module.exports = function(RED) {
         var nodeContext = this.context();
 
         try {
+            var contextStore = '';
             var thing = RED.nodes.getNode(this.thing);
+            if (thing.type == 'hal2Thing') { contextStore = thing.thingType.contextStore; }
+            else if (thing.type == 'hal2ThingType') { contextStore = thing.contextStore; }
         } catch (err) {
             node.error("Error getting thingType "+err);
             return;
         }
 
-        var eventTimestamp = nodeContext.get('eventTimestamp',thing.thingType.contextStore);
+        var eventTimestamp = nodeContext.get('eventTimestamp',contextStore);
         if (typeof eventTimestamp === 'undefined') { eventTimestamp = []; }
 
         var eventDelay = [];
@@ -72,31 +75,25 @@ module.exports = function(RED) {
         function showState() {
             var now = Date.now();
             var status = '';
-            var d = false;
-            var e = false;
-            var s = {};
+            var s = {
+                fill: 'gray'
+            };
 
             if (eventTimestamp[node.id]) {
                 let td = new Date(eventTimestamp[node.id]);
-                status += td.toLocaleString();
-                e = true;
                 s.fill = 'green';
                 s.text = td.toLocaleString();
             }
 
             if (now < rateLimited) {
-                if (status != '' ) { status += ', '; }
-                status += 'rate limited';
                 s.fill = 'blue';
                 if (s.text) { s.text += ' rate limited' } else { s.text = 'rate limited' }
             }
 
             if (Object.keys(eventDelay).length >0) {
-                status += 'delayed';
                 s.fill = 'yellow';
                 if (s.text) { s.text += ' delayed' } else { s.text = 'delayed' }
             }
-
             node.status(s);
         }
 
@@ -129,7 +126,7 @@ module.exports = function(RED) {
 
             eventTimestamp[thingid] = now;
             eventTimestamp[node.id] = now;
-            nodeContext.set('eventTimestamp',eventTimestamp,thing.thingType.contextStore);
+            nodeContext.set('eventTimestamp',eventTimestamp,contextStore);
 
             var msg = {};
             msg._msgid = RED.util.generateId();
@@ -192,6 +189,8 @@ module.exports = function(RED) {
                 node.eventHandler.unsubscribe('update', node.thing, node.listener);
             }
         });
+
+        showState();
     }
     RED.nodes.registerType("hal2Event",hal2Event);
 }
