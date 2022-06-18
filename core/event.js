@@ -26,9 +26,9 @@ module.exports = function(RED) {
         var contextStore = this.eventHandler.contextStore;
 
         var eventTimestamp = nodeContext.get('eventTimestamp',contextStore);
-        if (typeof eventTimestamp === 'undefined') { eventTimestamp = []; }
+        if (typeof eventTimestamp === 'undefined') { eventTimestamp = {}; }
 
-        var eventDelay = [];
+        var eventDelay = {};
         var rateLimited = 0;
 
         var convertRate = {
