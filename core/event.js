@@ -65,18 +65,32 @@ module.exports = function(RED) {
         function showState() {
             var now = Date.now();
             var status = '';
+            var d = false;
+            var e = false;
+            var s = {};
 
-            if (Object.keys(eventDelay).length >0) { status += 'delayed'; }
+            if (eventTimestamp[node.id]) {
+                let td = new Date(eventTimestamp[node.id]);
+                status += td.toLocaleString();
+                e = true;
+                s.fill = 'green';
+                s.text = td.toLocaleString();
+            }
+
             if (now < rateLimited) {
                 if (status != '' ) { status += ', '; }
                 status += 'rate limited';
+                s.fill = 'blue';
+                if (s.text) { s.text += ' rate limited' } else { s.text = 'rate limited' }
             }
 
-            if (status != '') {
-                node.status({fill:"blue",shape:"dot",text:status});    
-            } else {
-                node.status({});
+            if (Object.keys(eventDelay).length >0) {
+                status += 'delayed';
+                s.fill = 'yellow';
+                if (s.text) { s.text += ' delayed' } else { s.text = 'delayed' }
             }
+
+            node.status(s);
         }
 
         function triggerEvent(thingtypeid, thingid, itemid, event) {
