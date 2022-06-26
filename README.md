@@ -32,6 +32,7 @@ Take a look at the example flows and Thing definitions in the https://github.com
 **1.14**<br>
 Event node status text (last trigger event, delay/rate limit status)<br>
 Event node option to reset *Delay* if trigger no longer true<br>
+New config options for *Event handler*<br>
 
 **1.13**<br>
 Event node *Delay* and *Rate Limit*.<br>
