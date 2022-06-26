@@ -1,5 +1,4 @@
 module.exports = function(RED) {
-
     function hal2Event(config) {
         RED.nodes.createNode(this,config);
         this.eventHandler   = RED.nodes.getNode(config.eventHandler);
@@ -19,6 +18,7 @@ module.exports = function(RED) {
         this.rateUnits      = config.rateUnits;
         this.delay          = config.delay;
         this.delayExtend    = config.delayExtend;
+        this.delayReset     = config.delayReset;
         this.delayValue     = config.delayValue;
 
         var node = this;
@@ -150,7 +150,7 @@ module.exports = function(RED) {
         if (node.eventHandler) {
             node.listener = function(thingtypeid, thingid, itemid, event) {
                 if (itemid != node.item) { return; }
-                if (node.change == '2' && event.laststate == undefined) { return; }
+                if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
                 if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){
                     if (node.delay) {
@@ -167,8 +167,14 @@ module.exports = function(RED) {
                     } else {
                         triggerEvent(thingtypeid, thingid, itemid, event);
                     }
-                    showState();
+                } else {
+                    if ((node.delay) && (node.delayReset) && (typeof eventDelay[thingid] != 'undefined')) {
+                        clearTimeout(eventDelay[thingid]);
+                        delete eventDelay[thingid];
+                        node.debug('Event delay reset, Id '+thingid);
+                    }    
                 }
+                showState();
             }
 
             // Start listening for events
