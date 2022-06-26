@@ -35,6 +35,7 @@
             rateUnits:      { value:"hour" },
             delay:          { value: false },
             delayExtend:    { value: false },
+            delayReset:     { value: false },
             delayValue:     { value: 5 }
         },
         inputs:0,
@@ -524,6 +525,10 @@
             <div class="form-row">
                 <label></label>
                 <input type="checkbox" id="node-input-delayExtend" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Extend delay if new event arrives</label>
+            </div>
+            <div class="form-row">
+                <label></label>
+                <input type="checkbox" id="node-input-delayReset" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Reset delay if trigger no longer true</label>
             </div>
         </div>
 

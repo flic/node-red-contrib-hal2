@@ -1,5 +1,4 @@
 module.exports = function(RED) {
-
     function hal2Event(config) {
         RED.nodes.createNode(this,config);
         this.eventHandler   = RED.nodes.getNode(config.eventHandler);
@@ -19,15 +18,17 @@ module.exports = function(RED) {
         this.rateUnits      = config.rateUnits;
         this.delay          = config.delay;
         this.delayExtend    = config.delayExtend;
+        this.delayReset     = config.delayReset;
         this.delayValue     = config.delayValue;
 
         var node = this;
+        var nodeContext = this.context();
+        var contextStore = this.eventHandler.contextStore;
 
-        if (typeof node.ratelimit === 'undefined') { node.ratelimit = false; }
-        if (typeof node.delay === 'undefined') { node.delay = false; }
+        var eventTimestamp = nodeContext.get('eventTimestamp',contextStore);
+        if (typeof eventTimestamp === 'undefined') { eventTimestamp = {}; }
 
-        var eventTimestamp = [];
-        var eventDelay = [];
+        var eventDelay = {};
         var rateLimited = 0;
 
         var convertRate = {
@@ -65,18 +66,26 @@ module.exports = function(RED) {
         function showState() {
             var now = Date.now();
             var status = '';
+            var s = {
+                fill: 'gray'
+            };
 
-            if (Object.keys(eventDelay).length >0) { status += 'delayed'; }
+            if (eventTimestamp[node.id]) {
+                let td = new Date(eventTimestamp[node.id]);
+                s.fill = 'green';
+                s.text = td.toLocaleString();
+            }
+
             if (now < rateLimited) {
-                if (status != '' ) { status += ', '; }
-                status += 'rate limited';
+                s.fill = 'blue';
+                if (s.text) { s.text += ' rate limited' } else { s.text = 'rate limited' }
             }
 
-            if (status != '') {
-                node.status({fill:"blue",shape:"dot",text:status});    
-            } else {
-                node.status({});
+            if (Object.keys(eventDelay).length >0) {
+                s.fill = 'yellow';
+                if (s.text) { s.text += ' delayed' } else { s.text = 'delayed' }
             }
+            node.status(s);
         }
 
         function triggerEvent(thingtypeid, thingid, itemid, event) {
@@ -108,6 +117,7 @@ module.exports = function(RED) {
 
             eventTimestamp[thingid] = now;
             eventTimestamp[node.id] = now;
+            nodeContext.set('eventTimestamp',eventTimestamp,contextStore);
 
             var msg = {};
             msg._msgid = RED.util.generateId();
@@ -140,7 +150,7 @@ module.exports = function(RED) {
         if (node.eventHandler) {
             node.listener = function(thingtypeid, thingid, itemid, event) {
                 if (itemid != node.item) { return; }
-                if (node.change == '2' && event.laststate == undefined) { return; }
+                if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
                 if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){
                     if (node.delay) {
@@ -157,8 +167,14 @@ module.exports = function(RED) {
                     } else {
                         triggerEvent(thingtypeid, thingid, itemid, event);
                     }
-                    showState();
+                } else {
+                    if ((node.delay) && (node.delayReset) && (typeof eventDelay[thingid] != 'undefined')) {
+                        clearTimeout(eventDelay[thingid]);
+                        delete eventDelay[thingid];
+                        node.debug('Event delay reset, Id '+thingid);
+                    }    
                 }
+                showState();
             }
 
             // Start listening for events
@@ -170,6 +186,8 @@ module.exports = function(RED) {
                 node.eventHandler.unsubscribe('update', node.thing, node.listener);
             }
         });
+
+        showState();
     }
     RED.nodes.registerType("hal2Event",hal2Event);
 }

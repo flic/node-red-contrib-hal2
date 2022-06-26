@@ -1,10 +1,14 @@
 module.exports = function(RED) {
     function hal2EventHandler(config) {
         RED.nodes.createNode(this,config);
-        this.host = config.name;
-        this.maxlisteners = config.maxlisteners;
+        this.host           = config.name;
+        this.contextStore   = config.contextStore;
+        this.maxlisteners   = config.maxlisteners;
         this.checkHeartbeat = config.checkHeartbeat;
-        this.heartbeat = config.heartbeat;
+        this.heartbeat      = config.heartbeat;
+
+        if (typeof this.contextStore == 'undefined') { this.contextStore = ''; }
+
         var node = this;
         var hbList = [];
 
