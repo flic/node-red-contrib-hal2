@@ -29,6 +29,10 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ## History
 
+**1.14**<br>
+Event node status text (last trigger event, delay/rate limit status)<br>
+Event node option to reset *Delay* if trigger no longer true<br>
+
 **1.13**<br>
 Event node *Delay* and *Rate Limit*.<br>
 Dynamic msg.thing.id in Gate node.<br>
