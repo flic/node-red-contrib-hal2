@@ -252,7 +252,6 @@
                         console.log('Error: '+error.message);
                     }
                     //Add items
-                    debugger
                     for (let d in thingType.items) {
                         if (isStatusItem(thingType.items[d])) {
                             $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
