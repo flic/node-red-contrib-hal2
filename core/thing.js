@@ -76,6 +76,9 @@ module.exports = function(RED) {
             date = Date.now();
             let timestamp = new Date(node.hbTimestamp).getTime() + Number(node.thingType.hbTTL)*1000;
             let alive = date <= timestamp;
+            if (alive === false) {
+                node.error("not alive");
+            }
             if (alive) { setTimeout(() => { checkTimestamp(); },timestamp-date) }
             node.updateState([],'1',alive,'heartbeat');
         }
