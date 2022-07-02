@@ -1,6 +1,6 @@
 <script type="text/javascript">
     function isStatusItem(item) {
-        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id = '1'));
+        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id == '1'));
     }
 
     function isCommandItem(item) {
@@ -245,7 +245,7 @@
                         $("#row-notes").hide();
                     }
                     //get all items and sort them alphabetically
-                    var thingtype;
+                    var thingType;
                     try {
                         thingType = RED.nodes.node(thing.thingType);
                     } catch (error) {
