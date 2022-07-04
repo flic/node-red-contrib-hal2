@@ -72,11 +72,10 @@ module.exports = function(RED) {
             if (node.thingType.hbCheck == false) { return; }
             if (node.thingType.hbType != 'timestamp') { return; }
             if (node.hbTimestamp == 0) { return; }
-            if (typeof timestampId != 'undefined') { clearTimeout(timestampId); }
             date = Date.now();
             let timestamp = new Date(node.hbTimestamp).getTime() + Number(node.thingType.hbTTL)*1000;
-            let alive = date <= timestamp;
-            if (alive) { setTimeout(() => { checkTimestamp(); },timestamp-date) }
+            let alive = (date <= timestamp);
+            if (alive) { timestampId = setTimeout(() => { checkTimestamp(); },timestamp-date) }
             node.updateState([],'1',alive,'heartbeat');
         }
 
@@ -430,6 +429,8 @@ module.exports = function(RED) {
                     node.eventHandler.unregisterHeartbeat(node.id);
                 }
             }
+            if (typeof timestampId != 'undefined') { clearTimeout(timestampId); }
+
 
         });
 

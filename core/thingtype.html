@@ -963,7 +963,7 @@
                     {
                         name: 'heartbeat_type',
                         get: function() { return $("#node-config-input-hbType").val(); },
-                        set: function(v) { $("#node-config-input-hbType").val(v) }
+                        set: function(v) { $("#node-config-input-hbType").val(v).trigger('change'); }
                     },
                     {
                         name: 'heartbeat_ttl',
@@ -972,13 +972,13 @@
                     },
                     {
                         name: 'heartbeat_topicfilter',
-                        get: function() { return $("#node-config-input-hbFilterVal").val(); },
-                        set: function(v) { $("#node-config-input-hbFilterVal").val(v) }
+                        get: function() { return $("#node-config-input-hbFilterVal").typedInput('value'); },
+                        set: function(v) { $("#node-config-input-hbFilterVal").typedInput('value',v) }
                     },
                     {
                         name: 'heartbeat_topicfilterType',
-                        get: function() { return $("#node-config-input-hbFilterType").val(); },
-                        set: function(v) { $("#node-config-input-hbFilterType").val(v) }
+                        get: function() { return $("#node-config-input-hbFilterVal").typedInput('type'); },
+                        set: function(v) { $("#node-config-input-hbFilterVal").typedInput('type',v); }
                     },
                     {
                         name: 'heartbeat_ingress',
@@ -987,13 +987,13 @@
                     },
                     {
                         name: 'heartbeat_timestampProp',
-                        get: function() { return ($("#node-config-input-hbPropVal").val() === null) ? '' : $("#node-config-input-hbPropVal").val(); },
-                        set: function(v) { if (typeof v != 'undefined') { $("#node-config-input-hbPropVal").val(v) }}
+                        get: function() { return ($("#node-config-input-hbPropVal").val() === null) ? '' : $("#node-config-input-hbPropVal").typedInput('value'); },
+                        set: function(v) { if (typeof v != 'undefined') { $("#node-config-input-hbPropVal").typedInput('value',v) }}
                     },
                     {
                         name: 'heartbeat_timestampType',
-                        get: function() { return ($("#node-config-input-hbPropType").val() === null) ? '' : $("#node-config-input-hbPropType").val(); },
-                        set: function(v) { if (typeof v != 'undefined') { $("#node-config-input-hbPropType").val(v) }}
+                        get: function() { return ($("#node-config-input-hbPropVal").val() === null) ? '' : $("#node-config-input-hbPropVal").typedInput('type'); },
+                        set: function(v) { if (typeof v != 'undefined') { $("#node-config-input-hbPropVal").typedInput('type',v); }}
                     }
 
                 ],
