@@ -185,6 +185,10 @@ module.exports = function(RED) {
             if (node.eventHandler) {
                 node.eventHandler.unsubscribe('update', node.thing, node.listener);
             }
+            for (let d in eventDelay) {
+                clearTimeout(eventDelay[d]);
+                delete eventDelay[d];
+            }
         });
 
         showState();
