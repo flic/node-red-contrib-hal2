@@ -47,7 +47,7 @@ module.exports = function(RED) {
                         if (oProp.length > 1) {
                             oVal = node.context().flow.get(oProp[0]) || {};
                             RED.util.setObjectProperty(oVal, node.outputValue, thing.state[node.item], true);
-                            //oVal = RED.util.getObjectProperty(oVal,oProp[0]);
+                            oVal = RED.util.getObjectProperty(oVal,oProp[0]);
                         } else {
                             oVal = thing.state[node.item];
                         }
@@ -57,7 +57,7 @@ module.exports = function(RED) {
                         if (oProp.length > 1) {
                             oVal = node.context().global.get(oProp[0]) || {};
                             RED.util.setObjectProperty(oVal, node.outputValue, thing.state[node.item], true);
-                            //oVal = RED.util.getObjectProperty(oVal,oProp[0]);
+                            oVal = RED.util.getObjectProperty(oVal,oProp[0]);
                         } else {
                             oVal = thing.state[node.item];
                         }
