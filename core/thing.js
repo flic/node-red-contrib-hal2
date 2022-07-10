@@ -56,17 +56,12 @@ module.exports = function(RED) {
         var date;
         var timestampId;
 
-        node.laststate      = nodeContext.get("laststate",node.thingType.contextStore);
-        node.state          = nodeContext.get("state",node.thingType.contextStore);
-        node.heartbeat      = nodeContext.get("heartbeat",node.thingType.contextStore);
-        node.last_change    = nodeContext.get("last_change",node.thingType.contextStore);
-        node.hbTimestamp    = nodeContext.get("hbTimestamp",node.thingType.contextStore);
+        node.laststate      = nodeContext.get("laststate",node.thingType.contextStore) || {};
+        node.state          = nodeContext.get("state",node.thingType.contextStore) || {};
+        node.heartbeat      = nodeContext.get("heartbeat",node.thingType.contextStore) || {};
+        node.last_change    = nodeContext.get("last_change",node.thingType.contextStore) || {};
+        node.hbTimestamp    = nodeContext.get("hbTimestamp",node.thingType.contextStore) || 0;
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
-        if (typeof node.laststate === 'undefined') { node.laststate = {}; }
-        if (typeof node.state === 'undefined') { node.state = {}; }
-        if (typeof node.heartbeat === 'undefined') { node.heartbeat = {}; }
-        if (typeof node.last_change === 'undefined') { node.last_change = {}; }
-        if (typeof node.hbTimestamp === 'undefined') { node.hbTimestamp = 0; }
 
         function checkTimestamp() {
             if (node.thingType.hbCheck == false) { return; }

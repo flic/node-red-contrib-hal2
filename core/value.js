@@ -35,37 +35,55 @@ module.exports = function(RED) {
                 thing = RED.nodes.getNode(node.thing);
             }
 
+            var oVal;
+            var oProp = RED.util.normalisePropertyExpression(node.outputValue);
             if (node.action == 'get') {
                 if (!thing.state.hasOwnProperty(node.item)) {
                     // No value stored in item
                     return;
                 }
-
                 switch (node.outputType) {
                     case 'flow':
-                        node.context().flow.set(node.outputValue,thing.state[node.item]);
+                        if (oProp.length > 1) {
+                            oVal = node.context().flow.get(oProp[0]) || {};
+                            RED.util.setObjectProperty(oVal, node.outputValue, thing.state[node.item], true);
+                            oVal = RED.util.getObjectProperty(oVal,oProp[0]);
+                        } else {
+                            oVal = thing.state[node.item];
+                        }
+                        node.context().flow.set(oProp[0],oVal);
                         break;
                     case 'global':
-                        node.context().global.set(node.outputValue,thing.state[node.item]);
+                        if (oProp.length > 1) {
+                            oVal = node.context().global.get(oProp[0]) || {};
+                            RED.util.setObjectProperty(oVal, node.outputValue, thing.state[node.item], true);
+                            oVal = RED.util.getObjectProperty(oVal,oProp[0]);
+                        } else {
+                            oVal = thing.state[node.item];
+                        }
+                        node.context().global.set(oProp[0],oVal);
                         break;
                     case 'msg':
-                        msg[node.outputValue] = thing.state[node.item];
+                        RED.util.setMessageProperty(msg,node.outputValue,thing.state[node.item],true);
                         break;
                 }
             } else {
-                var value = "";
                 switch (node.outputType) {
                     case 'flow':
-                        value = node.context().flow.get(node.outputValue);
+                        oVal = {};
+                        oVal[oProp[0]] = node.context().flow.get(oProp[0]);
+                        oVal = RED.util.getObjectProperty(oVal,node.outputValue);
                         break;
                     case 'global':
-                        value = node.context().global.get(node.outputValue);
+                        oVal = {};
+                        oVal[oProp[0]] = node.context().global.get(oProp[0]);
+                        oVal = RED.util.getObjectProperty(oVal,node.outputValue);
                         break;
                     case 'msg':
-                        value = RED.util.getMessageProperty(msg,node.outputValue);
+                        oVal = RED.util.getMessageProperty(msg,node.outputValue);
                         break;
                 }
-                thing.updateState(msg,node.item,value,'set_value');
+                thing.updateState(msg,node.item,oVal,'set_value');
                 thing.showState();
             }
 

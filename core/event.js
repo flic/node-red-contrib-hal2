@@ -25,8 +25,7 @@ module.exports = function(RED) {
         var nodeContext = this.context();
         var contextStore = this.eventHandler.contextStore;
 
-        var eventTimestamp = nodeContext.get('eventTimestamp',contextStore);
-        if (typeof eventTimestamp === 'undefined') { eventTimestamp = {}; }
+        var eventTimestamp = nodeContext.get('eventTimestamp',contextStore) || {};
 
         var eventDelay = {};
         var rateLimited = 0;
