@@ -7,9 +7,10 @@ module.exports = function(RED) {
         this.name = config.name;
         this.commandset = config.commandset;
         this.ratelimit = Number(config.ratelimit);
+        this.passthru = config.passthru || false;
         var node = this;
 
-        node.on('input', function(msg) {
+        node.on('input', function(msg,send,done) {
             var command = {};
             var queue = [];
 
@@ -50,7 +51,10 @@ module.exports = function(RED) {
                     queue.push(command);
                 }
             }
-            common.queueSend(node,queue);
+            common.queueSend(node,queue,null,function(){
+                if (node.passthru) { send(msg); }
+                done();
+            });
         });
     }
     RED.nodes.registerType("hal2Action",hal2Action);
