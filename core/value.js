@@ -45,7 +45,8 @@ module.exports = function(RED) {
                 switch (node.outputType) {
                     case 'flow':
                         if (oProp.length > 1) {
-                            oVal = node.context().flow.get(oProp[0]) || {};
+                            oVal = {};
+                            oVal[oProp[0]] = node.context().flow.get(oProp[0]) || {};
                             RED.util.setObjectProperty(oVal, node.outputValue, thing.state[node.item], true);
                             oVal = RED.util.getObjectProperty(oVal,oProp[0]);
                         } else {
@@ -55,7 +56,8 @@ module.exports = function(RED) {
                         break;
                     case 'global':
                         if (oProp.length > 1) {
-                            oVal = node.context().global.get(oProp[0]) || {};
+                            oVal = {};
+                            oVal[oProp[0]] = node.context().global.get(oProp[0]) || {};
                             RED.util.setObjectProperty(oVal, node.outputValue, thing.state[node.item], true);
                             oVal = RED.util.getObjectProperty(oVal,oProp[0]);
                         } else {
