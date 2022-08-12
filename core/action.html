@@ -19,8 +19,10 @@
                 required: true
             },
             name:       {},
-            commandset:  {},
-            ratelimit: { value: 0}
+            commandset: {},
+            ratelimit:  { value: 0 },
+            passthru:   { value: false },
+            outputs:    { value: 0 } //Store if outputs are enabled
         },
         inputs:1,
         outputs:0,
@@ -380,6 +382,12 @@
                 }
                 node.commandset.push(b);
             });
+
+            if ($("#node-input-passthru").is(":checked")) {
+                node.outputs = 1;
+            } else {
+                node.outputs = 0;
+            }
         }
     });
 </script>
@@ -399,7 +407,10 @@
     <div class="form-row">
         <i class="fa fa-pause-circle-o"></i> Wait <input type="number" value="0" id="node-input-ratelimit" style="display: inline-block; width: 70px; vertical-align: middle;"> ms between messages.
     </div>
-
+    <div class="form-row">
+        <input type="checkbox" id="node-input-passthru" style="display: inline-block; width: auto; vertical-align: top;">
+        <label for="node-input-passthru" style="width:165px">Pass-through msg</label>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Action">
