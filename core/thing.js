@@ -170,11 +170,11 @@ module.exports = function(RED) {
                     }
                     try {
                         node.hbTimestamp = new Date(timestamp).getTime();
+                        nodeContext.set("hbTimestamp",node.hbTimestamp,node.thingType.contextStore);
+                        checkTimestamp();
                     } catch (error) {
                        node.error('Error interpreting timestamp: '+error.message);
                     }  
-                    nodeContext.set("hbTimestamp",node.hbTimestamp,node.thingType.contextStore);
-                    checkTimestamp();
                     continue;
                 }                
 
