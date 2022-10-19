@@ -117,7 +117,11 @@
                     var rowItemNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
-                    var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowCommand = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container);
+                    var rowOnChange = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
 
                     //Add labels
                     var labelCategory = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-folder"})
@@ -141,6 +145,9 @@
                     var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
                         .appendTo(rowCommand)
                         .append(' Cmnd')
+                    var labelOnChange = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-check"})
+                        .appendTo(rowOnChange)
+                        .append(' State')
 
                     var categoryField = $('<select/>',{class:"node-input-command-category",style:"width:calc(100% - 110px)"})
                         .appendTo(rowCategory)
@@ -159,6 +166,11 @@
                         .appendTo(rowItem);
                     var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"})
                         .appendTo(rowItemNotes);
+                    var onChangeField = $('<input/>',{style:"width:20px",class:"node-input-onchange-value",type:"checkbox"})
+                        .appendTo(rowOnChange)
+                    $('<label/>')
+                        .appendTo(rowOnChange)
+                        .append(' Only send command if it differs from state')
 
                     thingsField.change(function() {
                         var thing;
@@ -192,6 +204,7 @@
                             case 'hal2Group':
                                 rowNotes.hide();
                                 rowItemNotes.hide();
+                                rowOnChange.hide();
                                 itemsField.append($("<option></option>")
                                     .val(thing.id)
                                     .text(thing.name));
@@ -200,6 +213,7 @@
                             case 'dynamic':
                                 rowNotes.hide();
                                 rowItemNotes.hide();
+                                rowOnChange.hide();
                                 //Add items
                                 for (let d in thing.items) {
                                     if (isCommandItem(thing.items[d])) {
@@ -247,9 +261,16 @@
                         var item = itemsField.val();
                         for (let d in thingType.items) {
                             if (thingType.items[d].id == item) {
+                                //Show rowItemNotes if item have notes
                                 if (thingType.items[d].notes) {
                                     rowItemNotes.show();
                                     itemNotesField.val(thingType.items[d].notes);
+                                }
+                                //Show rowOnChange if item supports status
+                                if (isStatusItem(thingType.items[d])) {
+                                    rowOnChange.show();
+                                } else {
+                                    rowOnChange.hide();
                                 }
                                 break;
                             }
@@ -314,7 +335,7 @@
                         }                      
                     });
 
-                    //Add command value field
+                    // Add command field
                     var commandField = $('<input/>',{class:"node-input-command-value",type:"text"})
                         .appendTo(rowCommand)
                         .typedInput({
@@ -335,6 +356,8 @@
                         categoryField.val(command.category);
                         commandField.typedInput('value',command.value);
                         commandField.typedInput('type',command.type);
+                        onChangeField.prop('checked',command.onchange);
+
                     } else {
                         commandField.typedInput('value','payload');
                     }
@@ -379,6 +402,7 @@
                     item:command.find(".node-input-command-item option:selected").val(),
                     value:command.find(".node-input-command-value").typedInput('value'),
                     type:command.find(".node-input-command-value").typedInput('type'),
+                    onchange:command.find(".node-input-onchange-value").prop('checked'),
                 }
                 node.commandset.push(b);
             });
