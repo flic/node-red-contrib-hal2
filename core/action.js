@@ -68,9 +68,17 @@ module.exports = function(RED) {
                     }
                 }
             }
-            var qLength = queue.length;
+            var numCommands = queue.length;
             common.queueSend(node,queue,null,function(){
-                node.status({fill:"green",shape:"dot",text:qLength + "/" + node.commandset.length});
+                var color;
+                if (numCommands == 0) {
+                    color = "gray";
+                } else if (numCommands == node.commandset.length) {
+                    color = "green";
+                } else {
+                    color = "yellow";
+                }
+                node.status({fill:color,shape:"dot",text:numCommands + "/" + node.commandset.length});
                 if (node.passthru) { send(msg); }
                 done();
             });
