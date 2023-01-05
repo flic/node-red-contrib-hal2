@@ -54,7 +54,7 @@ function halGetThings(RED,filter) {
                 if (thingType.thingStatus) {
                     filteredThingsList.push(completeThingsList[t]);
                 }
-             } else if (t.name) {
+             } else if (completeThingsList[t].name) {
                 filteredThingsList.push(completeThingsList[t]);
              }
         } catch (error) {
