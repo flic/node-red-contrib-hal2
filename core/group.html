@@ -1,3 +1,38 @@
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
+
+<script type="text/x-red" data-template-name="hal2Group">
+    <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+            <ol id="node-input-group-container"</ol>
+    </div>
+    <div class="form-row">
+        <i class="fa fa-pause-circle-o"></i> Wait <input type="number" value="0" id="node-input-ratelimit" style="display: inline-block; width: 70px; vertical-align: middle;"> ms between group members when sending messages.
+    </div>
+    <div class="form-row">
+        <label for="node-input-input"><i class="fa fa-sign-in"></i> Use input</label>
+        <input type="checkbox" id="node-input-input" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-row">
+        <label for="node-input-output"><i class="fa fa-sign-out"></i> Use output</label>
+        <input type="checkbox" id="node-input-output" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Group">
+    <p>The Group node allows you to group multiple <i>Items</i> together, for use in <i>Event</i> or <i>Action</i> nodes or directly if input and/or output is enabled.</p>
+    <li><strong>Name</strong>: Node name.</li> 
+    <li><strong>Input</strong>: Send <code>msg.payload</code> as a command to all <i>Items</i> in the group.</li>
+    <li><strong>Output</strong>: Outputs events from any <i>Items</i> in the group.</li>
+    <li><string>Wait between messages</strong> allows you to rate limit the commands.</li>
+</script>
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2Group',{
         category: 'Home Automation',
@@ -36,39 +71,13 @@
         paletteLabel: "group",
         oneditprepare: function () {
             //get all thing nodes and sort them alphabetically
-            const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-            thingsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });           
-
+            var thingsList = halGetThings(RED);
             //No thing nodes have been created
             if(thingsList.length===0){
                 $("<li>No things found</li>").appendTo("#node-input-group-container");
                 return;
             }
-
-            //get all Thingtypes and sort them alphabetically
-            var thingTypeId = [];
-            for (let i in thingsList) {
-                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                    thingTypeId.push(thingsList[i].thingType);
-                }
-            }
-            var thingTypeList = [];
-            for (let i in thingTypeId) {
-                var thingType = RED.nodes.node(thingTypeId[i]);
-                if (thingType.thingStatus) {
-                    thingTypeList.push(thingType);
-                }
-            }
-            thingTypeList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });            
-
+            var thingTypeList = halGetThingTypes(RED,thingsList);
 
             $("#node-input-group-container").editableList({
                 addItem: function(container,i,opt) {
@@ -254,37 +263,4 @@
             }
         }
     });
-</script>
-
-<script type="text/x-red" data-template-name="hal2Group">
-    <div class="form-row">
-        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
-    </div>
-    <div class="form-row">
-        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
-    </div>
-    <div class="form-row">
-            <ol id="node-input-group-container"</ol>
-    </div>
-    <div class="form-row">
-        <i class="fa fa-pause-circle-o"></i> Wait <input type="number" value="0" id="node-input-ratelimit" style="display: inline-block; width: 70px; vertical-align: middle;"> ms between group members when sending messages.
-    </div>
-    <div class="form-row">
-        <label for="node-input-input"><i class="fa fa-sign-in"></i> Use input</label>
-        <input type="checkbox" id="node-input-input" style="display: inline-block; width: auto; vertical-align: top;">
-    </div>
-    <div class="form-row">
-        <label for="node-input-output"><i class="fa fa-sign-out"></i> Use output</label>
-        <input type="checkbox" id="node-input-output" style="display: inline-block; width: auto; vertical-align: top;">
-    </div>
-</script>
-
-<script type="text/x-red" data-help-name="hal2Group">
-    <p>The Group node allows you to group multiple <i>Items</i> together, for use in <i>Event</i> or <i>Action</i> nodes or directly if input and/or output is enabled.</p>
-    <li><strong>Name</strong>: Node name.</li> 
-    <li><strong>Input</strong>: Send <code>msg.payload</code> as a command to all <i>Items</i> in the group.</li>
-    <li><strong>Output</strong>: Outputs events from any <i>Items</i> in the group.</li>
-    <li><string>Wait between messages</strong> allows you to rate limit the commands.</li>
 </script>

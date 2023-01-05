@@ -1,11 +1,134 @@
-<script type="text/javascript">
-    function isStatusItem(item) {
-        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id == '1'));
-    }
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
 
-    function isCommandItem(item) {
-        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
-    }
+<script type="text/x-red" data-template-name="hal2Event">
+    <div class="form-row" id="div-error" hidden>
+        <p>No items found. Start by creating some Things.</p>
+    </div>
+
+    <div class="form-row" id="div-main">
+        <div class="form-row">
+            <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 127px)" placeholder="Event handler">
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Category</label>
+            <select id="node-input-typeSel" style="width:calc(100% - 170px)">
+                <option value='hal2Thing'>Thing</option>
+                <option value='hal2Group'>Group</option>
+                <option value='hal2ThingType'>Type</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-thing" id="label-node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
+            <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
+            <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
+        </div>
+
+        <div class="form-row" id="thing-filter-div" hidden>
+            <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
+            <select id="thing-filter" style="width:calc(100% - 170px)"></select>
+        </div>
+
+        <div class="form-row" id="row-notes" style="width:100%" hidden>
+            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="thing-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
+        </div>
+
+        <div class="form-row" id="div-item">
+            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
+            <select id="node-input-item" style="width:calc(100% - 170px)"></select>
+        </div>
+
+        <div class="form-row" id="row-item-notes" style="width:100%" hidden>
+            <label for="item-notes"><i class="fa fa-file"></i> Notes</label>
+            <textarea id="item-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
+            <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
+            <input type="text" id="node-input-compareValue" style="width:calc(100% - 219px)>
+            <input type="hidden" id="node-input-compareType">
+        </div>
+
+        <div class="form-row">
+            <label></label>
+            <select id="node-input-change" style="width:calc(100% - 170px)"></select>
+        </div>
+
+        <div class="form-row">
+            <label></label>
+            <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"> Rate limit
+        </div>
+        <div class="form-row">
+            <label></label>
+            <input type="checkbox" id="node-input-delay" style="width: 23px; margin:0"><label for="node-input-delay" style="margin:0;width: auto;"> Delay event</label>
+        </div>
+
+        <div id="ratelimit-details" hidden>
+            <div class="form-row">
+                <label for="node-input-rateUnits"><i class="fa fa-clock-o"></i> Rate limit</label>
+                1 event per <input type="text" id="node-input-rate" placeholder="1" style="width:53px" value=1>
+                <select id="node-input-rateUnits" style="width:calc(100% - 320px)">
+                  <option value="second">Second(s)</option>
+                  <option value="minute">Minute(s)</option>
+                  <option value="hour" selected>Hour(s)</option>
+                  <option value="day">Day(s)</option>
+                </select>
+            </div>
+            <div class="form-row" id="rate-type" hidden>
+                <label></label>
+                <select id="node-input-ratetype" style="width:calc(100% - 170px)">
+                    <option value="all" selected>All events</option>
+                    <option value="item">For each item</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="delay-details" hidden>
+            <div class="form-row">
+                <label for="node-input-delayValue"><i class="fa fa-pause-circle-o"></i> Delay event</label>
+                <input type="text" id="node-input-delayValue" placeholder="5" style="width:70px" value=5> second(s)
+            </div>
+            <div class="form-row">
+                <label></label>
+                <input type="checkbox" id="node-input-delayExtend" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Extend delay if new event arrives</label>
+            </div>
+            <div class="form-row">
+                <label></label>
+                <input type="checkbox" id="node-input-delayReset" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Reset delay if trigger no longer true</label>
+            </div>
+        </div>
+
+
+        <div class="form-row">
+            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
+            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
+            <input type="hidden" id="node-input-outputType">
+        </div>
+
+        <div class="form-row">
+            <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
+            <input type="text" id="node-input-topic" placeholder="Topic" style="width:calc(100% - 170px)">
+        </div>        
+
+        <div class="form-row">
+            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+            <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+        </div>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Event">
+    <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
+    <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
+    <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger.</li>
+    <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
+    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>Topic</strong>: <code>msg.topic</code>, leave blank to get topic from <i>Item</i>.</li>
+    <li><strong>Name</strong>: Node name.</li>    
 </script>
 
 <script type="text/javascript">
@@ -46,19 +169,7 @@
         },
         paletteLabel: "event",
         oneditprepare: async function () {
-            var operators = [
-                { v: "always", t: "always"},               
-                { v: "eq", t: "==" },
-                { v: "neq", t: "!=" },
-                { v: "lt", t: "<" },
-                { v: "lte", t: "<=" },
-                { v: "gt", t: ">" },
-                { v: "gte", t: ">=" },
-                { v: "cont", t: "contains" },
-                { v: "regex", t: "regex" },
-                { v: "true", t: "is true" },
-                { v: "false", t: "is false" }
-            ];
+            var operators = halOperators([{ v: "always", t: "always"}]);
 
             // Check if Thing has been deleted
             if (this.thing != 0) {
@@ -80,63 +191,14 @@
             var savedTypeSel = this.typeSel;
 
             //get all things and sort them alphabetically
-            const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-            var thingsList = [];
-            for (let t in completeThingsList) {
-                try {
-                    let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                    if (thingType.thingStatus) {
-                        thingsList.push(completeThingsList[t]);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }
-            }
+            var thingsList = halGetThings(RED,'status');
             if (thingsList.length == 0) {
                 $("#div-main").hide();
                 $("#div-error").show();
                 return;
             }  
-            thingsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-
-            //get all groups and sort them alphabetically
-            const groupsList = RED.nodes.filterNodes({type: "hal2Group"});
-            try {
-                groupsList.sort(function(a, b) {
-                    var textA = a.name.toUpperCase();
-                    var textB = b.name.toUpperCase();
-                    return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-                });
-            } catch (error) {
-                console.log('Error: '+error.message);
-            }
-            //get all Thingtypes and sort them alphabetically
-            var thingTypeId = [];
-            for (let i in thingsList) {
-                try {
-                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                        thingTypeId.push(thingsList[i].thingType);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }
-            }
-            var thingTypeList = [];
-            for (let i in thingTypeId) {
-                var thingType = RED.nodes.node(thingTypeId[i]);
-                if ((typeof thingType !== 'undefined') && (thingType.thingStatus)) {
-                    thingTypeList.push(thingType);
-                }
-            }
-            thingTypeList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
+            var groupsList = halGetGroups(RED);
+            var thingTypeList = halGetThingTypes(RED,thingsList);
 
             $('#node-input-rate').spinner({
                 min:1,
@@ -253,7 +315,7 @@
                     }
                     //Add items
                     for (let d in thingType.items) {
-                        if (isStatusItem(thingType.items[d])) {
+                        if (halStatusItem(thingType.items[d])) {
                             $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
                         }
                     }
@@ -428,135 +490,4 @@
             this.compareValue =  $('#node-input-compareValue').typedInput('value');
         }
     });
-</script>
-
-<script type="text/x-red" data-template-name="hal2Event">
-    <div class="form-row" id="div-error" hidden>
-        <p>No items found. Start by creating some Things.</p>
-    </div>
-
-    <div class="form-row" id="div-main">
-        <div class="form-row">
-            <label for="node-input-eventHandler"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 127px)" placeholder="Event handler">
-        </div>
-
-        <div class="form-row">
-            <label for="node-input-typeSel"><i class="fa fa-folder"></i> Category</label>
-            <select id="node-input-typeSel" style="width:calc(100% - 170px)">
-                <option value='hal2Thing'>Thing</option>
-                <option value='hal2Group'>Group</option>
-                <option value='hal2ThingType'>Type</option>
-            </select>
-        </div>
-
-        <div class="form-row">
-            <label for="node-input-thing" id="label-node-input-thing"><i class="fa fa-microchip"></i> Thing</label>
-            <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
-            <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
-        </div>
-
-        <div class="form-row" id="thing-filter-div" hidden>
-            <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
-            <select id="thing-filter" style="width:calc(100% - 170px)"></select>
-        </div>
-
-        <div class="form-row" id="row-notes" style="width:100%" hidden>
-            <label for="thing-notes"><i class="fa fa-file"></i> Notes</label>
-            <textarea id="thing-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
-        </div>
-
-        <div class="form-row" id="div-item">
-            <label for="node-input-item"><i class="fa fa-sitemap"></i> Item</label>
-            <select id="node-input-item" style="width:calc(100% - 170px)"></select>
-        </div>
-
-        <div class="form-row" id="row-item-notes" style="width:100%" hidden>
-            <label for="item-notes"><i class="fa fa-file"></i> Notes</label>
-            <textarea id="item-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
-        </div>
-
-        <div class="form-row">
-            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
-            <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
-            <input type="text" id="node-input-compareValue" style="width:calc(100% - 219px)>
-            <input type="hidden" id="node-input-compareType">
-        </div>
-
-        <div class="form-row">
-            <label></label>
-            <select id="node-input-change" style="width:calc(100% - 170px)"></select>
-        </div>
-
-        <div class="form-row">
-            <label></label>
-            <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"> Rate limit
-        </div>
-        <div class="form-row">
-            <label></label>
-            <input type="checkbox" id="node-input-delay" style="width: 23px; margin:0"><label for="node-input-delay" style="margin:0;width: auto;"> Delay event</label>
-        </div>
-
-        <div id="ratelimit-details" hidden>
-            <div class="form-row">
-                <label for="node-input-rateUnits"><i class="fa fa-clock-o"></i> Rate limit</label>
-                1 event per <input type="text" id="node-input-rate" placeholder="1" style="width:53px" value=1>
-                <select id="node-input-rateUnits" style="width:calc(100% - 320px)">
-                  <option value="second">Second(s)</option>
-                  <option value="minute">Minute(s)</option>
-                  <option value="hour" selected>Hour(s)</option>
-                  <option value="day">Day(s)</option>
-                </select>
-            </div>
-            <div class="form-row" id="rate-type" hidden>
-                <label></label>
-                <select id="node-input-ratetype" style="width:calc(100% - 170px)">
-                    <option value="all" selected>All events</option>
-                    <option value="item">For each item</option>
-                </select>
-            </div>
-        </div>
-
-        <div id="delay-details" hidden>
-            <div class="form-row">
-                <label for="node-input-delayValue"><i class="fa fa-pause-circle-o"></i> Delay event</label>
-                <input type="text" id="node-input-delayValue" placeholder="5" style="width:70px" value=5> second(s)
-            </div>
-            <div class="form-row">
-                <label></label>
-                <input type="checkbox" id="node-input-delayExtend" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Extend delay if new event arrives</label>
-            </div>
-            <div class="form-row">
-                <label></label>
-                <input type="checkbox" id="node-input-delayReset" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Reset delay if trigger no longer true</label>
-            </div>
-        </div>
-
-
-        <div class="form-row">
-            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
-            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
-            <input type="hidden" id="node-input-outputType">
-        </div>
-
-        <div class="form-row">
-            <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
-            <input type="text" id="node-input-topic" placeholder="Topic" style="width:calc(100% - 170px)">
-        </div>        
-
-        <div class="form-row">
-            <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
-            <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
-        </div>
-    </div>
-</script>
-
-<script type="text/x-red" data-help-name="hal2Event">
-    <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
-    <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
-    <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger.</li>
-    <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
-    <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
-    <li><strong>Topic</strong>: <code>msg.topic</code>, leave blank to get topic from <i>Item</i>.</li>
-    <li><strong>Name</strong>: Node name.</li>    
 </script>

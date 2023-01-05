@@ -1,3 +1,46 @@
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
+
+<script type="text/x-red" data-template-name="hal2Thing">
+    <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-thingType" style="width:95px; padding-right:10px;"><i class="fa fa-bookmark"></i> Type</label>
+        <input type="text" id="node-input-thingType" style="width:calc(100% - 125px)" placeholder="Type">
+    </div>
+    <div class="form-row">
+        <label for="node-input-topicFilter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Topic filter</label>
+        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:calc(100% - 170px)">
+        <input type="hidden" id="node-input-topicFilterType">
+    </div>
+    <div class="form-row">
+        <label for="node-input-topicPrefix" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
+        <input type="text" id="node-input-topicPrefix" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
+        <textarea id="node-input-notes" style="width:calc(100% - 170px)"></textarea>
+    </div>
+    <div class="form-row" id="attributes"  style="width:100%" hidden>
+        <label><i class="fa fa-tags"></i> Attributes</label>
+        <ol id="attributes-list"></ol>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Thing">
+    <p>The Thing node is a virtual representation of a physical device, like a switch or a sensor. The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor<i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
+    <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
+    <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
+    <li><strong>Topic</strong>: Used for filtering and creating item specific command topics. Will become <code>msg.topic</code> for outgoing messages.</li>
+    <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Action</i> and <i>Event</i> nodes.</li>    
+    <li><strong>Notes</strong>: Thing specific notes.</li>    
+</script>
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2Thing', {
         category: 'Home Automation',
@@ -41,14 +84,7 @@
         paletteLabel: "thing",
         oneditprepare: function () {
             var node = this;
-            //Types
-            var typeMQTT = {
-                value: "mqtt",
-                label: "MQTT Topic",
-                icon: "fa fa-tasks",
-                validate: /^(#$|(\+|[^+#]*)(\/(\+|[^+#]*))*(\/(\+|#|[^+#]*))?$)/,
-                hasValue: true
-            }
+            var typeMQTT = halTypeMQTT();
             
             //Incoming topic filter
             $('#node-input-topicFilter').typedInput({
@@ -163,45 +199,4 @@
                 })
         }
     });
-</script>
-
-<script type="text/x-red" data-template-name="hal2Thing">
-    <div class="form-row">
-        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
-    </div>
-    <div class="form-row">
-        <label for="node-input-thingType" style="width:95px; padding-right:10px;"><i class="fa fa-bookmark"></i> Type</label>
-        <input type="text" id="node-input-thingType" style="width:calc(100% - 125px)" placeholder="Type">
-    </div>
-    <div class="form-row">
-        <label for="node-input-topicFilter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Topic filter</label>
-        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:calc(100% - 170px)">
-        <input type="hidden" id="node-input-topicFilterType">
-    </div>
-    <div class="form-row">
-        <label for="node-input-topicPrefix" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
-        <input type="text" id="node-input-topicPrefix" style="width:calc(100% - 170px)">
-    </div>
-    <div class="form-row">
-        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
-    </div>
-    <div class="form-row">
-        <label for="node-input-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
-        <textarea id="node-input-notes" style="width:calc(100% - 170px)"></textarea>
-    </div>
-    <div class="form-row" id="attributes"  style="width:100%" hidden>
-        <label><i class="fa fa-tags"></i> Attributes</label>
-        <ol id="attributes-list"></ol>
-    </div>
-</script>
-
-<script type="text/x-red" data-help-name="hal2Thing">
-    <p>The Thing node is a virtual representation of a physical device, like a switch or a sensor. The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor<i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
-    <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
-    <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
-    <li><strong>Topic</strong>: Used for filtering and creating item specific command topics. Will become <code>msg.topic</code> for outgoing messages.</li>
-    <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Action</i> and <i>Event</i> nodes.</li>    
-    <li><strong>Notes</strong>: Thing specific notes.</li>    
 </script>

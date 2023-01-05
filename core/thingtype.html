@@ -1,9 +1,149 @@
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
+
+<script type="text/html" data-template-name="hal2ThingType">
+    <!-- Tabs -->
+    <div class="form-row tabs-row">
+        <ul style="min-width: 600px; margin-bottom: 20px;" id="tabs"></ul>
+    </div>
+    <div id="tabs-content" style="min-height: calc(100% - 95px);">
+        <!-- Main tab -->
+        <div id="tab-main" style="display:none">
+            <div class="form-row">
+                <label for="node-config-input-name" style="width: 125px; padding-left: 10px;"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-config-input-name" placeholder="Name" style="width: calc(100% - 185px - 55px)">
+                <!-- RED.library needs #node-input-name and an editor to function -->
+                <input type="hidden" id="node-input-name">
+                <div id="hidden-editor-not-used" hidden></div>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-contextStore" style="width: 125px; padding-left: 10px;"><i class="fa fa-database"></i> Context store</label>
+                <select id="node-config-input-contextStore" style="width: calc(100% - 185px)"></select>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-nodestatus" style="width: 125px; padding-left: 10px;"><i class="fa fa-quote-right"></i> Show state</label>
+                <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0%" style="width: calc(100% - 185px)">
+                <input type="hidden" id="node-config-input-nodestatusType">
+                <div id="statusFn-editor" style="padding-left: 140px; padding-bottom: 3px; height: 150px; min-height:150px;width: calc(100% - 185px);" hidden></div>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-filterFunction" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Filter function</label>
+                <select id="node-config-input-filterFunction" style="width: calc(100% - 185px)"></select>
+                <div class="form-tips" id="filterFunctionNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);" hidden><b>Note:</b> Filter function should return true or false.</div>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-hbCheck" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Check alive</label>
+                <input type="checkbox" id="node-config-input-hbCheck" style="display: inline-block; width: auto; vertical-align: top">
+            </div>
+            <div class="form-row" id="check-heartbeat" hidden>
+                <div class="form-row">
+                    <label for="node-config-input-hbType" style="width: 125px; padding-left: 10px;"> Type</label>
+                    <select id="node-config-input-hbType"  style="width: calc(100% - 185px)">
+                        <option value="ttl">Heartbeat</option>
+                        <option value="lwt" selected>Last Will</option>
+                        <option value="timestamp">Timestamp</option>
+                    </select>
+                </div>
+                <div class="form-row" id="heartbeat-ttl">
+                    <div class="form-row">
+                        <label for="node-config-input-hbTTL" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Warn after (s)</label>
+                        <input type="number" id="node-config-input-hbTTL" style="width: calc(100% - 185px)" min="1" value="3600">
+                    </div>                    
+                </div>
+                <div class="form-row" id="heartbeat-filter" hidden>
+                    <label for="node-config-input-hbFilterVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Topic filter</label>
+                    <input type="text" id="node-config-input-hbFilterVal" style="width: calc(100% - 185px)">
+                    <input type="hidden" id="node-config-input-hbFilterType">
+                </div>
+                <div class="form-row" id="heartbeat-lwt" hidden>
+                    <div class="form-row">
+                        <label for="node-config-input-hbLWT" style="width: 125px; padding-left: 10px;"><i class="fa fa-sign-in"></i> Ingress</label>
+                        <select id="node-config-input-hbLWT" style="width: calc(100% - 185px)"></select>
+                        <div class="form-tips" id="LWTNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);"><b>Note:</b> Ingress function must return true or false.</div>
+                    </div>   
+                </div>
+                <div class="form-row" id="heartbeat-timestamp" hidden>
+                    <div class="form-row">
+                        <label for="node-config-input-hbPropVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-ellipsis-h"></i> Property</label>
+                        <input type="text" id="node-config-input-hbPropVal" style="width: calc(100% - 185px)" value="payload">
+                        <input type="hidden" id="node-config-input-hbPropType">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-tips" id="TimestampNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);"><b>Note:</b> Timestamp must be in a format recognizeable by the JavaScript Date function. Epoch time recommended.</div>
+                    </div>   
+                </div>
+
+            </div>
+            <div class="form-row">
+                <ol id="node-config-thingtype-list-attributes"></ol>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-thingtype-list-items"></ol>
+            </div>
+        </div>
+        <!-- Ingress tab -->
+        <div id="tab-ingress" style="display:none">
+            <div class="form-row">
+                <ol id="node-config-ingress-list-items"></ol>
+            </div>
+            <div class="form-row">
+                <button id="tab-ingress-copy-show"><i class="fa fa-copy"></i></button>
+            </div>
+            <div class="form-row" id="tab-ingress-copy" hidden>
+                <div class="form-row">
+                    <label for="tab-ingress-copy-thing"><i class="fa fa-gears"></i> Type</label>
+                    <select id="tab-ingress-copy-thing" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <label for="tab-ingress-copy-ingress"><i class="fa fa-sign-in"></i> Function</label>
+                    <select id="tab-ingress-copy-ingress" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <button id="tab-ingress-copy-button"><i class="fa fa-copy"></i> Import function</button>
+                </div>
+            </div>
+        </div>
+        <!-- Egress tab -->
+        <div id="tab-egress" style="display:none">
+            <div class="form-row">
+                <ol id="node-config-egress-list-items"></ol>
+            </div>
+            <div class="form-row">
+                <button id="tab-egress-copy-show"><i class="fa fa-copy"></i></button>
+            </div>
+            <div class="form-row" id="tab-egress-copy" hidden>
+                <div class="form-row">
+                    <label for="tab-egress-copy-thing"><i class="fa fa-gears"></i> Type</label>
+                    <select id="tab-egress-copy-thing" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <label for="tab-egress-copy-egress"><i class="fa fa-sign-out"></i> Function</label>
+                    <select id="tab-egress-copy-egress" style="width:70%"></select>
+                </div>
+                <div class="form-row">
+                    <button id="tab-egress-copy-button"><i class="fa fa-copy"></i> Import function</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2ThingType">
+    <p>The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor</i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
+    <li><strong>Name</strong>: A describing name for the specific device type. For example, 'Shelly Dimmer'.</li>
+    <li><strong>Context store</strong>: The Node-RED context store used to store device values. Please see <a href="https://nodered.org/docs/user-guide/context" target="_blank">Node-RED documentation</a> for more information about different types of context stores. Use file-based storage for persistent context.</li>
+    <li><strong>Show state</strong>: A string defining how to show information about state on the node in the Node-RED GUI. Use <code>%Item_name%</code> (case sensitive) to show a specific item value. Leave blank if not wanted.</li>
+    <li><strong>Filter function</strong>: It's possible to use an ingress function to filter all incoming messages. If the function returns false the message is dropped.</li>
+    <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific <i>Alive</i> Item is automatically created. Possible values: true/false.</li>    
+    <li><strong>Attributes</strong>: Thing specific attributes. Define the attribute name and if it's mandatory or not, and define attribute values in the Thing configuration. Attributes can be used in ingress or egress functions as <code>attribute.name</code> or <code>attribute["name"]</code>.</li>
+    <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>
+    <li><strong>Items <i>Loopback Command</i></strong>: If the <i>item type</i> is set to Loopback Command no output msg will be sent. The command will instead be routed to the node input, basically a virtual wire between output and input. Standard ingress and egress rules apply, including topic filters and the filter function.</li>
+    <li><strong>Item <i>Topic filter</i></strong>: <i>Topic filter</i> is used to filter incoming messages. If <i>Topic filter</i> is of type string and starts with '.' the dot is replaced by the topic value configured for the <i>Thing</i>. If it starts with '/' the topic value is prepended.</li>
+    <li><strong>Item <i>Topic</i></strong>: <i>Topic</i> is added to outgoing messages as <code>msg.topic</code>. It's possible to modify the value of <code>msg.topic</code> in the egress function. Topics starting with '.' and '/' works just the same as it does in <i>Topic filter</i>. If <i>Topic</i> is left empty the topic configured for the <i>Thing</i> is used unmodified.</li>
+    <li><strong>Output</strong>: It's possible to select which output to use for a specific command. Select which output to use.</li>
+</script>
+
 <script type="text/javascript">
     var editors = {};
-
-    function createId () {
-        return (1+Math.random()*4294967295).toString(16);
-    }
 
     function getAttributes() {
         let attributes = [];
@@ -213,7 +353,7 @@
             //Types
             var stateType = {
                 value: "state",
-                label: "state.",
+                label: "state",
                 hasValue: true
             };
             var percentType = {
@@ -237,78 +377,49 @@
                 hasValue: true
             }
             var StrStartType = {
-            value: "StrStart",
-            label: "starts with",
-            hasValue: true
+                value: "StrStart",
+                label: "starts with",
+                hasValue: true
             }            
             var StrEndType = {
-            value: "StrEnd",
-            label: "ends with",
-            hasValue: true
+                value: "StrEnd",
+                label: "ends with",
+                hasValue: true
             }
             var StrContainsType = {
-            value: "StrContain",
-            label: "contains",
-            hasValue: true
+                value: "StrContain",
+                label: "contains",
+                hasValue: true
             }
-
 
             var defaultIngressFunctions = {
                 0 : {
                     name: "Pass-through",
-                    id: createId(),
+                    id: halCreateId(),
                     fn: "// msg & attribute objects are\n// passed to function\n\nreturn msg.payload;"
                 },
                 1 : {
                     name: "Convert to Number",
-                    id: createId(),
+                    id: halCreateId(),
                     fn: "// msg & attribute objects are\n// passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
                 },                
                 2 : {
                     name: "Convert to Boolean",
-                    id: createId(),
+                    id: halCreateId(),
                     fn: "// msg & attribute objects are\n// passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
                 }, 
             }
             var defaultEgressFunctions = {
                 0 : {
                     name: "Pass-through",
-                    id: createId(),
+                    id: halCreateId(),
                     fn: "// msg & attribute objects are\n// passed to function\n\nreturn msg;"
                 }
             }
         var lastTab = "";
 
-        // Get thingTypes
-        const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-        var thingsList = [];
-        for (let t in completeThingsList) {
-            let thingType = RED.nodes.node(completeThingsList[t].thingType);
-            if ((typeof thingType !== 'undefined') && (thingType.thingStatus)) {
-                thingsList.push(completeThingsList[t]);
-            }
-        }
-        if(thingsList.length>0){
-            //get all Thingtypes and sort them alphabetically
-            var thingTypeId = [];
-            for (let i in thingsList) {
-                if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                    thingTypeId.push(thingsList[i].thingType);
-                }
-            }
-            var thingTypeList = [];
-            for (let i in thingTypeId) {
-                var thingType = RED.nodes.node(thingTypeId[i]);
-                if (thingType.thingStatus) {
-                    thingTypeList.push(thingType);
-                }
-            }
-            thingTypeList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-        }
+        var thingsList = halGetThings(RED);
+        var thingTypeList = halGetThingTypes(RED,thingsList);
 
         // Create tabs
             var tabs = RED.tabs.create({
@@ -522,12 +633,12 @@
                         .prop('required',true);
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
-                        .val(createId())
+                        .val(halCreateId())
                     //MQTT topic filter
                     var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
                         .appendTo(rowTopicFilter)
                         .typedInput({
-                            default:MQTTType,
+                            default:'mqtt',
                             types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
                         });
                     var outputProperty = $('<input/>',{style: "width: 60px",class:"node-config-thingtype-output-property",type:"text"})
@@ -704,7 +815,7 @@
                         .prop('required',true);
                     var idProperty = $('<input/>',{class:"node-config-thingtype-attribute-id-property",type:"hidden"})
                         .appendTo(rowName)
-                        .val(createId())
+                        .val(halCreateId())
                     var notesProperty = $('<textarea/>',{class:"node-config-thingtype-attribute-notes-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowDescription)
                         var requiredProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-attribute-required-property",type:"checkbox"})
@@ -780,7 +891,7 @@
                             .appendTo(rowName)
                         var idProperty = $('<input/>',{class:"node-config-"+fn_type+"-id-property",type:"hidden"})
                             .appendTo(rowName)
-                            .val(createId())
+                            .val(halCreateId())
 
                         //Add name+id values
                         if (Object.keys(opt).length != 0) {
@@ -1079,146 +1190,4 @@
             }
         }
     });
-</script>
-
-<script type="text/html" data-template-name="hal2ThingType">
-    <!-- Tabs -->
-    <div class="form-row tabs-row">
-        <ul style="min-width: 600px; margin-bottom: 20px;" id="tabs"></ul>
-    </div>
-    <div id="tabs-content" style="min-height: calc(100% - 95px);">
-        <!-- Main tab -->
-        <div id="tab-main" style="display:none">
-            <div class="form-row">
-                <label for="node-config-input-name" style="width: 125px; padding-left: 10px;"><i class="fa fa-tag"></i> Name</label>
-                <input type="text" id="node-config-input-name" placeholder="Name" style="width: calc(100% - 185px - 55px)">
-                <!-- RED.library needs #node-input-name and an editor to function -->
-                <input type="hidden" id="node-input-name">
-                <div id="hidden-editor-not-used" hidden></div>
-            </div>
-            <div class="form-row">
-                <label for="node-config-input-contextStore" style="width: 125px; padding-left: 10px;"><i class="fa fa-database"></i> Context store</label>
-                <select id="node-config-input-contextStore" style="width: calc(100% - 185px)"></select>
-            </div>
-            <div class="form-row">
-                <label for="node-config-input-nodestatus" style="width: 125px; padding-left: 10px;"><i class="fa fa-quote-right"></i> Show state</label>
-                <input type="text" id="node-config-input-nodestatus" placeholder="Relay0: %relay0%" style="width: calc(100% - 185px)">
-                <input type="hidden" id="node-config-input-nodestatusType">
-                <div id="statusFn-editor" style="padding-left: 140px; padding-bottom: 3px; height: 150px; min-height:150px;width: calc(100% - 185px);" hidden></div>
-            </div>
-            <div class="form-row">
-                <label for="node-config-input-filterFunction" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Filter function</label>
-                <select id="node-config-input-filterFunction" style="width: calc(100% - 185px)"></select>
-                <div class="form-tips" id="filterFunctionNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);" hidden><b>Note:</b> Filter function should return true or false.</div>
-            </div>
-            <div class="form-row">
-                <label for="node-config-input-hbCheck" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Check alive</label>
-                <input type="checkbox" id="node-config-input-hbCheck" style="display: inline-block; width: auto; vertical-align: top">
-            </div>
-            <div class="form-row" id="check-heartbeat" hidden>
-                <div class="form-row">
-                    <label for="node-config-input-hbType" style="width: 125px; padding-left: 10px;"> Type</label>
-                    <select id="node-config-input-hbType"  style="width: calc(100% - 185px)">
-                        <option value="ttl">Heartbeat</option>
-                        <option value="lwt" selected>Last Will</option>
-                        <option value="timestamp">Timestamp</option>
-                    </select>
-                </div>
-                <div class="form-row" id="heartbeat-ttl">
-                    <div class="form-row">
-                        <label for="node-config-input-hbTTL" style="width: 125px; padding-left: 10px;"><i class="fa fa-heartbeat"></i> Warn after (s)</label>
-                        <input type="number" id="node-config-input-hbTTL" style="width: calc(100% - 185px)" min="1" value="3600">
-                    </div>                    
-                </div>
-                <div class="form-row" id="heartbeat-filter" hidden>
-                    <label for="node-config-input-hbFilterVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Topic filter</label>
-                    <input type="text" id="node-config-input-hbFilterVal" style="width: calc(100% - 185px)">
-                    <input type="hidden" id="node-config-input-hbFilterType">
-                </div>
-                <div class="form-row" id="heartbeat-lwt" hidden>
-                    <div class="form-row">
-                        <label for="node-config-input-hbLWT" style="width: 125px; padding-left: 10px;"><i class="fa fa-sign-in"></i> Ingress</label>
-                        <select id="node-config-input-hbLWT" style="width: calc(100% - 185px)"></select>
-                        <div class="form-tips" id="LWTNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);"><b>Note:</b> Ingress function must return true or false.</div>
-                    </div>   
-                </div>
-                <div class="form-row" id="heartbeat-timestamp" hidden>
-                    <div class="form-row">
-                        <label for="node-config-input-hbPropVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-ellipsis-h"></i> Property</label>
-                        <input type="text" id="node-config-input-hbPropVal" style="width: calc(100% - 185px)" value="payload">
-                        <input type="hidden" id="node-config-input-hbPropType">
-                    </div>
-                    <div class="form-row">
-                        <div class="form-tips" id="TimestampNote"  style="margin-top: 10px; margin-left: 140px; width: calc(100% - 195px);"><b>Note:</b> Timestamp must be in a format recognizeable by the JavaScript Date function. Epoch time recommended.</div>
-                    </div>   
-                </div>
-
-            </div>
-            <div class="form-row">
-                <ol id="node-config-thingtype-list-attributes"></ol>
-            </div>
-            <div class="form-row">
-                <ol id="node-config-thingtype-list-items"></ol>
-            </div>
-        </div>
-        <!-- Ingress tab -->
-        <div id="tab-ingress" style="display:none">
-            <div class="form-row">
-                <ol id="node-config-ingress-list-items"></ol>
-            </div>
-            <div class="form-row">
-                <button id="tab-ingress-copy-show"><i class="fa fa-copy"></i></button>
-            </div>
-            <div class="form-row" id="tab-ingress-copy" hidden>
-                <div class="form-row">
-                    <label for="tab-ingress-copy-thing"><i class="fa fa-gears"></i> Type</label>
-                    <select id="tab-ingress-copy-thing" style="width:70%"></select>
-                </div>
-                <div class="form-row">
-                    <label for="tab-ingress-copy-ingress"><i class="fa fa-sign-in"></i> Function</label>
-                    <select id="tab-ingress-copy-ingress" style="width:70%"></select>
-                </div>
-                <div class="form-row">
-                    <button id="tab-ingress-copy-button"><i class="fa fa-copy"></i> Import function</button>
-                </div>
-            </div>
-        </div>
-        <!-- Egress tab -->
-        <div id="tab-egress" style="display:none">
-            <div class="form-row">
-                <ol id="node-config-egress-list-items"></ol>
-            </div>
-            <div class="form-row">
-                <button id="tab-egress-copy-show"><i class="fa fa-copy"></i></button>
-            </div>
-            <div class="form-row" id="tab-egress-copy" hidden>
-                <div class="form-row">
-                    <label for="tab-egress-copy-thing"><i class="fa fa-gears"></i> Type</label>
-                    <select id="tab-egress-copy-thing" style="width:70%"></select>
-                </div>
-                <div class="form-row">
-                    <label for="tab-egress-copy-egress"><i class="fa fa-sign-out"></i> Function</label>
-                    <select id="tab-egress-copy-egress" style="width:70%"></select>
-                </div>
-                <div class="form-row">
-                    <button id="tab-egress-copy-button"><i class="fa fa-copy"></i> Import function</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</script>
-
-<script type="text/x-red" data-help-name="hal2ThingType">
-    <p>The Thing <i>type</i> defines the functions of the device as a list of <i>items</i> where each item corresponds to a specific measurement or command. For example: a <i>sensor</i> Thing Type might have a temperature-item and a humidity-item. A <i>switch</i> Thing Type might have a relay0 and a relay1 item. It can be queried by the <i>Value</i>, <i>Gate</i> and <i>Action</i> nodes and can trigger an event using <i>Event</i> nodes.</p>
-    <li><strong>Name</strong>: A describing name for the specific device type. For example, 'Shelly Dimmer'.</li>
-    <li><strong>Context store</strong>: The Node-RED context store used to store device values. Please see <a href="https://nodered.org/docs/user-guide/context" target="_blank">Node-RED documentation</a> for more information about different types of context stores. Use file-based storage for persistent context.</li>
-    <li><strong>Show state</strong>: A string defining how to show information about state on the node in the Node-RED GUI. Use <code>%Item_name%</code> (case sensitive) to show a specific item value. Leave blank if not wanted.</li>
-    <li><strong>Filter function</strong>: It's possible to use an ingress function to filter all incoming messages. If the function returns false the message is dropped.</li>
-    <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific <i>Alive</i> Item is automatically created. Possible values: true/false.</li>    
-    <li><strong>Attributes</strong>: Thing specific attributes. Define the attribute name and if it's mandatory or not, and define attribute values in the Thing configuration. Attributes can be used in ingress or egress functions as <code>attribute.name</code> or <code>attribute["name"]</code>.</li>
-    <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>
-    <li><strong>Items <i>Loopback Command</i></strong>: If the <i>item type</i> is set to Loopback Command no output msg will be sent. The command will instead be routed to the node input, basically a virtual wire between output and input. Standard ingress and egress rules apply, including topic filters and the filter function.</li>
-    <li><strong>Item <i>Topic filter</i></strong>: <i>Topic filter</i> is used to filter incoming messages. If <i>Topic filter</i> is of type string and starts with '.' the dot is replaced by the topic value configured for the <i>Thing</i>. If it starts with '/' the topic value is prepended.</li>
-    <li><strong>Item <i>Topic</i></strong>: <i>Topic</i> is added to outgoing messages as <code>msg.topic</code>. It's possible to modify the value of <code>msg.topic</code> in the egress function. Topics starting with '.' and '/' works just the same as it does in <i>Topic filter</i>. If <i>Topic</i> is left empty the topic configured for the <i>Thing</i> is used unmodified.</li>
-    <li><strong>Output</strong>: It's possible to select which output to use for a specific command. Select which output to use.</li>
 </script>
