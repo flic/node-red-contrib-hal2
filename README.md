@@ -29,6 +29,10 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ## History
 
+**1.15**<br>
+Info button in Thing node shows all the places it's used.<br>
+New option in Action node to only send command if it differs from state.<br>
+
 **1.14**<br>
 Event node status text (last trigger event, delay/rate limit status)<br>
 Event node option to reset *Delay* if trigger no longer true<br>
