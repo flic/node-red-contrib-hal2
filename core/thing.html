@@ -173,14 +173,15 @@
             $("#node-input-thingType").trigger('change');
 
             $('#info').click(function() {
-                let message = '<font size=+1>Included in</font><br><table>';
+                let message = '<font size=+1>Included in</font><br><table style="border-collapse: separate;border-spacing: 10px;"><tr><th>Type</th><th>Name</th><th>Workspace</th></tr>';
                 try {
                     let actions = RED.nodes.filterNodes({type: "hal2Action"});
                     for (let i in actions) {
                         let action = RED.nodes.node(actions[i].id);
                         for (let c in action.commandset) {
                             if ((action.commandset[c].category == 'hal2Thing') && (action.commandset[c].thing == node.id)) {
-                                message += '<tr><td style="width:70px;"><b>Action</b></td><td>'+action.name+'</td></tr>';
+                                let workspace = RED.nodes.workspace(action.z);
+                                message += '<tr><td><b>Action</b></td><td>'+action.name+'</td><td>'+workspace.label+'</td></tr>';
                                 break;
                             }
                         }
@@ -190,7 +191,8 @@
                     for (let i in events) {
                         let event = RED.nodes.node(events[i].id);
                         if ((event.typeSel == 'hal2Thing') && (event.thing == node.id)) {
-                            message += '<tr><td style="width:70px;"><b>Event</b></td><td>'+event.name+'</td></tr>';
+                            let workspace = RED.nodes.workspace(event.z);
+                            message += '<tr><td><b>Event</b></td><td>'+event.name+'</td><td>'+workspace.label+'</td></tr>';
                             break;
                         }
                     }
@@ -200,7 +202,8 @@
                         let gate = RED.nodes.node(gates[i].id);
                         for (let c in gate.rules) {
                             if (gate.rules[c].thing == node.id) {
-                                message += '<tr><td style="width:70px;"><b>Gate</b></td><td>'+gate.name+'</td></tr>';
+                                let workspace = RED.nodes.workspace(gate.z);
+                                message += '<tr><td><b>Gate</b></td><td>'+gate.name+'</td><td>'+workspace.label+'</td></tr>';
                                 break;
                             }
                         }
@@ -211,7 +214,8 @@
                         let group = RED.nodes.node(groups[i].id);
                         for (let c in group.group) {
                             if (group.group[c].thing == node.id) {
-                                message += '<tr><td style="width:70px;"><b>Group</b></td><td>'+group.name+'</td></tr>';
+                                let workspace = RED.nodes.workspace(group.z);
+                                message += '<tr><td><b>Group</b></td><td>'+group.name+'</td><td>'+workspace.label+'</td></tr>';
                                 break;
                             }
                         }
@@ -221,7 +225,8 @@
                     for (let i in values) {
                         let value = RED.nodes.node(values[i].id);
                         if (value.thing == node.id) {
-                            message += '<tr><td style="width:70px;"><b>Value</b></td><td>'+value.name+'</td></tr>';
+                            let workspace = RED.nodes.workspace(value.z);
+                            message += '<tr><td><b>Value</b></td><td>'+value.name+'</td><td>'+workspace.label+'</td></tr>';
                             break;
                         }
                     }
@@ -229,7 +234,7 @@
                 }  catch (error) {
                         console.log('Error: '+error.message);
                 }
-                RED.notify(message);
+                RED.notify(message,{ timeout: 10000 });
             });
         },
         oneditsave: function () {
