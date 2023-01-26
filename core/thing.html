@@ -173,7 +173,7 @@
             $("#node-input-thingType").trigger('change');
 
             $('#info').click(function() {
-                let message = '<font size=+1>Included in</font><br><table style="border-collapse: separate;border-spacing: 10px;"><tr><th>Type</th><th>Name</th><th>Workspace</th></tr>';
+                let message = '<font size=+1>Included in</font><br><table style="border-collapse: separate;border-spacing: 10px;"><tr><th style="text-align: left;">Type</th><th style="text-align: left;">Name</th><th style="text-align: left;">Workspace</th></tr>';
                 try {
                     let actions = RED.nodes.filterNodes({type: "hal2Action"});
                     for (let i in actions) {
