@@ -21,6 +21,7 @@
     <div class="form-row">
         <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+        <button id="info"><i class="fa fa-info-circle"></i></button>
     </div>
     <div class="form-row">
         <label for="node-input-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
@@ -85,7 +86,6 @@
         oneditprepare: function () {
             var node = this;
             var typeMQTT = halTypeMQTT();
-            
             //Incoming topic filter
             $('#node-input-topicFilter').typedInput({
                 default: 'mqtt',
@@ -171,6 +171,66 @@
             });
 
             $("#node-input-thingType").trigger('change');
+
+            $('#info').click(function() {
+                let message = '<font size=+1>Included in</font><br><table>';
+                try {
+                    let actions = RED.nodes.filterNodes({type: "hal2Action"});
+                    for (let i in actions) {
+                        let action = RED.nodes.node(actions[i].id);
+                        for (let c in action.commandset) {
+                            if ((action.commandset[c].category == 'hal2Thing') && (action.commandset[c].thing == node.id)) {
+                                message += '<tr><td style="width:70px;"><b>Action</b></td><td>'+action.name+'</td></tr>';
+                                break;
+                            }
+                        }
+                    }
+
+                    let events = RED.nodes.filterNodes({type: "hal2Event"});
+                    for (let i in events) {
+                        let event = RED.nodes.node(events[i].id);
+                        if ((event.typeSel == 'hal2Thing') && (event.thing == node.id)) {
+                            message += '<tr><td style="width:70px;"><b>Event</b></td><td>'+event.name+'</td></tr>';
+                            break;
+                        }
+                    }
+
+                    let gates = RED.nodes.filterNodes({type: "hal2Gate"});
+                    for (let i in gates) {
+                        let gate = RED.nodes.node(gates[i].id);
+                        for (let c in gate.rules) {
+                            if (gate.rules[c].thing == node.id) {
+                                message += '<tr><td style="width:70px;"><b>Gate</b></td><td>'+gate.name+'</td></tr>';
+                                break;
+                            }
+                        }
+                    }
+
+                    let groups = RED.nodes.filterNodes({type: "hal2Group"});
+                    for (let i in groups) {
+                        let group = RED.nodes.node(groups[i].id);
+                        for (let c in group.group) {
+                            if (group.group[c].thing == node.id) {
+                                message += '<tr><td style="width:70px;"><b>Group</b></td><td>'+group.name+'</td></tr>';
+                                break;
+                            }
+                        }
+                    }
+
+                    let values = RED.nodes.filterNodes({type: "hal2Value"});
+                    for (let i in values) {
+                        let value = RED.nodes.node(values[i].id);
+                        if (value.thing == node.id) {
+                            message += '<tr><td style="width:70px;"><b>Value</b></td><td>'+value.name+'</td></tr>';
+                            break;
+                        }
+                    }
+                    message += '</table>'
+                }  catch (error) {
+                        console.log('Error: '+error.message);
+                }
+                RED.notify(message);
+            });
         },
         oneditsave: function () {
             var node = this;

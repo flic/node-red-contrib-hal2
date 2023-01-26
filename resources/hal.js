@@ -111,3 +111,36 @@ function halGetThingTypes(RED,thingsList) {
     });            
     return thingTypeList;
 }
+
+function halAddExpandButton(appendTo,expandRow,visible) {
+    var collapsed   = "fa fa-angle-right";
+    var expanded    = "fa fa-angle-down"
+
+    // Show a clickable expand icon
+    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
+        .html('<i class="' + (visible ? expanded : collapsed) + '"></i>')
+        .appendTo(appendTo);
+    expandButton.click(function(e) {
+        e.preventDefault();
+        
+        // Switch the icon between expand and compress
+        if (this.firstElementChild.className === collapsed) {
+            this.firstElementChild.className = expanded;
+        }
+        else {
+            this.firstElementChild.className = collapsed;
+        }
+
+        // Only show the relevant widget type properties
+        expandRow.change();
+    });
+
+    expandRow.change(function () {
+        if (expandButton.children()[0].className === expanded) {
+            expandRow.show();
+        } else {
+            expandRow.hide();
+        }
+    });
+    expandRow.change();
+}
