@@ -1,11 +1,33 @@
-<script type="text/javascript">
-    function isStatusItem(item) {
-        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id == '1'));
-    }
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
 
-    function isCommandItem(item) {
-        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
-    }
+<script type="text/x-red" data-template-name="hal2Gate">
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+        <ol id="node-input-rule-container"</ol>
+    </div>
+    <div class="form-row">
+        <select id="node-input-checkall" style="width:calc(100% - 65px)">
+            <option value="true">all rules must be true</option>
+            <option value="false">minimum one rule must be true</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <input type="checkbox" id="node-input-if" style="display: inline-block; width: auto; vertical-align: top;">
+        <label for="node-input-if" style="width:165px">Set msg.payload to result</label>
+    </div>
+
+</script>
+
+<script type="text/x-red" data-help-name="hal2Gate">
+    <p>The Gate node is used to redirect the flow depending on if certain <i>Item</i> conditions are met.</p>
+    <li><strong>Name</strong>: Node name.</li> 
+    <li><strong>Rules</strong>: Add one or more conditions to be met.</li>
+    <li><strong>TSU</strong>: Time since last update (in seconds)</li>
+    <li><strong>TSC</strong>: Time since last change (in seconds)</li>
+    <li><strong>Set <code>msg.payload</code> to result</strong>: Sends true or false.</li>
 </script>
 
 <script type="text/javascript">
@@ -17,7 +39,7 @@
             rules:      {},
             checkall:   { value: "true" },
             if:         {},
-            outputs:    {}, // Store number of outputs
+            outputs:    {} // Store number of outputs
         },
         inputs:1,
         outputs:2,
@@ -28,74 +50,20 @@
         },
         paletteLabel: "gate",
         oneditprepare: function () {
-            var operators = [
-                { v: "eq", t: "==" },
-                { v: "neq", t: "!=" },
-                { v: "lt", t: "<" },
-                { v: "lte", t: "<=" },
-                { v: "gt", t: ">" },
-                { v: "gte", t: ">=" },
-                { v: "cont", t: "contains" },
-                { v: "regex", t: "regex" },
-                { v: "true", t: "is true" },
-                { v: "false", t: "is false" },
+            var operators = halOperators([
                 { v: "last_update_gte", t: "TSU >=" },
                 { v: "last_update_lte", t: "TSU <=" },
                 { v: "last_change_gte", t: "TSC >=" },
                 { v: "last_change_lte", t: "TSC <=" }
-            ];
-            //get all thing nodes and sort them alphabetically
-            const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-            var thingsList = [];
-            for (let t in completeThingsList) {
-                try {
-                    let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                    if (thingType.thingStatus) {
-                        thingsList.push(completeThingsList[t]);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }
-            }            
-            thingsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
+            ]);
 
+            var thingsList = halGetThings(RED,'status');
             //No thing nodes have been created
             if(thingsList.length===0){
                 $("<li>No things found</li>").appendTo("#node-input-rule-container");
                 return;
             }
-
-            //get all Thingtypes and sort them alphabetically
-            var thingTypeId = [];
-            for (let i in thingsList) {
-                try {
-                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                        thingTypeId.push(thingsList[i].thingType);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }                
-            }
-            var thingTypeList = [];
-            for (let i in thingTypeId) {
-                try {
-                    var thingType = RED.nodes.node(thingTypeId[i]);
-                    if (thingType.thingStatus) {
-                        thingTypeList.push(thingType);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }                      
-            }
-            thingTypeList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });            
+            var thingTypeList = halGetThingTypes(RED,thingsList);
 
            //Rules
            $("#node-input-rule-container").editableList({
@@ -193,7 +161,7 @@
 
                         //Add items
                         for (let d in thingType.items) {
-                            if (isStatusItem(thingType.items[d])) {
+                            if (halStatusItem(thingType.items[d])) {
                                 itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                             }
                         }
@@ -301,8 +269,8 @@
                                 valueField.typedInput('types',['re']);
                                 valueField.typedInput('type','re');
                             } else {
-                                valueField.typedInput('types',['num']);
-                                valueField.typedInput('type','num');                        
+                                valueField.typedInput('types',['msg','flow','global','num','env']);
+                                valueField.typedInput('type',rule.ct);                        
                             }
                         } else if (type == "last_update_gte" || type == "last_update_lte" || type == "last_change_gte" || type == "last_change_lte") {
                             valueField.typedInput('types',['num','msg','flow','global','env']);
@@ -390,34 +358,4 @@
             }
         }
     });
-</script>
-
-<script type="text/x-red" data-template-name="hal2Gate">
-    <div class="form-row">
-        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
-    </div>
-    <div class="form-row">
-        <ol id="node-input-rule-container"</ol>
-    </div>
-    <div class="form-row">
-        <select id="node-input-checkall" style="width:calc(100% - 65px)">
-            <option value="true">all rules must be true</option>
-            <option value="false">minimum one rule must be true</option>
-        </select>
-    </div>
-    <div class="form-row">
-        <input type="checkbox" id="node-input-if" style="display: inline-block; width: auto; vertical-align: top;">
-        <label for="node-input-if" style="width:165px">Set msg.payload to result</label>
-    </div>
-
-</script>
-
-<script type="text/x-red" data-help-name="hal2Gate">
-    <p>The Gate node is used to redirect the flow depending on if certain <i>Item</i> conditions are met.</p>
-    <li><strong>Name</strong>: Node name.</li> 
-    <li><strong>Rules</strong>: Add one or more conditions to be met.</li>
-    <li><strong>TSU</strong>: Time since last update (in seconds)</li>
-    <li><strong>TSC</strong>: Time since last change (in seconds)</li>
-    <li><strong>Set <code>msg.payload</code> to result</strong>: Sends true or false.</li>
 </script>

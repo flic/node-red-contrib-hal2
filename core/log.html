@@ -1,3 +1,23 @@
+<script type="text/x-red" data-template-name="hal2Log">
+    <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-onchange" style="width:135px">Only log on change</label>
+        <input type="checkbox" id="node-input-onchange" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>    
+</script>
+
+<script type="text/x-red" data-help-name="hal2Log">
+    <p>The Log node outputs a log message for all <i>Thing</i> and <i>Item</i> events on the selected <i>event handler</i>.</p>
+    <li><strong>Name</strong>: Node name.</li>  
+</script>
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2Log',{
         category: 'Home Automation',
@@ -19,24 +39,4 @@
         },
         paletteLabel: "log",
     });
-</script>
-
-<script type="text/x-red" data-template-name="hal2Log">
-    <div class="form-row">
-        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
-    </div>
-    <div class="form-row">
-        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
-    </div>
-    <div class="form-row">
-        <label for="node-input-onchange" style="width:135px">Only log on change</label>
-        <input type="checkbox" id="node-input-onchange" style="display: inline-block; width: auto; vertical-align: top;">
-    </div>    
-</script>
-
-<script type="text/x-red" data-help-name="hal2Log">
-    <p>The Log node outputs a log message for all <i>Thing</i> and <i>Item</i> events on the selected <i>event handler</i>.</p>
-    <li><strong>Name</strong>: Node name.</li>  
 </script>

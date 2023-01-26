@@ -8,12 +8,14 @@ module.exports = function(RED) {
         this.commandset = config.commandset;
         this.ratelimit = Number(config.ratelimit);
         this.passthru = config.passthru || false;
+        this.onchange = config.onchange || false;
         var node = this;
 
         node.on('input', function(msg,send,done) {
             var command = {};
             var queue = [];
 
+            
             for (let i = 0; i < node.commandset.length; i += 1) {
                 command = {
                     payload: "",
@@ -48,10 +50,35 @@ module.exports = function(RED) {
                 } else {
                     command.item = node.commandset[i].item;
                     command.thing = node.commandset[i].thing;
-                    queue.push(command);
+                    if (node.commandset[i].onchange) {
+                        try {
+                            var thing = RED.nodes.getNode(command.thing);
+                            if (thing.state.hasOwnProperty(command.item)) {
+                                if (thing.state[command.item] != command.payload) {
+                                    queue.push(command);
+                                }
+                            } else {
+                                queue.push(command);
+                            }    
+                        } catch (error) {
+                            console.log('Error: '+error.message);
+                        }
+                    } else {
+                        queue.push(command);
+                    }
                 }
             }
+            var numCommands = queue.length;
             common.queueSend(node,queue,null,function(){
+                var color;
+                if (numCommands == 0) {
+                    color = "gray";
+                } else if (numCommands == node.commandset.length) {
+                    color = "green";
+                } else {
+                    color = "yellow";
+                }
+                node.status({fill:color,shape:"dot",text:numCommands + "/" + node.commandset.length});
                 if (node.passthru) { send(msg); }
                 done();
             });

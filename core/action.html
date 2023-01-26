@@ -1,11 +1,31 @@
-<script type="text/javascript">
-    function isStatusItem(item) {
-        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id == '1'));
-    }
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
 
-    function isCommandItem(item) {
-        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
-    }
+<script type="text/x-red" data-template-name="hal2Action">
+    <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+            <ol id="command-con"</ol>
+    </div>
+    <div class="form-row">
+        <i class="fa fa-pause-circle-o"></i> Wait <input type="number" value="0" id="node-input-ratelimit" style="display: inline-block; width: 70px; vertical-align: middle;"> ms between messages.
+    </div>
+    <div class="form-row">
+        <input type="checkbox" id="node-input-passthru" style="display: inline-block; width: auto; vertical-align: top;">
+        <label for="node-input-passthru" style="width:165px">Pass-through msg</label>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Action">
+    <p>The Action node sends commands to one or more <i>Items</i> or <i>Groups</i></p>
+    <li><strong>Name</strong>: Node name.</li> 
+    <li><strong>Action</strong>: A list of items or groups.</li>
+    <li><string>Wait between messages</strong> allows you to rate limit the output.</li>
 </script>
 
 <script type="text/javascript">
@@ -32,67 +52,17 @@
         },
         paletteLabel: "action",
         oneditprepare: function () {
-            //get all things and sort them alphabetically
-            var completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-            var thingsList=[];
-            for (let t in completeThingsList) {
-                try {
-                    let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                    if (thingType.thingCommand) {
-                        thingsList.push(completeThingsList[t]);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }
-            }
-            thingsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-
+            var thingsList = halGetThings(RED,'command');
             //No thing nodes have been created
             if(thingsList.length===0){
-                $("<li>No things found</li>").appendTo("#node-input-command-container");
+                $("<li>No things found</li>").appendTo("#command-con");
                 return;
             } 
                        
-            //get all groups and sort them alphabetically
-            var groupsList = RED.nodes.filterNodes({type: "hal2Group"});
-            groupsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-            //get all Thingtypes and sort them alphabetically
-            var thingTypeId = [];
-            for (let i in thingsList) {
-                try {
-                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                        thingTypeId.push(thingsList[i].thingType);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }                
-            }
-            var thingTypeList = [];
-            for (let i in thingTypeId) {
-                try {
-                    var thingType = RED.nodes.node(thingTypeId[i]);
-                    if (thingType.thingCommand) {
-                        thingTypeList.push(thingType);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }                    
-            }
-            thingTypeList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });            
+            var groupsList = halGetGroups(RED);
+            var thingTypeList = halGetThingTypes(RED,thingsList);
 
-            $("#node-input-command-container").editableList({
+            $("#command-con").editableList({
                 addItem: function(container,i,opt) {
                     var command = opt;
                     var savedThing = command.thing;
@@ -106,7 +76,8 @@
 
                     //Add rows
                     var rowCategory = $('<div/>').appendTo(container);
-                    var rowThing = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowThing = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container);
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
@@ -117,7 +88,11 @@
                     var rowItemNotes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
-                    var rowCommand = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowCommand = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container);
+                    var rowOnChange = $('<div/>',{style:"margin-top:8px;"})
+                        .appendTo(container)
+                        .hide()
 
                     //Add labels
                     var labelCategory = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-folder"})
@@ -141,6 +116,9 @@
                     var labelCommand = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-out"})
                         .appendTo(rowCommand)
                         .append(' Cmnd')
+                    var labelOnChange = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-check"})
+                        .appendTo(rowOnChange)
+                        .append(' State')
 
                     var categoryField = $('<select/>',{class:"node-input-command-category",style:"width:calc(100% - 110px)"})
                         .appendTo(rowCategory)
@@ -159,6 +137,11 @@
                         .appendTo(rowItem);
                     var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"})
                         .appendTo(rowItemNotes);
+                    var onChangeField = $('<input/>',{style:"width:20px",class:"node-input-onchange-value",type:"checkbox"})
+                        .appendTo(rowOnChange)
+                    $('<label/>')
+                        .appendTo(rowOnChange)
+                        .append(' Only send command if it differs from state')
 
                     thingsField.change(function() {
                         var thing;
@@ -180,7 +163,7 @@
                                 let thingType = RED.nodes.node(thing.thingType);
                                 //Add items
                                 for (let d in thingType.items) {
-                                    if (isCommandItem(thingType.items[d])) {
+                                    if (halCommandItem(thingType.items[d])) {
                                         itemsField.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
                                     }
                                 }
@@ -192,6 +175,7 @@
                             case 'hal2Group':
                                 rowNotes.hide();
                                 rowItemNotes.hide();
+                                rowOnChange.hide();
                                 itemsField.append($("<option></option>")
                                     .val(thing.id)
                                     .text(thing.name));
@@ -200,9 +184,10 @@
                             case 'dynamic':
                                 rowNotes.hide();
                                 rowItemNotes.hide();
+                                rowOnChange.hide();
                                 //Add items
                                 for (let d in thing.items) {
-                                    if (isCommandItem(thing.items[d])) {
+                                    if (halCommandItem(thing.items[d])) {
                                         itemsField.append($("<option></option>").val(thing.items[d].id).text(thing.items[d].name));
                                     }
                                 }
@@ -247,9 +232,16 @@
                         var item = itemsField.val();
                         for (let d in thingType.items) {
                             if (thingType.items[d].id == item) {
+                                //Show rowItemNotes if item have notes
                                 if (thingType.items[d].notes) {
                                     rowItemNotes.show();
                                     itemNotesField.val(thingType.items[d].notes);
+                                }
+                                //Show rowOnChange if item supports status
+                                if (halStatusItem(thingType.items[d])) {
+                                    rowOnChange.show();
+                                } else {
+                                    rowOnChange.hide();
                                 }
                                 break;
                             }
@@ -314,7 +306,7 @@
                         }                      
                     });
 
-                    //Add command value field
+                    // Add command field
                     var commandField = $('<input/>',{class:"node-input-command-value",type:"text"})
                         .appendTo(rowCommand)
                         .typedInput({
@@ -335,6 +327,8 @@
                         categoryField.val(command.category);
                         commandField.typedInput('value',command.value);
                         commandField.typedInput('type',command.type);
+                        onChangeField.prop('checked',command.onchange || false);
+
                     } else {
                         commandField.typedInput('value','payload');
                     }
@@ -354,7 +348,7 @@
                     try {
                         let thing = RED.nodes.node(command.thing);
                         if (typeof thing !== 'undefined') {
-                            $("#node-input-command-container").editableList('addItem',command);
+                            $("#command-con").editableList('addItem',command);
                         } else {
                             console.error('Thing ID '+command.thing+' is missing.');
                         }
@@ -363,11 +357,11 @@
                     } 
                 }
             } else {
-                $("#node-input-command-container").editableList('addItem',null);              
+                $("#command-con").editableList('addItem',null);              
             }
         },
         oneditsave: function() {
-            var commandcontainer = $("#node-input-command-container").children();
+            var commandcontainer = $("#command-con").children();
             var node = this;
             node.commandset = [];
 
@@ -379,6 +373,7 @@
                     item:command.find(".node-input-command-item option:selected").val(),
                     value:command.find(".node-input-command-value").typedInput('value'),
                     type:command.find(".node-input-command-value").typedInput('type'),
+                    onchange:command.find(".node-input-onchange-value").prop('checked'),
                 }
                 node.commandset.push(b);
             });
@@ -390,32 +385,4 @@
             }
         }
     });
-</script>
-
-<script type="text/x-red" data-template-name="hal2Action">
-    <div class="form-row">
-        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
-    </div>
-    <div class="form-row">
-        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
-    </div>
-    <div class="form-row">
-            <ol id="node-input-command-container"</ol>
-    </div>
-    <div class="form-row">
-        <i class="fa fa-pause-circle-o"></i> Wait <input type="number" value="0" id="node-input-ratelimit" style="display: inline-block; width: 70px; vertical-align: middle;"> ms between messages.
-    </div>
-    <div class="form-row">
-        <input type="checkbox" id="node-input-passthru" style="display: inline-block; width: auto; vertical-align: top;">
-        <label for="node-input-passthru" style="width:165px">Pass-through msg</label>
-    </div>
-</script>
-
-<script type="text/x-red" data-help-name="hal2Action">
-    <p>The Action node sends commands to one or more <i>Items</i> or <i>Groups</i></p>
-    <li><strong>Name</strong>: Node name.</li> 
-    <li><strong>Action</strong>: A list of items or groups.</li>
-    <li><string>Wait between messages</strong> allows you to rate limit the output.</li>
 </script>

@@ -1,254 +1,6 @@
-<script type="text/javascript">
-    function isStatusItem(item) {
-        return ((item.type == 'both') || (item.type == 'status') || (item.type == 'loopback_both') || (item.id == '1'));
-    }
-
-    function isCommandItem(item) {
-        return ((item.type == 'both') || (item.type == 'command') || (item.type == 'loopback_both') || (item.type == 'loopback_command'));
-    }
-</script>
-
-<script type="text/javascript">
-    RED.nodes.registerType('hal2Value',{
-        category: 'Home Automation',
-        color: '#b3b3ff',
-        defaults: {
-            name:           {},
-            action:         {},
-            thing:          {},
-            thingType:      {},   
-            item:           { required: true   },           
-            outputValue:    { value: "payload" },
-            outputType:     { required: true   },
-            info:           { value: false     }
-        },
-        inputs:1,
-        outputs:1,
-        icon: "value.png",
-        label: function() {
-            return this.name||"value";
-        },
-        paletteLabel: "value",
-        oneditprepare: function () {
-
-            // Check if Thing has been deleted
-            if (this.thing != 0) {
-                try {
-                    let thing = RED.nodes.node(this.thing);
-                    if (typeof thing === 'undefined') {
-                        console.error('Thing ID '+this.thing+' is missing.');
-                        this.thing = void 0;
-                        this.thingType = void 0;
-                        this.item = void 0;
-                    }
-                } catch (error) {
-                        console.log('Error: '+error.message);
-                }  
-            }
-            var savedThing = this.thing;
-            var savedType = this.thingType;
-            var savedItem = this.item;
-
-            //get all thing nodes and sort them alphabetically
-            const completeThingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-            var thingsList = [];
-            for (let t in completeThingsList) {
-                try {
-                    let thingType = RED.nodes.node(completeThingsList[t].thingType);
-                    if (thingType.thingStatus) {
-                        thingsList.push(completeThingsList[t]);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }
-            }            
-            if (thingsList.length == 0) {
-                $("#div-main").hide();
-                $("#div-error").show();
-                return;
-            }
-            thingsList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-
-            //get all Thingtypes and sort them alphabetically
-            var thingTypeId = [];
-            for (let i in thingsList) {
-                try {
-                    if (thingTypeId.indexOf(thingsList[i].thingType) == -1) {
-                        thingTypeId.push(thingsList[i].thingType);
-                    }
-                } catch (error) {
-                    console.log('Error: '+error.message);
-                }                    
-            }
-            var thingTypeList = [];
-            for (let i in thingTypeId) {
-                var thingType = RED.nodes.node(thingTypeId[i]);
-                if ((typeof thingType !== 'undefined') && (thingType.thingStatus)) {
-                    thingTypeList.push(thingType);
-                }
-            }
-            thingTypeList.sort(function(a, b) {
-                var textA = a.name.toUpperCase();
-                var textB = b.name.toUpperCase();
-                return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-            });
-
-            $("#thing-filter").change(function() {
-                $("#node-input-thing").children().remove();
-                if ($("#thing-filter").val() == 0) {
-                    $("#node-input-thing").append($("<option value='0'>- set by msg.thing.id -</option>"));
-                }
-                for (var d in thingsList) {
-                    if (($("#thing-filter").val() == 0) || (thingsList[d].thingType == $("#thing-filter").val())) {
-                        $("#node-input-thing").append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
-                    }
-                }
-                if ($("#thing-filter").val() == 0) {
-                    $("#node-input-thing").val(thingsList[0].id);
-                }
-                $("#node-input-thing").trigger('change');
-            });
-
-            $("#thing-filter-button").on('click', function() {
-                        if ($("#thing-filter-div").is(':visible')) {
-                            $("#thing-filter-div").hide();
-                            if ($("#thing-filter").val() != 0) {
-                                $("#thing-filter").val(0);
-                                $("#thing-filter").trigger('change');
-                            }
-                        } else {
-                            $("#thing-filter-div").show();
-                        }
-                    });
-
-
-            $("#node-input-thing").change(function() {
-                if ($("#node-input-thing").val() == '0') {
-                    $("#div-type").show();
-                    return;
-                } else {
-                    $("#div-type").hide();
-                }
-
-                $("#node-input-item").children().remove();
-
-                //get all items and sort them alphabetically
-                let thing = RED.nodes.node($("#node-input-thing").val());
-                let thingType = RED.nodes.node(thing.thingType);
-                // Show notes
-                if (thing.notes) {
-                    $("#row-notes").show();
-                    $("#thing-notes").val(thing.notes);
-                } else {
-                    $("#row-notes").hide();
-                }
-                //Add items
-                for (let d in thingType.items) {
-                    if (isStatusItem(thingType.items[d])) {
-                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
-                    }
-                }
-
-                if ($("#node-input-thing").val() == savedThing) {
-                    $("#node-input-item").val(savedItem);
-                }
-                $("#node-input-item").trigger('change');
-            });
-
-            $("#node-input-item").change(function() {
-                $("#row-item-notes").hide();
-                if ($("#node-input-thing").val() == '0') {
-                    var thingType = RED.nodes.node($("#node-input-thingType").val());
-                } else {
-                    var thing = RED.nodes.node($("#node-input-thing").val());
-                    var thingType = RED.nodes.node(thing.thingType);
-                }
-                var item = $("#node-input-item").val();
-                for (let d in thingType.items) {
-                    if (thingType.items[d].id == item) {
-                        if (thingType.items[d].notes) {
-                            $("#row-item-notes").show();
-                            $("#item-notes").val(thingType.items[d].notes);
-                        }
-                        break;
-                    }
-                }                                     
-            });
-
-            $("#node-input-thingType").change(function() {
-                if ($("#node-input-thingType").is(':hidden')) { return; }
-                $("#node-input-item").children().remove();
-
-                //get all items and sort them alphabetically
-                let thingType = RED.nodes.node($("#node-input-thingType").val());
-                //Add items
-                for (let d in thingType.items) {
-                    if (isStatusItem(thingType.items[d])) {
-                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
-                    }
-                }
-
-                if ($("#node-input-thingType").val() == savedType) {
-                    $("#node-input-item").val(savedItem);
-                }
-                $("#node-input-item").trigger('change');
-            });
-
-            //Add types
-            for (var d in thingTypeList) {
-                $("#node-input-thingType").append($("<option value='" + thingTypeList[d].id + "'> " + thingTypeList[d].name + "</option>"));
-            }
-
-            //Add filter types
-            $("#thing-filter").append($("<option></option>").val(0).text("<All types>"));
-            for (let d in thingTypeList) {
-                $("#thing-filter").append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));
-            }
-
-            $("#thing-filter").trigger('change');
-
-            if (typeof this.thingType !== 'undefined') {
-                $("#node-input-thingType").val(this.thingType);
-            }
-
-            if (typeof this.thing !== 'undefined') {
-                $("#node-input-thing").val(this.thing);
-            } else {
-                $("#node-input-thing").val(thingsList[0].id);
-            }
-
-            if ($("#node-input-thing").val() == '0') {
-                $('#node-input-thingType').trigger('change');
-            } else {
-                $('#node-input-thing').trigger('change');
-            }
-
-            //Add output
-            $('#node-input-outputValue').typedInput({
-                default: 'msg',
-                typeField: $("#node-input-outputType"),
-                types: ['flow','global','msg']
-            });
-
-            if (this.outputType) {
-                $("#node-input-outputValue").typedInput('type',this.outputType);
-            }
-            if (this.outputValue) {
-                $("#node-input-outputValue").typedInput('value',this.outputValue);
-            }
-            if (typeof this.action == 'undefined') {
-                $("#node-input-action").val('get');
-            }
-        }
-    });
-</script>
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
 
 <script type="text/x-red" data-template-name="hal2Value">
-
     <div class="form-row" id="div-error" hidden>
         <p>No items found. Start by creating some Things.</p>
     </div>
@@ -308,4 +60,203 @@
     <li><strong>Property</strong>: Source or destination for <i>Item</i> value.</li>
     <li><strong>Item info</strong>: Output <code>msg.thing</code> and <code>msg.item</code> information. Only works when <code>msg</code> is used for output.</li>
     <li><strong>Name</strong>: Node name.</li>  
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Value',{
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            name:           {},
+            action:         {},
+            thing:          {},
+            thingType:      {},   
+            item:           { required: true   },           
+            outputValue:    { value: "payload" },
+            outputType:     { required: true   },
+            info:           { value: false     }
+        },
+        inputs:1,
+        outputs:1,
+        icon: "value.png",
+        label: function() {
+            return this.name||"value";
+        },
+        paletteLabel: "value",
+        oneditprepare: function () {
+
+            // Check if Thing has been deleted
+            if (this.thing != 0) {
+                try {
+                    let thing = RED.nodes.node(this.thing);
+                    if (typeof thing === 'undefined') {
+                        console.error('Thing ID '+this.thing+' is missing.');
+                        this.thing = void 0;
+                        this.thingType = void 0;
+                        this.item = void 0;
+                    }
+                } catch (error) {
+                        console.log('Error: '+error.message);
+                }  
+            }
+            var savedThing = this.thing;
+            var savedType = this.thingType;
+            var savedItem = this.item;
+
+            var thingsList = halGetThings(RED,'status');
+            if (thingsList.length == 0) {
+                $("#div-main").hide();
+                $("#div-error").show();
+                return;
+            }
+            var thingTypeList = halGetThingTypes(RED,thingsList);
+
+            $("#thing-filter").change(function() {
+                $("#node-input-thing").children().remove();
+                if ($("#thing-filter").val() == 0) {
+                    $("#node-input-thing").append($("<option value='0'>- set by msg.thing.id -</option>"));
+                }
+                for (var d in thingsList) {
+                    if (($("#thing-filter").val() == 0) || (thingsList[d].thingType == $("#thing-filter").val())) {
+                        $("#node-input-thing").append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                    }
+                }
+                if ($("#thing-filter").val() == 0) {
+                    $("#node-input-thing").val(thingsList[0].id);
+                }
+                $("#node-input-thing").trigger('change');
+            });
+
+            $("#thing-filter-button").on('click', function() {
+                        if ($("#thing-filter-div").is(':visible')) {
+                            $("#thing-filter-div").hide();
+                            if ($("#thing-filter").val() != 0) {
+                                $("#thing-filter").val(0);
+                                $("#thing-filter").trigger('change');
+                            }
+                        } else {
+                            $("#thing-filter-div").show();
+                        }
+                    });
+
+
+            $("#node-input-thing").change(function() {
+                if ($("#node-input-thing").val() == '0') {
+                    $("#div-type").show();
+                    return;
+                } else {
+                    $("#div-type").hide();
+                }
+
+                $("#node-input-item").children().remove();
+
+                //get all items and sort them alphabetically
+                let thing = RED.nodes.node($("#node-input-thing").val());
+                let thingType = RED.nodes.node(thing.thingType);
+                // Show notes
+                if (thing.notes) {
+                    $("#row-notes").show();
+                    $("#thing-notes").val(thing.notes);
+                } else {
+                    $("#row-notes").hide();
+                }
+                //Add items
+                for (let d in thingType.items) {
+                    if (halStatusItem(thingType.items[d])) {
+                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    }
+                }
+
+                if ($("#node-input-thing").val() == savedThing) {
+                    $("#node-input-item").val(savedItem);
+                }
+                $("#node-input-item").trigger('change');
+            });
+
+            $("#node-input-item").change(function() {
+                $("#row-item-notes").hide();
+                if ($("#node-input-thing").val() == '0') {
+                    var thingType = RED.nodes.node($("#node-input-thingType").val());
+                } else {
+                    var thing = RED.nodes.node($("#node-input-thing").val());
+                    var thingType = RED.nodes.node(thing.thingType);
+                }
+                var item = $("#node-input-item").val();
+                for (let d in thingType.items) {
+                    if (thingType.items[d].id == item) {
+                        if (thingType.items[d].notes) {
+                            $("#row-item-notes").show();
+                            $("#item-notes").val(thingType.items[d].notes);
+                        }
+                        break;
+                    }
+                }                                     
+            });
+
+            $("#node-input-thingType").change(function() {
+                if ($("#node-input-thingType").is(':hidden')) { return; }
+                $("#node-input-item").children().remove();
+
+                //get all items and sort them alphabetically
+                let thingType = RED.nodes.node($("#node-input-thingType").val());
+                //Add items
+                for (let d in thingType.items) {
+                    if (halStatusItem(thingType.items[d])) {
+                        $("<option value='" + thingType.items[d].id + "'> " + thingType.items[d].name + "</option>").appendTo("#node-input-item");
+                    }
+                }
+
+                if ($("#node-input-thingType").val() == savedType) {
+                    $("#node-input-item").val(savedItem);
+                }
+                $("#node-input-item").trigger('change');
+            });
+
+            //Add types
+            for (var d in thingTypeList) {
+                $("#node-input-thingType").append($("<option value='" + thingTypeList[d].id + "'> " + thingTypeList[d].name + "</option>"));
+            }
+
+            //Add filter types
+            $("#thing-filter").append($("<option></option>").val(0).text("<All types>"));
+            for (let d in thingTypeList) {
+                $("#thing-filter").append($("<option></option>").val(thingTypeList[d].id).text(thingTypeList[d].name));
+            }
+
+            $("#thing-filter").trigger('change');
+
+            if (typeof this.thingType !== 'undefined') {
+                $("#node-input-thingType").val(this.thingType);
+            }
+
+            if (typeof this.thing !== 'undefined') {
+                $("#node-input-thing").val(this.thing);
+            } else {
+                $("#node-input-thing").val(thingsList[0].id);
+            }
+
+            if ($("#node-input-thing").val() == '0') {
+                $('#node-input-thingType').trigger('change');
+            } else {
+                $('#node-input-thing').trigger('change');
+            }
+
+            //Add output
+            $('#node-input-outputValue').typedInput({
+                default: 'msg',
+                typeField: $("#node-input-outputType"),
+                types: ['flow','global','msg']
+            });
+
+            if (this.outputType) {
+                $("#node-input-outputValue").typedInput('type',this.outputType);
+            }
+            if (this.outputValue) {
+                $("#node-input-outputValue").typedInput('value',this.outputValue);
+            }
+            if (typeof this.action == 'undefined') {
+                $("#node-input-action").val('get');
+            }
+        }
+    });
 </script>
