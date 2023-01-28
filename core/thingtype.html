@@ -557,16 +557,13 @@
                     });
 
                     //Add rows
-                    var rowName         = $('<div/>').appendTo(container);
-                    var rowDetails      = $('<div/>',{style:"margin-top:8px;"})
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()
-                    var rowNotes        = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
-                    var rowItemType     = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
-                    var rowFilter       = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
-                    var rowFilterProp   = $('<div/>',{style:"margin-top:8px;"})
-                        .appendTo(rowDetails)
-                        .hide()
+                    var rowNotes = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
+                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
@@ -606,13 +603,9 @@
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
-                    var labelFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
-                        .appendTo(rowFilter)
-                        .append(' Filter')
-                    var labelFProp = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
-                        .appendTo(rowFilterProp)
-                        .append(' Property')
-
+                    var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .appendTo(rowTopicFilter)
+                        .append(' Topic filter')
                     var labelItemType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
                         .appendTo(rowItemType)
                         .append(' Type')
@@ -636,11 +629,11 @@
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(halCreateId())
-                    // Filter
+                    //MQTT topic filter
                     var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
                         .appendTo(rowTopicFilter)
                         .typedInput({
-                            default:'mqtt',
+                            default:MQTTType,
                             types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
                         });
                     var outputProperty = $('<input/>',{style: "width: 60px",class:"node-config-thingtype-output-property",type:"text"})
