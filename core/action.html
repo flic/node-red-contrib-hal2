@@ -60,7 +60,7 @@
             } 
                        
             var groupsList = halGetGroups(RED);
-            var thingTypeList = halGetThingTypes(RED,thingsList);
+            var thingTypeList = halGetThingTypes(RED,thingsList,false,true);
 
             $("#command-con").editableList({
                 addItem: function(container,i,opt) {

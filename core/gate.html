@@ -63,7 +63,7 @@
                 $("<li>No things found</li>").appendTo("#node-input-rule-container");
                 return;
             }
-            var thingTypeList = halGetThingTypes(RED,thingsList);
+            var thingTypeList = halGetThingTypes(RED,thingsList,true);
 
            //Rules
            $("#node-input-rule-container").editableList({

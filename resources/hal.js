@@ -73,7 +73,9 @@ function halGetThings(RED,filter) {
 function halGetGroups(RED) {
     //get all groups and sort them alphabetically
     var groupsList = RED.nodes.filterNodes({type: "hal2Group"});
+    debugger
     groupsList.sort(function(a, b) {
+        if ((typeof a.name === 'undefined') || (typeof b.name === 'undefined')) { return; }
         var textA = a.name.toUpperCase();
         var textB = b.name.toUpperCase();
         return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
@@ -81,7 +83,7 @@ function halGetGroups(RED) {
     return groupsList;
 }
 
-function halGetThingTypes(RED,thingsList) {
+function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {
     //get all Thingtypes and sort them alphabetically
     var thingTypeId = [];
     for (let i in thingsList) {
@@ -97,8 +99,8 @@ function halGetThingTypes(RED,thingsList) {
     for (let i in thingTypeId) {
         try {
             var thingType = RED.nodes.node(thingTypeId[i]);
-            if (thingType.thingCommand) {
-                thingTypeList.push(thingType);
+            if (((filterOnCommand) && (thingType.thingCommand)) || ((filterOnStatus) && (thingType.thingStatus)) || ((filterOnStatus = false) && (filterOnCommand = false))) {
+                thingTypeList.push(thingType); 
             }
         } catch (error) {
             console.log('Error: '+error.message);

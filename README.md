@@ -23,6 +23,10 @@ npm install node-red-contrib-hal2
 
 ![Example automation flows](https://user-images.githubusercontent.com/400673/168665539-3984681b-5059-4ed6-b350-683a431841d8.png)
 
+**node-red-contrib-hal2** uses the Node-RED built-in context store to save device state. If you'd like for state to survive a Node-RED restart you'll need to save context data to the file system (default is memory-only). You can choose to save all Node-RED context data to disk or to create a separate context store just for your IoT devices. I would recommend a separate context store for this use. **node-red-contrib-hal2** lets you select which context store to use per thing type. Please take a look at the Node-RED documentation for [instructions on how to configure the context stores](https://nodered.org/docs/user-guide/context#context-stores).
+
+<img width="654" alt="Skärmavbild 2023-03-19 kl  11 16 03" src="https://user-images.githubusercontent.com/400673/226168861-5af8042f-b8b3-4138-8996-ddb3d37f9d44.png">
+
 Take a look at the example flows and Thing definitions in the https://github.com/flic/node-red-contrib-hal2/tree/main/examples folder for more information.
 
 ![Example logging](https://user-images.githubusercontent.com/400673/168665807-aa3aba8f-8b06-4292-bcad-7374e508f59a.png)

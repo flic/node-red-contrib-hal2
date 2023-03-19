@@ -109,7 +109,7 @@
                 $("#div-error").show();
                 return;
             }
-            var thingTypeList = halGetThingTypes(RED,thingsList);
+            var thingTypeList = halGetThingTypes(RED,thingsList,true);
 
             $("#thing-filter").change(function() {
                 $("#node-input-thing").children().remove();
