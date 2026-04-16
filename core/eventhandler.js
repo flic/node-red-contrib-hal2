@@ -229,11 +229,15 @@ module.exports = function(RED) {
 
         const mcpPrefix = (config.httpPathPrefix || '').replace(/\/$/, '');
 
+        node.log('MCP enabled: ' + !!config.mcpEnabled + ', prefix: "' + mcpPrefix + '"');
+
         if (config.mcpEnabled) {
 
             const mcpServerUrl  = config.mcpServerUrl  || '';
             const pocketidUrl   = config.pocketidUrl   || '';
             const mcpServerName = config.mcpServerName || 'hal2-mcp';
+
+            node.log('MCP init: serverUrl=' + mcpServerUrl + ', pocketidUrl=' + pocketidUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
             const adminEnabled  = config.adminToolsEnabled === true;
             const adminPort     = Number(config.adminPort || 1880);
@@ -335,6 +339,7 @@ module.exports = function(RED) {
 
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
+            node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-protected-resource');
             RED.httpNode.get(mcpPrefix + '/.well-known/oauth-protected-resource', (_req, res) => {
                 res.status(200).json({
                     resource                 : mcpServerUrl,
@@ -346,6 +351,7 @@ module.exports = function(RED) {
 
             // ── OAuth: /.well-known/oauth-authorization-server ────────────────
 
+            node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-authorization-server');
             RED.httpNode.get(mcpPrefix + '/.well-known/oauth-authorization-server', (_req, res) => {
                 res.status(200).json({
                     issuer                                : mcpServerUrl,
@@ -364,6 +370,7 @@ module.exports = function(RED) {
 
             // ── DCR: /oauth/register ──────────────────────────────────────────
 
+            node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
             RED.httpNode.post(mcpPrefix + '/oauth/register', (req, res) => {
                 const clientId     = (node.credentials && node.credentials.pocketidClientId)     || '';
                 const clientSecret = (node.credentials && node.credentials.pocketidClientSecret) || '';
@@ -383,6 +390,7 @@ module.exports = function(RED) {
 
             // ── MCP: /mcp ─────────────────────────────────────────────────────
 
+            node.log('MCP registering route: POST ' + mcpPrefix + '/mcp');
             RED.httpNode.post(mcpPrefix + '/mcp', async (req, res) => {
                 // Bearer token validation
                 const user = await requireBearer(req, res);
@@ -567,8 +575,10 @@ module.exports = function(RED) {
         // ── Close ─────────────────────────────────────────────────────────────
 
         node.on('close', function () {
+            node.log('MCP close: mcpEnabled=' + !!config.mcpEnabled);
             if (config.mcpEnabled) {
                 tokenCache = {};
+                node.log('MCP removing routes with prefix: "' + mcpPrefix + '"');
                 removeRoute(RED, 'get',  mcpPrefix + '/.well-known/oauth-protected-resource');
                 removeRoute(RED, 'get',  mcpPrefix + '/.well-known/oauth-authorization-server');
                 removeRoute(RED, 'post', mcpPrefix + '/oauth/register');
