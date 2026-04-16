@@ -145,7 +145,7 @@
 <script type="text/javascript">
     var editors = {};
 
-    function getAttributes() {
+    function localGetAttributes() {
         let attributes = [];
         $("#node-config-thingtype-list-attributes")
             .editableList('items')
@@ -162,7 +162,7 @@
         return attributes;
     }
 
-    function getItems() {
+    function localGetItems() {
         let items = [];
         $("#node-config-thingtype-list-items")
             .editableList('items')
@@ -175,6 +175,7 @@
                     topicFilterValue:item.find(".node-config-thingtype-topicfilter-property").typedInput('value'),
                     topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
                     type:item.find(".node-config-thingtype-itemtype-property").val(),
+                    haType:item.find(".node-config-thingtype-hatype-property").val(),
                     ingress:item.find(".node-config-thingtype-ingress-property").val(),
                     egress:item.find(".node-config-thingtype-egress-property").val(),
                     notes:item.find(".node-config-thingtype-notes-property").val(),
@@ -562,6 +563,7 @@
                         .appendTo(container)
                         .hide()
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowHaType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
                     var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
@@ -603,6 +605,9 @@
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
+                    var labelHaType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-home"})
+                        .appendTo(rowHaType)
+                        .append(' HA type')
                     var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowTopicFilter)
                         .append(' Topic filter')
@@ -629,6 +634,30 @@
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(halCreateId())
+                    // HA type
+                    var haTypeProperty = $('<select/>',{class:"node-config-thingtype-hatype-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowHaType)
+                        .append($("<option></option>").val('').text('— None —'))
+                        .append($("<option></option>").val('button').text('Button'))
+                        .append($("<option></option>").val('switch').text('Switch'))
+                        .append($("<option></option>").val('light').text('Light'))
+                        .append($("<option></option>").val('dimmer').text('Dimmer'))
+                        .append($("<option></option>").val('cover').text('Cover / Blind / Shutter'))
+                        .append($("<option></option>").val('lock').text('Lock'))
+                        .append($("<option></option>").val('fan').text('Fan'))
+                        .append($("<option></option>").val('climate').text('Climate / HVAC'))
+                        .append($("<option></option>").val('media_player').text('Media player'))
+                        .append($("<option></option>").val('temperature').text('Temperature sensor'))
+                        .append($("<option></option>").val('humidity').text('Humidity sensor'))
+                        .append($("<option></option>").val('motion').text('Motion sensor'))
+                        .append($("<option></option>").val('contact').text('Contact sensor'))
+                        .append($("<option></option>").val('smoke').text('Smoke sensor'))
+                        .append($("<option></option>").val('co2').text('CO₂ sensor'))
+                        .append($("<option></option>").val('illuminance').text('Illuminance sensor'))
+                        .append($("<option></option>").val('power').text('Power / Energy sensor'))
+                        .append($("<option></option>").val('binary_sensor').text('Binary sensor (generic)'))
+                        .append($("<option></option>").val('sensor').text('Sensor (generic)'))
+                        .append($("<option></option>").val('other').text('Other'))
                     //MQTT topic filter
                     var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
                         .appendTo(rowTopicFilter)
@@ -743,6 +772,7 @@
                         notesProperty.val(item.notes);
                         if (typeof item.output == 'undefined') { item.output = 1; }
                         outputProperty.val(item.output);
+                        haTypeProperty.val(item.haType || '');
                     }
                     itemTypeProperty.trigger('change');
                 },
@@ -1055,12 +1085,12 @@
                     },
                     {
                         name: 'attributes',
-                        get: function() { return JSON.stringify(getAttributes()); },
+                        get: function() { return JSON.stringify(localGetAttributes()); },
                         set: function(v) { addAttributes(JSON.parse(v)); }
                     },
                     {
                         name: 'items',
-                        get: function() { return JSON.stringify(getItems()); },
+                        get: function() { return JSON.stringify(localGetItems()); },
                         set: function(v) { addItems(JSON.parse(v)); }
                     },                    
                     {
@@ -1121,8 +1151,8 @@
             
             node.statusFn = editors['statusFn'].getValue();
 
-            node.attributes = getAttributes();
-            node.items = getItems();
+            node.attributes = localGetAttributes();
+            node.items = localGetItems();
 
             for (let d in node.items) {
                 if (node.items[d].output > node.outputs) { node.outputs = node.items[d].output; }

@@ -1,50 +1,264 @@
 <script type="text/x-red" data-template-name="hal2EventHandler">
-    <div class="form-row">
-        <p>The configuration is used for firing events between nodes.</br>
-        Use the same config for all nodes that should be able to communicate.</br>
-        If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
-    </div>   
-    <div class="form-row">
-        <label for="node-config-input-name" style="width:150px"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-config-input-name" placeholder="Name" style="width:calc(100% - 185px)">
+    <div class="form-row tabs-row">
+        <ul style="min-width: 600px; margin-bottom: 20px;" id="hal2eh-tabs"></ul>
     </div>
-    <div class="form-row">
-        <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
-        <select id="node-config-input-contextStore" style="width:calc(100% - 185px)"></select>
-    </div>
-    <div class="form-row">
-        <label for="node-config-input-maxlisteners" style="width:150px"><i class="fa fa-sign-out"></i> Max event listeners</label>
-        <input type="number" id="node-config-input-maxlisteners" style="width: 80px;" min="0" max="500" value="50"> (0 for unlimited)
-    </div>
-    <div class="form-row">
-        <label for="node-config-input-heartbeat" style="width:150px"><i class="fa fa-heartbeat"></i> Heartbeat check interval</label>
-        <input type="number" id="node-config-input-heartbeat" style="width: 80px;" min="1" value="60"> seconds
+    <div id="hal2eh-tabs-content" style="min-height: calc(100% - 95px);">
+
+        <!-- General tab -->
+        <div id="hal2eh-tab-general" style="display:none">
+            <div class="form-row">
+                <p>The configuration is used for firing events between nodes.<br>
+                Use the same config for all nodes that should be able to communicate.<br>
+                If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-name" style="width:150px"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-config-input-name" placeholder="Name" style="width:calc(100% - 185px)">
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
+                <select id="node-config-input-contextStore" style="width:calc(100% - 185px)"></select>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-maxlisteners" style="width:150px"><i class="fa fa-sign-out"></i> Max event listeners</label>
+                <input type="number" id="node-config-input-maxlisteners" style="width:80px" min="0" max="500" value="50"> (0 for unlimited)
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-heartbeat" style="width:150px"><i class="fa fa-heartbeat"></i> Heartbeat interval</label>
+                <input type="number" id="node-config-input-heartbeat" style="width:80px" min="1" value="60"> seconds
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eventhandler-list-items"></ol>
+            </div>
+        </div>
+
+        <!-- MCP tab -->
+        <div id="hal2eh-tab-mcp" style="display:none">
+            <div class="form-row">
+                <label style="width:150px"><i class="fa fa-plug"></i> Enable MCP</label>
+                <input type="checkbox" id="node-config-input-mcpEnabled" style="width:23px; margin:0">
+                <label for="node-config-input-mcpEnabled" style="margin:0; width:auto;"> Aktivera MCP-server</label>
+            </div>
+
+            <div id="hal2eh-mcp-details">
+                <div class="form-row">
+                    <label for="node-config-input-mcpServerName" style="width:150px"><i class="fa fa-server"></i> Server name</label>
+                    <input type="text" id="node-config-input-mcpServerName" placeholder="hal2-mcp" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-mcpServerUrl" style="width:150px"><i class="fa fa-globe"></i> MCP server URL</label>
+                    <input type="text" id="node-config-input-mcpServerUrl" placeholder="https://nodered.example.com" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-httpPathPrefix" style="width:150px"><i class="fa fa-link"></i> HTTP path prefix</label>
+                    <input type="text" id="node-config-input-httpPathPrefix" placeholder="/prefix (valfritt)" style="width:calc(100% - 185px)">
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label for="node-config-input-pocketidUrl" style="width:150px"><i class="fa fa-lock"></i> PocketID URL</label>
+                    <input type="text" id="node-config-input-pocketidUrl" placeholder="https://pocketid.example.com" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-pocketidClientId" style="width:150px"><i class="fa fa-id-card"></i> Client ID</label>
+                    <input type="text" id="node-config-input-pocketidClientId" placeholder="Client ID" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
+                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="Client secret" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label for="node-config-input-tokenCacheTTL" style="width:150px"><i class="fa fa-clock-o"></i> Token cache TTL</label>
+                    <input type="number" id="node-config-input-tokenCacheTTL" style="width:80px" min="30" value="300"> seconds
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-toolTimeout" style="width:150px"><i class="fa fa-hourglass-half"></i> Tool timeout</label>
+                    <input type="number" id="node-config-input-toolTimeout" style="width:80px" min="1" value="30"> seconds
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label style="width:150px"><i class="fa fa-terminal"></i> Admin tools</label>
+                    <input type="checkbox" id="node-config-input-adminToolsEnabled" style="width:23px; margin:0">
+                    <label for="node-config-input-adminToolsEnabled" style="margin:0; width:auto;"> Aktivera Node-RED-adminverktyg</label>
+                </div>
+                <div id="hal2eh-admin-details">
+                    <div class="form-row">
+                        <label for="node-config-input-adminToken" style="width:150px"><i class="fa fa-shield"></i> Admin token</label>
+                        <input type="password" id="node-config-input-adminToken" placeholder="NODE_RED_ADMIN_TOKEN" style="width:calc(100% - 185px)" autocomplete="off">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-adminPort" style="width:150px"><i class="fa fa-plug"></i> Admin API port</label>
+                        <input type="number" id="node-config-input-adminPort" style="width:80px" min="1" max="65535" value="1880">
+                    </div>
+                    <div class="form-row" style="background:#fff8e1; border:1px solid #ffe082; border-radius:4px; padding:8px 12px; margin-top:4px;">
+                        <i class="fa fa-info-circle" style="color:#f9a825;"></i>
+                        <span style="font-size:12px; margin-left:6px;">
+                            Aktiverade adminverktyg: <strong>get_flows</strong>, <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
+                            Dessa anropar Node-RED admin API på localhost:&lt;port&gt;.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </script>
-    
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2EventHandler', {
         category: 'config',
         defaults: {
-            name:           {value: "Event handler"},
-            contextStore:   {},
-            maxlisteners:   {value: "50"},
-            checkHeartbeat: {value: false},
-            heartbeat:      {value: 3600}
+            name:              { value: "Event handler" },
+            contextStore:      {},
+            maxlisteners:      { value: "50" },
+            checkHeartbeat:    { value: false },
+            heartbeat:         { value: 3600 },
+            items:             { value: [], required: false },
+            // MCP
+            mcpEnabled:        { value: false },
+            mcpServerName:     { value: 'hal2-mcp' },
+            mcpServerUrl:      { value: '' },
+            httpPathPrefix:    { value: '' },
+            pocketidUrl:       { value: '' },
+            tokenCacheTTL:     { value: 300 },
+            toolTimeout:       { value: 30 },
+            adminToolsEnabled: { value: false },
+            adminPort:         { value: 1880 }
+        },
+        credentials: {
+            pocketidClientId:     { type: 'text' },
+            pocketidClientSecret: { type: 'password' },
+            adminToken:           { type: 'password' }
         },
         label: function () {
             return this.name || "Event handler";
         },
         oneditprepare: function () {
+            var node = this;
+
+            // ── Tabs ──────────────────────────────────────────────────────────
+            var tabs = RED.tabs.create({
+                id: 'hal2eh-tabs',
+                onchange: function (tab) {
+                    $('#hal2eh-tabs-content').children().hide();
+                    $('#' + tab.id).show();
+                }
+            });
+            tabs.addTab({ id: 'hal2eh-tab-general', label: 'General' });
+            tabs.addTab({ id: 'hal2eh-tab-mcp',     label: 'MCP' });
+
+            // ── Context stores ────────────────────────────────────────────────
             var contextStores = RED.settings.context.stores;
-            //Context stores from setup
-            for (let c in contextStores) {
-                $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>").appendTo("#node-config-input-contextStore");
+            for (var c in contextStores) {
+                $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>")
+                    .appendTo("#node-config-input-contextStore");
             }
-            if (this.contextStore) {
-                $("#node-config-input-contextStore").val(this.contextStore);
-                $("#node-config-input-contextStore").trigger("change");
+            if (node.contextStore) {
+                $("#node-config-input-contextStore").val(node.contextStore).trigger("change");
             }
+
+            // ── Items editableList ────────────────────────────────────────────
+            $("#node-config-eventhandler-list-items").editableList({
+                addItem: function(container, i, opt) {
+                    var item = opt;
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    var rowName    = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
+                    var rowUnit    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+
+                    var expandButton = $('<span/>', { style: "margin-left:5px; margin-right:10px" })
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        } else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                        rowDetails.change();
+                    });
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") {
+                            rowDetails.show();
+                        } else {
+                            rowDetails.hide();
+                        }
+                    });
+
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;", class: "fa fa-tag" })
+                        .appendTo(rowName).append(' Item');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-left:25px;padding-right:10px;box-sizing:border-box;", class: "fa fa-file" })
+                        .appendTo(rowUnit).append(' Unit');
+
+                    var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 125px)", class: "node-config-eventhandler-item-name-property", type: "text" })
+                        .appendTo(rowName).prop('required', true);
+                    var idProperty = $('<input/>', { class: "node-config-eventhandler-item-id-property", type: "hidden" })
+                        .appendTo(rowName).val(halCreateId());
+                    var unitProperty = $('<input/>', { style: "width:calc(100% - 125px)", class: "node-config-eventhandler-item-unit-property", type: "text" })
+                        .appendTo(rowUnit);
+
+                    if (item && Object.keys(item).length !== 0) {
+                        nameProperty.val(item.name);
+                        idProperty.val(item.id);
+                        unitProperty.val(item.unit);
+                    }
+                },
+                removable: true,
+                sortable:  true,
+                addButton: "Item"
+            });
+
+            if (node.items) {
+                for (var d in node.items) {
+                    $("#node-config-eventhandler-list-items").editableList('addItem', node.items[d]);
+                }
+            }
+
+            // ── MCP toggle ────────────────────────────────────────────────────
+            function toggleMcp() {
+                if ($('#node-config-input-mcpEnabled').is(':checked')) {
+                    $('#hal2eh-mcp-details').show();
+                } else {
+                    $('#hal2eh-mcp-details').hide();
+                }
+            }
+            $('#node-config-input-mcpEnabled').on('change', toggleMcp);
+            toggleMcp();
+
+            // ── Admin tools toggle ────────────────────────────────────────────
+            function toggleAdmin() {
+                if ($('#node-config-input-adminToolsEnabled').is(':checked')) {
+                    $('#hal2eh-admin-details').show();
+                } else {
+                    $('#hal2eh-admin-details').hide();
+                }
+            }
+            $('#node-config-input-adminToolsEnabled').on('change', toggleAdmin);
+            toggleAdmin();
+        },
+        oneditsave: function () {
+            var node = this;
+            node.mcpEnabled        = $('#node-config-input-mcpEnabled').is(':checked');
+            node.adminToolsEnabled = $('#node-config-input-adminToolsEnabled').is(':checked');
+
+            node.items = [];
+            $("#node-config-eventhandler-list-items")
+                .editableList('items')
+                .each(function () {
+                    var item = $(this);
+                    node.items.push({
+                        name: item.find(".node-config-eventhandler-item-name-property").val(),
+                        id:   item.find(".node-config-eventhandler-item-id-property").val(),
+                        unit: item.find(".node-config-eventhandler-item-unit-property").val()
+                    });
+                });
         }
     });
 </script>
