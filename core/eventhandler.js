@@ -213,6 +213,9 @@ module.exports = function(RED) {
         };
 
         node.publishCommand = function (id, itemid, payload) {
+            // Normalise string on/off/true/false to boolean
+            if (payload === 'on'  || payload === 'true')  payload = true;
+            if (payload === 'off' || payload === 'false') payload = false;
             const listenerCount = this.listenerCount("command_" + id);
             console.log('[hal2EventHandler] publishCommand: thing=' + id + ', item=' + itemid + ', payload=' + JSON.stringify(payload) + ', listeners=' + listenerCount);
             this.emit("command_" + id, itemid, payload);
