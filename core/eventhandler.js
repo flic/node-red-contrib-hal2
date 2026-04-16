@@ -23,6 +23,33 @@ const MCP_TOOLS = [
                 value     : { description: 'Value to set (e.g. "on", "off", brightness number, temperature, etc.)' }
             }
         }
+    },
+    {
+        name        : 'get_low_battery',
+        description : 'Returns all devices that have a battery level below a given threshold. ' +
+                      'Use this to answer questions like "which sensors have low battery?" or "what needs new batteries?".',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                threshold : { type: 'number', description: 'Battery level threshold in percent (default: 20)', minimum: 0, maximum: 100 }
+            }
+        }
+    },
+    {
+        name        : 'set_light',
+        description : 'Control a specific light or lamp by thing_id. Use get_all_states to find the thing_id ' +
+                      'for a room or device. You can turn it on/off and/or set brightness in one call. ' +
+                      'Only sends the parameters you provide.',
+        inputSchema : {
+            type       : 'object',
+            required   : ['thing_id'],
+            properties : {
+                thing_id   : { type: 'string',  description: 'Thing node ID (from get_all_states)' },
+                on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
+                brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
+                color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool white)' }
+            }
+        }
     }
 ];
 
@@ -405,11 +432,80 @@ module.exports = function(RED) {
                         return toolOk(JSON.stringify(states, null, 2));
                     }
 
+                    // get_low_battery
+                    if (toolName === 'get_low_battery') {
+                        const threshold = args.threshold !== undefined ? Number(args.threshold) : 20;
+                        const low = [];
+                        for (const device of getAllStates()) {
+                            for (const itm of device.items) {
+                                if ((itm.ha_type || '').toLowerCase() === 'battery') {
+                                    const level = Number(itm.value);
+                                    if (!isNaN(level) && level < threshold) {
+                                        low.push({
+                                            thing_id   : device.thing_id,
+                                            thing_name : device.thing_name,
+                                            item_id    : itm.item_id,
+                                            item_name  : itm.item_name,
+                                            battery    : level
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        low.sort((a, b) => a.battery - b.battery);
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ threshold, low_battery_devices: low }));
+                    }
+
                     // control_device
                     if (toolName === 'control_device') {
                         const result = controlDevice(args.thing_id, args.item_id, args.value);
                         node.status({ fill: result.error ? 'red' : 'green', shape: 'dot', text: result.error ? 'error' : 'ready' });
                         return toolOk(JSON.stringify(result));
+                    }
+
+                    // set_light
+                    if (toolName === 'set_light') {
+                        const thing = RED.nodes.getNode(args.thing_id);
+                        if (!thing || thing.type !== 'hal2Thing') {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'Thing not found: ' + args.thing_id }));
+                        }
+                        if (!thing.eventHandler || thing.eventHandler.id !== node.id) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'Thing not connected to this event handler' }));
+                        }
+
+                        const tt = thing.thingType;
+                        if (!tt || !tt.items) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'Thing has no items' }));
+                        }
+
+                        const sent = [];
+                        for (const itm of Object.values(tt.items)) {
+                            const ht = (itm.haType || '').toLowerCase();
+                            if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
+                                node.publishCommand(thing.id, itm.id, args.on);
+                                sent.push({ item_id: itm.id, item_name: itm.name, value: args.on });
+                            }
+                            if (ht === 'dimmer' && args.brightness !== undefined) {
+                                node.publishCommand(thing.id, itm.id, args.brightness);
+                                sent.push({ item_id: itm.id, item_name: itm.name, value: args.brightness });
+                            }
+                            if (ht === 'color temperature' && args.color_temp !== undefined) {
+                                node.publishCommand(thing.id, itm.id, args.color_temp);
+                                sent.push({ item_id: itm.id, item_name: itm.name, value: args.color_temp });
+                            }
+                        }
+
+                        if (sent.length === 0) {
+                            node.status({ fill: 'yellow', shape: 'dot', text: 'no match' });
+                            return toolOk(JSON.stringify({ warning: 'No light/switch/dimmer items found on this thing', thing_name: thing.name }));
+                        }
+
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ success: true, thing_name: thing.name, commands: sent }));
                     }
 
                     // Admin tools — handled internally
