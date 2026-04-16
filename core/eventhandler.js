@@ -481,58 +481,43 @@ module.exports = function(RED) {
                     if (toolName === 'set_light') {
                         console.log('[hal2EventHandler] set_light called, args=' + JSON.stringify(args));
 
-                        // Resolve target things — by id or by name (partial, case-insensitive)
-                        let targets = [];
+                        // Use getAllStates() so search is consistent with what Claude sees
+                        const allStates = getAllStates();
+                        let matched = [];
                         if (args.thing_id) {
-                            const t = RED.nodes.getNode(args.thing_id);
-                            console.log('[hal2EventHandler] set_light by id: found=' + !!(t) + ', type=' + (t && t.type) + ', ehMatch=' + !!(t && t.eventHandler && t.eventHandler.id === node.id));
-                            if (t && t.type === 'hal2Thing' && t.eventHandler && t.eventHandler.id === node.id) {
-                                targets = [t];
-                            }
+                            matched = allStates.filter(d => d.thing_id === args.thing_id);
+                            console.log('[hal2EventHandler] set_light by id "' + args.thing_id + '": matched=' + matched.length);
                         } else if (args.thing_name) {
                             const needle = args.thing_name.toLowerCase();
-                            RED.nodes.eachNode(function (cfg) {
-                                if (cfg.type !== 'hal2Thing') return;
-                                const t = RED.nodes.getNode(cfg.id);
-                                if (!t || !t.eventHandler || t.eventHandler.id !== node.id) return;
-                                console.log('[hal2EventHandler] set_light name scan: "' + t.name + '" includes "' + needle + '"=' + !!(t.name && t.name.toLowerCase().includes(needle)));
-                                if (t.name && t.name.toLowerCase().includes(needle)) targets.push(t);
-                            });
+                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                            console.log('[hal2EventHandler] set_light by name "' + args.thing_name + '": candidates=' + allStates.map(d => d.thing_name).join(', ') + ' → matched=' + matched.length);
                         }
 
-                        console.log('[hal2EventHandler] set_light targets found: ' + targets.length);
-
-                        if (targets.length === 0) {
+                        if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'No matching thing found', thing_id: args.thing_id, thing_name: args.thing_name }));
+                            return toolOk(JSON.stringify({ error: 'No matching thing found', thing_id: args.thing_id, thing_name: args.thing_name, available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
                         }
 
                         const results = [];
-                        for (const thing of targets) {
-                            const tt = thing.thingType;
-                            if (!tt || !tt.items) {
-                                console.log('[hal2EventHandler] set_light: thing ' + thing.id + ' has no thingType/items');
-                                continue;
-                            }
-                            const itemKeys = Object.keys(tt.items);
-                            console.log('[hal2EventHandler] set_light: thing=' + thing.name + ', items=' + itemKeys.length + ', haTypes=' + itemKeys.map(k => tt.items[k].haType || '(none)').join(','));
+                        for (const device of matched) {
                             const sent = [];
-                            for (const itm of Object.values(tt.items)) {
-                                const ht = (itm.haType || '').toLowerCase();
+                            for (const itm of device.items) {
+                                const ht = (itm.ha_type || '').toLowerCase();
+                                console.log('[hal2EventHandler] set_light item: "' + itm.item_name + '" ha_type="' + ht + '"');
                                 if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
-                                    node.publishCommand(thing.id, itm.id, args.on);
-                                    sent.push({ item_id: itm.id, item_name: itm.name, value: args.on });
+                                    node.publishCommand(device.thing_id, itm.item_id, args.on);
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, value: args.on });
                                 }
                                 if (ht === 'dimmer' && args.brightness !== undefined) {
-                                    node.publishCommand(thing.id, itm.id, args.brightness);
-                                    sent.push({ item_id: itm.id, item_name: itm.name, value: args.brightness });
+                                    node.publishCommand(device.thing_id, itm.item_id, args.brightness);
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, value: args.brightness });
                                 }
                                 if (ht === 'color temperature' && args.color_temp !== undefined) {
-                                    node.publishCommand(thing.id, itm.id, args.color_temp);
-                                    sent.push({ item_id: itm.id, item_name: itm.name, value: args.color_temp });
+                                    node.publishCommand(device.thing_id, itm.item_id, args.color_temp);
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, value: args.color_temp });
                                 }
                             }
-                            results.push({ thing_id: thing.id, thing_name: thing.name, commands: sent });
+                            results.push({ thing_id: device.thing_id, thing_name: device.thing_name, commands: sent });
                         }
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
