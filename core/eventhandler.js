@@ -142,10 +142,13 @@ function removeRoute(RED, method, path) {
 
 // ── EventHandler node ─────────────────────────────────────────────────────────
 
+console.log('[hal2EventHandler] module loaded');
+
 module.exports = function(RED) {
 
     function hal2EventHandler(config) {
         RED.nodes.createNode(this, config);
+        console.log('[hal2EventHandler] constructor called, id=' + config.id + ', mcpEnabled=' + !!config.mcpEnabled);
 
         this.host         = config.name;
         this.contextStore = config.contextStore;
