@@ -36,7 +36,7 @@ const MCP_TOOLS = [
         }
     },
     {
-        name        : 'set_light',
+        name        : 'control_light',
         description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
                       'thing_name supports partial, case-insensitive match against the thing name OR against ' +
                       'item labels (the label field in get_all_states items). Labels are friendly names assigned ' +
@@ -338,11 +338,14 @@ module.exports = function(RED) {
             }
 
             function controlDevice(thingId, itemId, value) {
+                console.log('[hal2EventHandler] controlDevice: thingId=' + thingId + ', itemId=' + itemId + ', value=' + JSON.stringify(value));
                 const thing = RED.nodes.getNode(thingId);
                 if (!thing || thing.type !== 'hal2Thing') {
+                    console.log('[hal2EventHandler] controlDevice: thing not found or wrong type, type=' + (thing && thing.type));
                     return { error: 'Thing not found: ' + thingId };
                 }
                 if (!thing.eventHandler || thing.eventHandler.id !== node.id) {
+                    console.log('[hal2EventHandler] controlDevice: eventHandler mismatch, thing.eh=' + (thing.eventHandler && thing.eventHandler.id) + ', node.id=' + node.id);
                     return { error: 'Thing not connected to this event handler' };
                 }
                 node.publishCommand(thingId, itemId, value);
@@ -463,6 +466,7 @@ module.exports = function(RED) {
                 if (method === 'tools/call') {
                     const toolName = params.name;
                     const args     = params.arguments || {};
+                    console.log('[hal2EventHandler] tools/call: tool=' + toolName + ', args=' + JSON.stringify(args));
 
                     node.status({ fill: 'blue', shape: 'dot', text: toolName });
 
@@ -505,8 +509,8 @@ module.exports = function(RED) {
                         return toolOk(JSON.stringify(result));
                     }
 
-                    // set_light
-                    if (toolName === 'set_light') {
+                    // control_light
+                    if (toolName === 'control_light') {
                         console.log('[hal2EventHandler] set_light called, args=' + JSON.stringify(args));
 
                         // Use getAllStates() so search is consistent with what Claude sees
