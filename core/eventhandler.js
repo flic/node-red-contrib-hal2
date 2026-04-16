@@ -211,7 +211,8 @@ module.exports = function(RED) {
         };
 
         node.publishCommand = function (id, itemid, payload) {
-            node.debug("Command event: Id " + id + " Item " + itemid);
+            const listenerCount = this.listenerCount("command_" + id);
+            console.log('[hal2EventHandler] publishCommand: thing=' + id + ', item=' + itemid + ', payload=' + JSON.stringify(payload) + ', listeners=' + listenerCount);
             this.emit("command_" + id, itemid, payload);
         };
 
@@ -478,10 +479,13 @@ module.exports = function(RED) {
 
                     // set_light
                     if (toolName === 'set_light') {
+                        console.log('[hal2EventHandler] set_light called, args=' + JSON.stringify(args));
+
                         // Resolve target things — by id or by name (partial, case-insensitive)
                         let targets = [];
                         if (args.thing_id) {
                             const t = RED.nodes.getNode(args.thing_id);
+                            console.log('[hal2EventHandler] set_light by id: found=' + !!(t) + ', type=' + (t && t.type) + ', ehMatch=' + !!(t && t.eventHandler && t.eventHandler.id === node.id));
                             if (t && t.type === 'hal2Thing' && t.eventHandler && t.eventHandler.id === node.id) {
                                 targets = [t];
                             }
@@ -491,9 +495,12 @@ module.exports = function(RED) {
                                 if (cfg.type !== 'hal2Thing') return;
                                 const t = RED.nodes.getNode(cfg.id);
                                 if (!t || !t.eventHandler || t.eventHandler.id !== node.id) return;
+                                console.log('[hal2EventHandler] set_light name scan: "' + t.name + '" includes "' + needle + '"=' + !!(t.name && t.name.toLowerCase().includes(needle)));
                                 if (t.name && t.name.toLowerCase().includes(needle)) targets.push(t);
                             });
                         }
+
+                        console.log('[hal2EventHandler] set_light targets found: ' + targets.length);
 
                         if (targets.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
@@ -503,7 +510,12 @@ module.exports = function(RED) {
                         const results = [];
                         for (const thing of targets) {
                             const tt = thing.thingType;
-                            if (!tt || !tt.items) continue;
+                            if (!tt || !tt.items) {
+                                console.log('[hal2EventHandler] set_light: thing ' + thing.id + ' has no thingType/items');
+                                continue;
+                            }
+                            const itemKeys = Object.keys(tt.items);
+                            console.log('[hal2EventHandler] set_light: thing=' + thing.name + ', items=' + itemKeys.length + ', haTypes=' + itemKeys.map(k => tt.items[k].haType || '(none)').join(','));
                             const sent = [];
                             for (const itm of Object.values(tt.items)) {
                                 const ht = (itm.haType || '').toLowerCase();
