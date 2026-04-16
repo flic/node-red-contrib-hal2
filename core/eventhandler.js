@@ -37,14 +37,15 @@ const MCP_TOOLS = [
     },
     {
         name        : 'set_light',
-        description : 'Control a specific light or lamp by thing_id. Use get_all_states to find the thing_id ' +
-                      'for a room or device. You can turn it on/off and/or set brightness in one call. ' +
-                      'Only sends the parameters you provide.',
+        description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name ' +
+                      '(both available from get_all_states). thing_name supports partial, case-insensitive match. ' +
+                      'If multiple devices match the name, all of them are controlled. ' +
+                      'You can turn it on/off and/or set brightness/color_temp in one call.',
         inputSchema : {
             type       : 'object',
-            required   : ['thing_id'],
             properties : {
-                thing_id   : { type: 'string',  description: 'Thing node ID (from get_all_states)' },
+                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over thing_name.' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "kontor" matches "Kontor Spotlights").' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
                 color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool white)' }
@@ -477,46 +478,53 @@ module.exports = function(RED) {
 
                     // set_light
                     if (toolName === 'set_light') {
-                        const thing = RED.nodes.getNode(args.thing_id);
-                        if (!thing || thing.type !== 'hal2Thing') {
-                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'Thing not found: ' + args.thing_id }));
-                        }
-                        if (!thing.eventHandler || thing.eventHandler.id !== node.id) {
-                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'Thing not connected to this event handler' }));
+                        // Resolve target things — by id or by name (partial, case-insensitive)
+                        let targets = [];
+                        if (args.thing_id) {
+                            const t = RED.nodes.getNode(args.thing_id);
+                            if (t && t.type === 'hal2Thing' && t.eventHandler && t.eventHandler.id === node.id) {
+                                targets = [t];
+                            }
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            RED.nodes.eachNode(function (cfg) {
+                                if (cfg.type !== 'hal2Thing') return;
+                                const t = RED.nodes.getNode(cfg.id);
+                                if (!t || !t.eventHandler || t.eventHandler.id !== node.id) return;
+                                if (t.name && t.name.toLowerCase().includes(needle)) targets.push(t);
+                            });
                         }
 
-                        const tt = thing.thingType;
-                        if (!tt || !tt.items) {
+                        if (targets.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'Thing has no items' }));
+                            return toolOk(JSON.stringify({ error: 'No matching thing found', thing_id: args.thing_id, thing_name: args.thing_name }));
                         }
 
-                        const sent = [];
-                        for (const itm of Object.values(tt.items)) {
-                            const ht = (itm.haType || '').toLowerCase();
-                            if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
-                                node.publishCommand(thing.id, itm.id, args.on);
-                                sent.push({ item_id: itm.id, item_name: itm.name, value: args.on });
+                        const results = [];
+                        for (const thing of targets) {
+                            const tt = thing.thingType;
+                            if (!tt || !tt.items) continue;
+                            const sent = [];
+                            for (const itm of Object.values(tt.items)) {
+                                const ht = (itm.haType || '').toLowerCase();
+                                if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
+                                    node.publishCommand(thing.id, itm.id, args.on);
+                                    sent.push({ item_id: itm.id, item_name: itm.name, value: args.on });
+                                }
+                                if (ht === 'dimmer' && args.brightness !== undefined) {
+                                    node.publishCommand(thing.id, itm.id, args.brightness);
+                                    sent.push({ item_id: itm.id, item_name: itm.name, value: args.brightness });
+                                }
+                                if (ht === 'color temperature' && args.color_temp !== undefined) {
+                                    node.publishCommand(thing.id, itm.id, args.color_temp);
+                                    sent.push({ item_id: itm.id, item_name: itm.name, value: args.color_temp });
+                                }
                             }
-                            if (ht === 'dimmer' && args.brightness !== undefined) {
-                                node.publishCommand(thing.id, itm.id, args.brightness);
-                                sent.push({ item_id: itm.id, item_name: itm.name, value: args.brightness });
-                            }
-                            if (ht === 'color temperature' && args.color_temp !== undefined) {
-                                node.publishCommand(thing.id, itm.id, args.color_temp);
-                                sent.push({ item_id: itm.id, item_name: itm.name, value: args.color_temp });
-                            }
-                        }
-
-                        if (sent.length === 0) {
-                            node.status({ fill: 'yellow', shape: 'dot', text: 'no match' });
-                            return toolOk(JSON.stringify({ warning: 'No light/switch/dimmer items found on this thing', thing_name: thing.name }));
+                            results.push({ thing_id: thing.id, thing_name: thing.name, commands: sent });
                         }
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify({ success: true, thing_name: thing.name, commands: sent }));
+                        return toolOk(JSON.stringify({ success: true, results }));
                     }
 
                     // Admin tools — handled internally
