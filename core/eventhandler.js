@@ -37,9 +37,11 @@ const MCP_TOOLS = [
     },
     {
         name        : 'set_light',
-        description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name ' +
-                      '(both available from get_all_states). thing_name supports partial, case-insensitive match. ' +
-                      'If multiple devices match the name, all of them are controlled. ' +
+        description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
+                      'thing_name supports partial, case-insensitive match against the thing name OR against ' +
+                      'item labels (the label field in get_all_states items). Labels are friendly names assigned ' +
+                      'per-device, e.g. a double switch named "Kök Dubbelbrytare" may have items labelled ' +
+                      '"Kök Taklampa" and "Kök Bänkbelysning" — searching "bänkbelysning" will target only that relay. ' +
                       'You can turn it on/off and/or set brightness/color_temp in one call.',
         inputSchema : {
             type       : 'object',
@@ -48,7 +50,7 @@ const MCP_TOOLS = [
                 thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "kontor" matches "Kontor Spotlights").' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
-                color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool white)' }
+                color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' }
             }
         }
     }
@@ -277,6 +279,27 @@ module.exports = function(RED) {
 
             // ── Device state helpers ───────────────────────────────────────────
 
+            // Normalise a name for attribute key matching: lowercase + remove spaces/hyphens
+            function normalise(str) {
+                return (str || '').toLowerCase().replace(/[\s\-_]+/g, '');
+            }
+
+            // Build attribute name→value map for a thing
+            function resolveAttributes(thing) {
+                const map = {};
+                if (!Array.isArray(thing.thingType.attributes)) return map;
+                for (const attrDef of thing.thingType.attributes) {
+                    if (!Array.isArray(thing.attributes)) break;
+                    for (const a of thing.attributes) {
+                        if (a.id === attrDef.id) {
+                            map[normalise(attrDef.name)] = a.val;
+                            break;
+                        }
+                    }
+                }
+                return map;
+            }
+
             function getAllStates() {
                 const devices = [];
                 RED.nodes.eachNode(function (cfg) {
@@ -286,16 +309,21 @@ module.exports = function(RED) {
                     const tt = thing.thingType;
                     if (!tt || !tt.items) return;
 
+                    const attrMap = resolveAttributes(thing);
+
                     const items = [];
                     for (const i in tt.items) {
                         const itm = tt.items[i];
                         if (itm.id === '1') continue; // skip heartbeat alive item
-                        items.push({
+                        const label = attrMap[normalise(itm.name)] || null;
+                        const entry = {
                             item_id   : itm.id,
                             item_name : itm.name,
                             ha_type   : itm.haType || '',
                             value     : (thing.state[itm.id] !== undefined) ? thing.state[itm.id] : 'no value'
-                        });
+                        };
+                        if (label) entry.label = label;
+                        items.push(entry);
                     }
 
                     devices.push({
@@ -483,38 +511,57 @@ module.exports = function(RED) {
 
                         // Use getAllStates() so search is consistent with what Claude sees
                         const allStates = getAllStates();
+
+                        // matched = array of { device, items } where items may be filtered to a subset
                         let matched = [];
                         if (args.thing_id) {
-                            matched = allStates.filter(d => d.thing_id === args.thing_id);
+                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                            if (device) matched = [{ device, items: device.items }];
                             console.log('[hal2EventHandler] set_light by id "' + args.thing_id + '": matched=' + matched.length);
                         } else if (args.thing_name) {
                             const needle = args.thing_name.toLowerCase();
-                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
-                            console.log('[hal2EventHandler] set_light by name "' + args.thing_name + '": candidates=' + allStates.map(d => d.thing_name).join(', ') + ' → matched=' + matched.length);
+                            // First try matching thing_name
+                            for (const device of allStates) {
+                                if (device.thing_name && device.thing_name.toLowerCase().includes(needle)) {
+                                    matched.push({ device, items: device.items });
+                                }
+                            }
+                            // If nothing matched thing_name, try matching item labels
+                            if (matched.length === 0) {
+                                for (const device of allStates) {
+                                    const labelItems = device.items.filter(itm => itm.label && itm.label.toLowerCase().includes(needle));
+                                    if (labelItems.length > 0) matched.push({ device, items: labelItems });
+                                }
+                            }
+                            console.log('[hal2EventHandler] set_light by name "' + args.thing_name + '": matched=' + matched.length);
                         }
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'No matching thing found', thing_id: args.thing_id, thing_name: args.thing_name, available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                            const available = allStates.map(d => ({
+                                thing_id: d.thing_id, thing_name: d.thing_name,
+                                labels: d.items.filter(i => i.label).map(i => i.label)
+                            }));
+                            return toolOk(JSON.stringify({ error: 'No matching thing found', thing_id: args.thing_id, thing_name: args.thing_name, available }));
                         }
 
                         const results = [];
-                        for (const device of matched) {
+                        for (const { device, items } of matched) {
                             const sent = [];
-                            for (const itm of device.items) {
+                            for (const itm of items) {
                                 const ht = (itm.ha_type || '').toLowerCase();
-                                console.log('[hal2EventHandler] set_light item: "' + itm.item_name + '" ha_type="' + ht + '"');
+                                console.log('[hal2EventHandler] set_light item: "' + itm.item_name + '" label="' + (itm.label || '') + '" ha_type="' + ht + '"');
                                 if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.on);
-                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, value: args.on });
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.on });
                                 }
                                 if (ht === 'dimmer' && args.brightness !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.brightness);
-                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, value: args.brightness });
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.brightness });
                                 }
                                 if (ht === 'color temperature' && args.color_temp !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.color_temp);
-                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, value: args.color_temp });
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.color_temp });
                                 }
                             }
                             results.push({ thing_id: device.thing_id, thing_name: device.thing_name, commands: sent });
