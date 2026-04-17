@@ -36,7 +36,7 @@ const MCP_TOOLS = [
         }
     },
     {
-        name        : 'control_light',
+        name        : 'set_light',
         description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
                       'thing_name supports partial, case-insensitive match against the thing name OR against ' +
                       'item labels (the label field in get_all_states items). Labels are friendly names assigned ' +
@@ -512,8 +512,8 @@ module.exports = function(RED) {
                         return toolOk(JSON.stringify(result));
                     }
 
-                    // control_light
-                    if (toolName === 'control_light') {
+                    // set_light / control_light
+                    if (toolName === 'set_light' || toolName === 'control_light') {
                         console.log('[hal2EventHandler] set_light called, args=' + JSON.stringify(args));
 
                         // Use getAllStates() so search is consistent with what Claude sees
@@ -567,8 +567,13 @@ module.exports = function(RED) {
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.brightness });
                                 }
                                 if (ht === 'color temperature' && args.color_temp !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.color_temp);
-                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.color_temp });
+                                    // Convert Kelvin → percent, 100% = warmest (2700K), 0% = coolest (6500K)
+                                    const CT_MIN = 2700, CT_MAX = 6500;
+                                    const ctPct = Math.round(Math.max(0, Math.min(100,
+                                        (CT_MAX - args.color_temp) / (CT_MAX - CT_MIN) * 100
+                                    )));
+                                    node.publishCommand(device.thing_id, itm.item_id, ctPct);
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: ctPct, kelvin: args.color_temp });
                                 }
                             }
                             results.push({ thing_id: device.thing_id, thing_name: device.thing_name, commands: sent });
