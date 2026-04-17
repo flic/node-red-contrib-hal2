@@ -25,6 +25,14 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'get_presence',
+        description : 'Returns presence information for all people/persons tracked in the system. ' +
+                      'Shows who is home, who is away, and which room each person is in. ' +
+                      'Use this to answer questions like "is anyone home?", "where is Fredrik?", ' +
+                      '"who is home right now?".',
+        inputSchema : { type: 'object', properties: {} }
+    },
+    {
         name        : 'get_low_battery',
         description : 'Returns all devices that have a battery level below a given threshold. ' +
                       'Use this to answer questions like "which sensors have low battery?" or "what needs new batteries?".',
@@ -478,6 +486,25 @@ module.exports = function(RED) {
                         const states = getAllStates();
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify(states, null, 2));
+                    }
+
+                    // get_presence
+                    if (toolName === 'get_presence') {
+                        const people = [];
+                        for (const device of getAllStates()) {
+                            const presenceItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'presence');
+                            if (!presenceItem) continue;
+                            const roomItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'room');
+                            const home = presenceItem.value === true || presenceItem.value === 'true';
+                            people.push({
+                                name  : device.thing_name,
+                                home,
+                                room  : (home && roomItem) ? roomItem.value : null
+                            });
+                        }
+                        people.sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0));
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ people }));
                     }
 
                     // get_low_battery
