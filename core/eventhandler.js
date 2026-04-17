@@ -25,6 +25,23 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'control_spa',
+        description : 'Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-insensitive). ' +
+                      'Current status (water temperature, heater state etc.) is available via get_all_states. ' +
+                      'All control parameters are optional — only provided ones are sent.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id    : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                thing_name  : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                target_temp : { type: 'number',  description: 'Desired water temperature in °C' },
+                heater      : { type: 'boolean', description: 'true = turn heater on, false = turn off' },
+                pump        : { type: 'boolean', description: 'true = turn circulation pump on, false = turn off' },
+                airjets     : { type: 'boolean', description: 'true = turn airjets on, false = turn off' }
+            }
+        }
+    },
+    {
         name        : 'get_presence',
         description : 'Returns presence information for all people/persons tracked in the system. ' +
                       'Shows who is home, who is away, and which room each person is in. ' +
@@ -505,6 +522,52 @@ module.exports = function(RED) {
                         people.sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0));
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ people }));
+                    }
+
+                    // control_spa
+                    if (toolName === 'control_spa') {
+                        const allStates = getAllStates();
+                        let matched = [];
+                        if (args.thing_id) {
+                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                            if (device) matched = [device];
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        }
+
+                        if (matched.length === 0) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'No matching spa found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                        }
+
+                        const results = [];
+                        for (const device of matched) {
+                            const sent = [];
+                            for (const itm of device.items) {
+                                const ht = (itm.ha_type || '').toLowerCase();
+                                if (ht === 'target temperature' && args.target_temp !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.target_temp);
+                                    sent.push({ item_name: itm.item_name, value: args.target_temp });
+                                }
+                                if (ht === 'heater' && args.heater !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.heater);
+                                    sent.push({ item_name: itm.item_name, value: args.heater });
+                                }
+                                if (ht === 'circulation pump' && args.pump !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.pump);
+                                    sent.push({ item_name: itm.item_name, value: args.pump });
+                                }
+                                if (ht === 'airjets' && args.airjets !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.airjets);
+                                    sent.push({ item_name: itm.item_name, value: args.airjets });
+                                }
+                            }
+                            results.push({ thing_name: device.thing_name, commands: sent });
+                        }
+
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ success: true, results }));
                     }
 
                     // get_low_battery
