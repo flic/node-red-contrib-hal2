@@ -25,6 +25,29 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'get_scenes',
+        description : 'Returns all scenes with their current status (active/inactive). ' +
+                      'Use this to answer "is scene X active?" or "which scenes are active right now?".',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                name : { type: 'string', description: 'Optional partial, case-insensitive filter on scene name' }
+            }
+        }
+    },
+    {
+        name        : 'activate_scene',
+        description : 'Activate or deactivate a scene by name or ID. Use get_scenes to find available scenes.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_scenes)' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                active     : { type: 'boolean', description: 'true = activate, false = deactivate' }
+            }
+        }
+    },
+    {
         name        : 'control_cover',
         description : 'Control curtains, blinds or shutters. Identify by thing_id or thing_name ' +
                       '(partial, case-insensitive). Use position to set an exact opening level, ' +
@@ -537,6 +560,53 @@ module.exports = function(RED) {
                         people.sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0));
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ people }));
+                    }
+
+                    // get_scenes
+                    if (toolName === 'get_scenes') {
+                        const needle = args.name ? args.name.toLowerCase() : null;
+                        const scenes = [];
+                        for (const device of getAllStates()) {
+                            const sceneItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'scene');
+                            if (!sceneItem) continue;
+                            if (needle && !device.thing_name.toLowerCase().includes(needle)) continue;
+                            scenes.push({
+                                thing_id   : device.thing_id,
+                                thing_name : device.thing_name,
+                                active     : sceneItem.value === true || sceneItem.value === 'true'
+                            });
+                        }
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ scenes }));
+                    }
+
+                    // activate_scene
+                    if (toolName === 'activate_scene') {
+                        const allStates = getAllStates();
+                        let matched = [];
+                        if (args.thing_id) {
+                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                            if (device) matched = [device];
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        }
+
+                        if (matched.length === 0) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'No matching scene found' }));
+                        }
+
+                        const results = [];
+                        for (const device of matched) {
+                            const sceneItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'scene');
+                            if (!sceneItem) continue;
+                            node.publishCommand(device.thing_id, sceneItem.item_id, args.active);
+                            results.push({ thing_name: device.thing_name, active: args.active });
+                        }
+
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ success: true, results }));
                     }
 
                     // control_cover
