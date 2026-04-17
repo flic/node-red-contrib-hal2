@@ -101,6 +101,13 @@ const MCP_TOOLS = [
         inputSchema : { type: 'object', properties: {} }
     },
     {
+        name        : 'get_water_sensors',
+        description : 'Returns status of all water leak sensors. ' +
+                      'Use this to answer "is there a water leak?", "are any water sensors triggered?" etc. ' +
+                      'Triggered sensors (wet=true) are listed first.',
+        inputSchema : { type: 'object', properties: {} }
+    },
+    {
         name        : 'get_low_battery',
         description : 'Returns all devices that have a battery level below a given threshold. ' +
                       'Use this to answer questions like "which sensors have low battery?" or "what needs new batteries?".',
@@ -749,6 +756,24 @@ module.exports = function(RED) {
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ success: true, results }));
+                    }
+
+                    // get_water_sensors
+                    if (toolName === 'get_water_sensors') {
+                        const sensors = [];
+                        for (const device of getAllStates()) {
+                            const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
+                            if (!waterItem) continue;
+                            const wet = waterItem.value === true || waterItem.value === 'true';
+                            sensors.push({
+                                thing_id   : device.thing_id,
+                                thing_name : device.thing_name,
+                                wet
+                            });
+                        }
+                        sensors.sort((a, b) => (b.wet ? 1 : 0) - (a.wet ? 1 : 0));
+                        node.status({ fill: sensors.some(s => s.wet) ? 'red' : 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ sensors, any_wet: sensors.some(s => s.wet) }));
                     }
 
                     // get_low_battery
