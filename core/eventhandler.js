@@ -25,6 +25,19 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'control_fan',
+        description : 'Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensitive). ' +
+                      'Speed 0 = off, 1 = low, 2 = medium, 3 = high. Current speed is available via get_all_states.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                speed      : { type: 'number',  description: '0 = off, 1 = low, 2 = medium, 3 = high', minimum: 0, maximum: 3 }
+            }
+        }
+    },
+    {
         name        : 'get_scenes',
         description : 'Returns all scenes with their current status (active/inactive). ' +
                       'Use this to answer "is scene X active?" or "which scenes are active right now?".',
@@ -560,6 +573,44 @@ module.exports = function(RED) {
                         people.sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0));
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ people }));
+                    }
+
+                    // control_fan
+                    if (toolName === 'control_fan') {
+                        const allStates = getAllStates();
+                        let matched = [];
+                        if (args.thing_id) {
+                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                            if (device) matched = [device];
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        }
+
+                        if (matched.length === 0) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'No matching fan found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                        }
+
+                        if (args.speed === undefined) {
+                            return toolOk(JSON.stringify({ error: 'Provide speed (0–3)' }));
+                        }
+
+                        const speed = Math.max(0, Math.min(3, Math.round(args.speed)));
+                        const results = [];
+                        for (const device of matched) {
+                            const sent = [];
+                            for (const itm of device.items) {
+                                if ((itm.ha_type || '').toLowerCase() === 'fan') {
+                                    node.publishCommand(device.thing_id, itm.item_id, speed);
+                                    sent.push({ item_name: itm.item_name, value: speed });
+                                }
+                            }
+                            results.push({ thing_name: device.thing_name, commands: sent });
+                        }
+
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ success: true, results }));
                     }
 
                     // get_scenes
