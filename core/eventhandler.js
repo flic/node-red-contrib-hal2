@@ -25,6 +25,21 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'control_cover',
+        description : 'Control curtains, blinds or shutters. Identify by thing_id or thing_name ' +
+                      '(partial, case-insensitive). Use position to set an exact opening level, ' +
+                      'or open/close as a shortcut. Current position is available via get_all_states.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                position   : { type: 'number',  description: 'Position 0–100 where 0 = fully closed, 100 = fully open', minimum: 0, maximum: 100 },
+                open       : { type: 'boolean', description: 'true = fully open (100), false = fully closed (0). Overridden by position if both are given.' }
+            }
+        }
+    },
+    {
         name        : 'control_spa',
         description : 'Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-insensitive). ' +
                       'Current status (water temperature, heater state etc.) is available via get_all_states. ' +
@@ -522,6 +537,51 @@ module.exports = function(RED) {
                         people.sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0));
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ people }));
+                    }
+
+                    // control_cover
+                    if (toolName === 'control_cover') {
+                        const allStates = getAllStates();
+                        let matched = [];
+                        if (args.thing_id) {
+                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                            if (device) matched = [device];
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        }
+
+                        if (matched.length === 0) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'No matching cover found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                        }
+
+                        // Resolve target position
+                        let position;
+                        if (args.position !== undefined) {
+                            position = Math.max(0, Math.min(100, args.position));
+                        } else if (args.open !== undefined) {
+                            position = args.open ? 100 : 0;
+                        }
+
+                        if (position === undefined) {
+                            return toolOk(JSON.stringify({ error: 'Provide position (0–100) or open (true/false)' }));
+                        }
+
+                        const results = [];
+                        for (const device of matched) {
+                            const sent = [];
+                            for (const itm of device.items) {
+                                if ((itm.ha_type || '').toLowerCase() === 'cover') {
+                                    node.publishCommand(device.thing_id, itm.item_id, position);
+                                    sent.push({ item_name: itm.item_name, value: position });
+                                }
+                            }
+                            results.push({ thing_name: device.thing_name, commands: sent });
+                        }
+
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ success: true, results }));
                     }
 
                     // control_spa
