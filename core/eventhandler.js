@@ -530,10 +530,15 @@ module.exports = function(RED) {
                 // ── initialize ────────────────────────────────────────────────
                 if (method === 'initialize') {
                     node.status({ fill: 'green', shape: 'dot', text: 'connected' });
+                    res.set('Cache-Control', 'no-store');
                     return respond({
                         protocolVersion : '2024-11-05',
                         capabilities    : { tools: {} },
-                        serverInfo      : { name: mcpServerName, version: '1.0.0' }
+                        serverInfo      : { name: mcpServerName, version: '1.0.0' },
+                        instructions    : 'Always call the appropriate tool to fetch live data — never rely on ' +
+                                          'previously seen results. Device states, presence, sensor values and ' +
+                                          'scene status can change at any time. When in doubt, call get_all_states ' +
+                                          'or the relevant tool again before answering.'
                     });
                 }
 
