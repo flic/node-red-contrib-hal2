@@ -30,7 +30,9 @@
       "hal2Gate": "core/gate.js",
       "hal2Action": "core/action.js",
       "hal2Group": "core/group.js",
-      "hal2Log": "core/log.js"
+      "hal2Log":    "core/log.js",
+      "hal2MCPIn":  "core/mcpin.js",
+      "hal2MCPOut": "core/mcpout.js"
     }
   },
   "dependencies": {}
