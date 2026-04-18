@@ -2,6 +2,8 @@ const http   = require('http');
 const https  = require('https');
 const crypto = require('crypto');
 
+console.log('[hal2EventHandler] module loaded, version check: ' + new Date().toISOString());
+
 // ── MCP tool definitions ──────────────────────────────────────────────────────
 
 const MCP_TOOLS = [
@@ -159,6 +161,8 @@ const MCP_TOOLS = [
     }
 ];
 
+console.log('[hal2EventHandler] MCP_TOOLS loaded: ' + MCP_TOOLS.map(t => t.name).join(', '));
+
 const MCP_TOOLS_ADMIN = [
     {
         name        : 'get_flows',
@@ -247,8 +251,6 @@ function removeRoute(RED, method, path) {
 }
 
 // ── EventHandler node ─────────────────────────────────────────────────────────
-
-console.log('[hal2EventHandler] module loaded');
 
 module.exports = function(RED) {
 
