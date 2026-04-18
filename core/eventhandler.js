@@ -141,7 +141,7 @@ const MCP_TOOLS = [
                       'item labels (the label field in get_all_states items). Labels are friendly names assigned ' +
                       'per-device, e.g. a double switch named "Kök Dubbelbrytare" may have items labelled ' +
                       '"Kök Taklampa" and "Kök Bänkbelysning" — searching "bänkbelysning" will target only that relay. ' +
-                      'You can turn it on/off and/or set brightness/color_temp in one call.',
+                      'You can turn it on/off and/or set brightness/color_temp/color in one call.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -149,7 +149,8 @@ const MCP_TOOLS = [
                 thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "kontor" matches "Kontor Spotlights").' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
-                color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' }
+                color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' },
+                color      : { type: 'string',  description: 'Color as HSB string "H,S,B" where H=0-360 (hue), S=0-100 (saturation), B=0-100 (brightness). E.g. "0,100,100"=red, "120,100,100"=green, "240,100,100"=blue.' }
             }
         }
     }
@@ -959,6 +960,10 @@ module.exports = function(RED) {
                                     )));
                                     node.publishCommand(device.thing_id, itm.item_id, ctPct);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: ctPct, kelvin: args.color_temp });
+                                }
+                                if (ht === 'color' && args.color !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.color);
+                                    sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.color });
                                 }
                             }
                             results.push({ thing_id: device.thing_id, thing_name: device.thing_name, commands: sent });
