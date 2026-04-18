@@ -512,6 +512,7 @@ module.exports = function(RED) {
                         type_name  : tt.name,
                         items
                     });
+
                 });
                 return devices;
             }
@@ -628,7 +629,8 @@ module.exports = function(RED) {
                         protocolVersion : '2024-11-05',
                         capabilities    : { tools: {} },
                         serverInfo      : { name: mcpServerName, version: '1.0.0' },
-                        instructions    : 'Always call the appropriate tool to fetch live data — never rely on ' +
+                        instructions    : (config.locationName ? 'This MCP server controls devices at location: ' + config.locationName + '. ' : '') +
+                                          'Always call the appropriate tool to fetch live data — never rely on ' +
                                           'previously seen results. Device states, presence, sensor values and ' +
                                           'scene status can change at any time. When in doubt, call get_all_states ' +
                                           'or the relevant tool again before answering.'
@@ -659,9 +661,10 @@ module.exports = function(RED) {
 
                     // get_all_states
                     if (toolName === 'get_all_states') {
-                        const states = getAllStates();
+                        const result = { devices: getAllStates() };
+                        if (config.locationName) result.location = config.locationName;
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify(states, null, 2));
+                        return toolOk(JSON.stringify(result, null, 2));
                     }
 
                     // get_presence

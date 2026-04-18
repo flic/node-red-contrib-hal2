@@ -16,6 +16,10 @@
                 <input type="text" id="node-config-input-name" placeholder="Name" style="width:calc(100% - 185px)">
             </div>
             <div class="form-row">
+                <label for="node-config-input-locationName" style="width:150px"><i class="fa fa-map-marker"></i> Location</label>
+                <input type="text" id="node-config-input-locationName" placeholder="e.g. Hemma, Landet" style="width:calc(100% - 185px)">
+            </div>
+            <div class="form-row">
                 <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
                 <select id="node-config-input-contextStore" style="width:calc(100% - 185px)"></select>
             </div>
@@ -135,6 +139,7 @@
         category: 'config',
         defaults: {
             name:              { value: "Event handler" },
+            locationName:      { value: '' },
             contextStore:      {},
             maxlisteners:      { value: "50" },
             checkHeartbeat:    { value: false },
