@@ -639,7 +639,8 @@ module.exports = function(RED) {
                                           'Always call the appropriate tool to fetch live data — never rely on ' +
                                           'previously seen results. Device states, presence, sensor values and ' +
                                           'scene status can change at any time. When in doubt, call get_all_states ' +
-                                          'or the relevant tool again before answering.'
+                                          'or the relevant tool again before answering. ' +
+                                          'Available tools: ' + [...MCP_TOOLS, ...(adminEnabled ? MCP_TOOLS_ADMIN : [])].map(t => t.name).join(', ') + '.'
                     });
                 }
 
