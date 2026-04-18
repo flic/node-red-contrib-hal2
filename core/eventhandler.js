@@ -8,7 +8,9 @@ const MCP_TOOLS = [
     {
         name        : 'get_all_states',
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
-                      'Each device has thing_id, thing_name, type_name and a list of items with item_id, item_name, ha_type and current value.',
+                      'The response includes a location field (e.g. "Hemma" or "Landet") identifying which ' +
+                      'property this server controls, and a devices array where each device has thing_id, ' +
+                      'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value.',
         inputSchema : { type: 'object', properties: {} }
     },
     {
@@ -408,7 +410,7 @@ module.exports = function(RED) {
 
         const mcpPrefix = (config.httpPathPrefix || '').replace(/\/$/, '');
 
-        node.log('MCP enabled: ' + !!config.mcpEnabled + ', prefix: "' + mcpPrefix + '"');
+        node.log('MCP enabled: ' + !!config.mcpEnabled + ', prefix: "' + mcpPrefix + '", location: "' + (config.locationName || '') + '"');
 
         if (config.mcpEnabled) {
 
