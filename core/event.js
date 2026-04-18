@@ -141,6 +141,19 @@ module.exports = function(RED) {
             if (node.topic != '') {
                 msg.topic = node.topic;
             }
+            const thing = RED.nodes.getNode(thingid);
+            if (thing && thing.thingType && thing.thingType.items) {
+                const itm = thing.thingType.items.find(i => i.id === itemid);
+                if (itm && itm.haType) {
+                    msg.item = {
+                        name       : itm.name,
+                        id         : itm.id,
+                        ha_type    : itm.haType,
+                        last_update: thing.heartbeat && thing.heartbeat[itemid],
+                        last_change: thing.last_change && thing.last_change[itemid]
+                    };
+                }
+            }
             node.send(msg);
             node.debug('Event: Id '+thingid);
             showState();

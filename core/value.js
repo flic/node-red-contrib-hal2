@@ -46,6 +46,7 @@ module.exports = function(RED) {
                 last_update: thing.heartbeat[thing.thingType.items[i].id],
                 last_change: thing.last_change[thing.thingType.items[i].id]
             };
+            if (thing.thingType.items[i].haType) { msg.item.ha_type = thing.thingType.items[i].haType; }
             if (Object.keys(attribute).length !== 0) {
                 msg.thing.attributes = Object.assign({}, attribute);
             }
