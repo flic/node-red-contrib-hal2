@@ -16,6 +16,24 @@ const MCP_TOOLS = [
         inputSchema : { type: 'object', properties: {} }
     },
     {
+        name        : 'get_history',
+        description : 'Returns logged historical values for a specific device item. ' +
+                      'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
+                      '"how often", "when was", "last time", or similar time-based questions. ' +
+                      'Items that support history are marked with history:true in get_all_states. ' +
+                      'Returns an array of {ts, state} objects sorted oldest-first.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
+                thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
+                item_id    : { type: 'string', description: 'Item ID (from get_all_states)' },
+                item_name  : { type: 'string', description: 'Item name, partial case-insensitive match (alternative to item_id)' },
+                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 0.1 }
+            }
+        }
+    },
+    {
         name        : 'control_device',
         description : 'Send a command to a specific device item. Use thing_id and item_id from get_all_states.',
         inputSchema : {
@@ -105,38 +123,14 @@ const MCP_TOOLS = [
         inputSchema : { type: 'object', properties: {} }
     },
     {
-        name        : 'get_water_sensors',
-        description : 'Returns status of all water leak sensors. ' +
-                      'Use this to answer "is there a water leak?", "are any water sensors triggered?" etc. ' +
-                      'Triggered sensors (wet=true) are listed first.',
-        inputSchema : { type: 'object', properties: {} }
-    },
-    {
-        name        : 'get_low_battery',
-        description : 'Returns all devices that have a battery level below a given threshold. ' +
-                      'Use this to answer questions like "which sensors have low battery?" or "what needs new batteries?".',
+        name        : 'get_alerts',
+        description : 'Returns water leak sensor status and devices with low battery in one call. ' +
+                      'Use this to answer "is there a water leak?", "which sensors have low battery?", ' +
+                      '"what needs attention?" or similar questions about sensor alerts.',
         inputSchema : {
             type       : 'object',
             properties : {
-                threshold : { type: 'number', description: 'Battery level threshold in percent (default: 20)', minimum: 0, maximum: 100 }
-            }
-        }
-    },
-    {
-        name        : 'get_history',
-        description : 'Returns logged historical values for a specific device item. ' +
-                      'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
-                      '"how often", "when was", "last time", or similar time-based questions. ' +
-                      'Items that support history are marked with history:true in get_all_states. ' +
-                      'Returns an array of {ts, state} objects sorted oldest-first.',
-        inputSchema : {
-            type       : 'object',
-            properties : {
-                thing_id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
-                thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
-                item_id    : { type: 'string', description: 'Item ID (from get_all_states)' },
-                item_name  : { type: 'string', description: 'Item name, partial case-insensitive match (alternative to item_id)' },
-                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 0.1 }
+                battery_threshold : { type: 'number', description: 'Battery level threshold in percent (default: 20)', minimum: 0, maximum: 100 }
             }
         }
     },
@@ -165,18 +159,13 @@ console.log('[hal2EventHandler] MCP_TOOLS loaded: ' + MCP_TOOLS.map(t => t.name)
 
 const MCP_TOOLS_ADMIN = [
     {
-        name        : 'get_flows',
-        description : 'Lists all Node-RED tabs with ID and node count.',
-        inputSchema : { type: 'object', properties: {} }
-    },
-    {
         name        : 'get_flow',
-        description : 'Returns full JSON configuration for a Node-RED tab.',
+        description : 'Lists all Node-RED tabs (ID and node count) when called without arguments. ' +
+                      'Returns full JSON configuration for a specific tab when called with an id.',
         inputSchema : {
             type       : 'object',
-            required   : ['id'],
             properties : {
-                id : { type: 'string', description: 'Flow/tab ID' }
+                id : { type: 'string', description: 'Flow/tab ID — omit to list all flows' }
             }
         }
     },
@@ -869,29 +858,17 @@ module.exports = function(RED) {
                         return toolOk(JSON.stringify({ success: true, results }));
                     }
 
-                    // get_water_sensors
-                    if (toolName === 'get_water_sensors') {
+                    // get_alerts
+                    if (toolName === 'get_alerts') {
+                        const threshold = args.battery_threshold !== undefined ? Number(args.battery_threshold) : 20;
                         const sensors = [];
-                        for (const device of getAllStates()) {
-                            const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
-                            if (!waterItem) continue;
-                            const wet = waterItem.value === true || waterItem.value === 'true';
-                            sensors.push({
-                                thing_id   : device.thing_id,
-                                thing_name : device.thing_name,
-                                wet
-                            });
-                        }
-                        sensors.sort((a, b) => (b.wet ? 1 : 0) - (a.wet ? 1 : 0));
-                        node.status({ fill: sensors.some(s => s.wet) ? 'red' : 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify({ sensors, any_wet: sensors.some(s => s.wet) }));
-                    }
-
-                    // get_low_battery
-                    if (toolName === 'get_low_battery') {
-                        const threshold = args.threshold !== undefined ? Number(args.threshold) : 20;
                         const low = [];
                         for (const device of getAllStates()) {
+                            const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
+                            if (waterItem) {
+                                const wet = waterItem.value === true || waterItem.value === 'true';
+                                sensors.push({ thing_id: device.thing_id, thing_name: device.thing_name, wet });
+                            }
                             for (const itm of device.items) {
                                 if ((itm.ha_type || '').toLowerCase() === 'battery') {
                                     const level = Number(itm.value);
@@ -907,9 +884,10 @@ module.exports = function(RED) {
                                 }
                             }
                         }
+                        sensors.sort((a, b) => (b.wet ? 1 : 0) - (a.wet ? 1 : 0));
                         low.sort((a, b) => a.battery - b.battery);
-                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify({ threshold, low_battery_devices: low }));
+                        node.status({ fill: sensors.some(s => s.wet) ? 'red' : 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ water_sensors: sensors, any_wet: sensors.some(s => s.wet), low_battery_devices: low, battery_threshold: threshold }));
                     }
 
                     // control_device
@@ -993,22 +971,21 @@ module.exports = function(RED) {
                     // Admin tools — handled internally
                     if (adminEnabled && MCP_ADMIN_TOOL_NAMES.has(toolName)) {
                         try {
-                            if (toolName === 'get_flows') {
-                                const r       = await adminApi('GET', '/flows');
-                                const allNodes = Array.isArray(r.body) ? r.body
-                                    : (Array.isArray(r.body?.flows) ? r.body.flows : []);
-                                const tabs  = allNodes.filter(n => n.type === 'tab');
-                                const lines = ['**Node-RED flikar:**', ''];
-                                tabs.forEach(tab => {
-                                    const count = allNodes.filter(n => n.z === tab.id).length;
-                                    lines.push('- **' + tab.label + '**' + (tab.disabled ? ' [inaktiv]' : ''));
-                                    lines.push('  ID: `' + tab.id + '`  |  Noder: ' + count);
-                                });
-                                node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                                return toolOk(lines.join('\n'));
-                            }
-
                             if (toolName === 'get_flow') {
+                                if (!args.id) {
+                                    const r        = await adminApi('GET', '/flows');
+                                    const allNodes = Array.isArray(r.body) ? r.body
+                                        : (Array.isArray(r.body?.flows) ? r.body.flows : []);
+                                    const tabs  = allNodes.filter(n => n.type === 'tab');
+                                    const lines = ['**Node-RED flikar:**', ''];
+                                    tabs.forEach(tab => {
+                                        const count = allNodes.filter(n => n.z === tab.id).length;
+                                        lines.push('- **' + tab.label + '**' + (tab.disabled ? ' [inaktiv]' : ''));
+                                        lines.push('  ID: `' + tab.id + '`  |  Noder: ' + count);
+                                    });
+                                    node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                                    return toolOk(lines.join('\n'));
+                                }
                                 const r = await adminApi('GET', '/flow/' + args.id);
                                 if (r.status === 404) {
                                     node.status({ fill: 'green', shape: 'dot', text: 'ready' });
