@@ -32,6 +32,25 @@
             </div>
         </div>
 
+        <!-- History tab -->
+        <div id="hal2eh-tab-history" style="display:none">
+            <div class="form-row">
+                <label style="width:150px"><i class="fa fa-history"></i> Enable history</label>
+                <input type="checkbox" id="node-config-input-historyEnabled" style="width:23px; margin:0">
+                <label for="node-config-input-historyEnabled" style="margin:0; width:auto;"> Aktivera historikloggning</label>
+            </div>
+            <div id="hal2eh-history-details">
+                <div class="form-row">
+                    <label for="node-config-input-historyDbPath" style="width:150px"><i class="fa fa-database"></i> Database path</label>
+                    <input type="text" id="node-config-input-historyDbPath" placeholder="/data/hal2-history.db" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-historyRetentionDays" style="width:150px"><i class="fa fa-clock-o"></i> Retention</label>
+                    <input type="number" id="node-config-input-historyRetentionDays" style="width:80px" min="1" value="30"> days
+                </div>
+            </div>
+        </div>
+
         <!-- MCP tab -->
         <div id="hal2eh-tab-mcp" style="display:none">
             <div class="form-row">
@@ -121,6 +140,10 @@
             checkHeartbeat:    { value: false },
             heartbeat:         { value: 3600 },
             items:             { value: [], required: false },
+            // History
+            historyEnabled:        { value: false },
+            historyDbPath:         { value: '' },
+            historyRetentionDays:  { value: 30 },
             // MCP
             mcpEnabled:        { value: false },
             mcpServerName:     { value: 'hal2-mcp' },
@@ -152,6 +175,7 @@
                 }
             });
             tabs.addTab({ id: 'hal2eh-tab-general', label: 'General' });
+            tabs.addTab({ id: 'hal2eh-tab-history', label: 'History' });
             tabs.addTab({ id: 'hal2eh-tab-mcp',     label: 'MCP' });
 
             // ── Context stores ────────────────────────────────────────────────
@@ -222,6 +246,17 @@
                     $("#node-config-eventhandler-list-items").editableList('addItem', node.items[d]);
                 }
             }
+
+            // ── History toggle ────────────────────────────────────────────────
+            function toggleHistory() {
+                if ($('#node-config-input-historyEnabled').is(':checked')) {
+                    $('#hal2eh-history-details').show();
+                } else {
+                    $('#hal2eh-history-details').hide();
+                }
+            }
+            $('#node-config-input-historyEnabled').on('change', toggleHistory);
+            toggleHistory();
 
             // ── MCP toggle ────────────────────────────────────────────────────
             function toggleMcp() {

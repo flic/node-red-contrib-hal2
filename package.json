@@ -35,5 +35,7 @@
       "hal2MCPOut": "core/mcpout.js"
     }
   },
-  "dependencies": {}
+  "dependencies": {
+    "@seald-io/nedb": "^4.0.4"
+  }
 }
