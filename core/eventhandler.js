@@ -123,8 +123,9 @@ const MCP_TOOLS = [
     {
         name        : 'get_history',
         description : 'Returns logged historical values for a specific device item. ' +
-                      'Only items with history logging enabled are available. ' +
-                      'Use get_all_states to find thing_id and item_id. ' +
+                      'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
+                      '"how often", "when was", "last time", or similar time-based questions. ' +
+                      'Items that support history are marked with history:true in get_all_states. ' +
                       'Returns an array of {ts, state} objects sorted oldest-first.',
         inputSchema : {
             type       : 'object',
@@ -504,6 +505,7 @@ module.exports = function(RED) {
                             value     : (thing.state[itm.id] !== undefined) ? thing.state[itm.id] : 'no value'
                         };
                         if (label) entry.label = label;
+                        if (itm.history) entry.history = true;
                         items.push(entry);
                     }
 
