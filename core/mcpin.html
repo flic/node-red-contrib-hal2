@@ -1,0 +1,68 @@
+<script type="text/html" data-template-name="hal2MCPIn">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-eventHandler"><i class="fa fa-cog"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-toolName"><i class="fa fa-terminal"></i> Tool name</label>
+        <input type="text" id="node-input-toolName" placeholder="my_tool" style="width:calc(100% - 105px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-description"><i class="fa fa-comment"></i> Description</label>
+        <textarea id="node-input-description" rows="3" style="width:calc(100% - 105px);" placeholder="Describe what this tool does so Claude knows when to use it."></textarea>
+    </div>
+    <div class="form-row">
+        <label for="node-input-inputSchema" style="vertical-align:top; margin-top:4px"><i class="fa fa-code"></i> Parameters</label>
+        <textarea id="node-input-inputSchema" rows="8" style="width:calc(100% - 105px); font-family:monospace; font-size:12px;"></textarea>
+    </div>
+    <div class="form-row">
+        <label for="node-input-topic"><i class="fa fa-tag"></i> msg.topic</label>
+        <input type="text" id="node-input-topic" placeholder="(defaults to tool name)" style="width:calc(100% - 105px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-timeout"><i class="fa fa-clock-o"></i> Timeout</label>
+        <input type="number" id="node-input-timeout" style="width:80px" min="1" value="30"> seconds
+    </div>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('hal2MCPIn', {
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults  : {
+            name         : { value: '' },
+            eventHandler : { value: '', type: 'hal2EventHandler' },
+            toolName     : { value: '', required: true },
+            description  : { value: '' },
+            inputSchema  : { value: '' },
+            topic        : { value: '' },
+            timeout      : { value: 30 }
+        },
+        inputs    : 0,
+        outputs   : 1,
+        icon      : 'font-awesome/fa-sign-out',
+        paletteLabel: 'MCP In',
+        label     : function () { return this.name || this.toolName || 'MCP In'; },
+        oneditprepare: function () {
+            if (!this.inputSchema) {
+                $('#node-input-inputSchema').val(JSON.stringify({
+                    type: 'object',
+                    properties: {
+                        param1: { type: 'string', description: 'Description of param1' }
+                    }
+                }, null, 2));
+            }
+        },
+        oneditsave: function () {
+            var schema = $('#node-input-inputSchema').val();
+            if (schema) {
+                try { JSON.parse(schema); }
+                catch (e) { RED.notify('Parameters JSON is invalid: ' + e.message, 'error'); }
+            }
+        }
+    });
+</script>

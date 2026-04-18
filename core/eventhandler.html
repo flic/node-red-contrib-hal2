@@ -72,6 +72,13 @@
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
+                    <label for="node-config-input-localDebugToken" style="width:150px"><i class="fa fa-bug"></i> Local debug token</label>
+                    <input type="password" id="node-config-input-localDebugToken" placeholder="(valfritt, skippar OAuth lokalt)" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
                     <label for="node-config-input-tokenCacheTTL" style="width:150px"><i class="fa fa-clock-o"></i> Token cache TTL</label>
                     <input type="number" id="node-config-input-tokenCacheTTL" style="width:80px" min="30" value="300"> seconds
                 </div>
@@ -127,7 +134,8 @@
         credentials: {
             pocketidClientId:     { type: 'text' },
             pocketidClientSecret: { type: 'password' },
-            adminToken:           { type: 'password' }
+            adminToken:           { type: 'password' },
+            localDebugToken:      { type: 'password' }
         },
         label: function () {
             return this.name || "Event handler";

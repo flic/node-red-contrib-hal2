@@ -245,6 +245,29 @@ module.exports = function(RED) {
         if (typeof this.contextStore === 'undefined') { this.contextStore = ''; }
 
         const node  = this;
+
+        // ── Dynamic MCP tool registry (used by hal2MCPIn / hal2MCPOut) ─────────
+
+        node.mcpRegisteredTools = {};
+        node.mcpPendingCalls    = {};
+
+        node.registerMCPTool = function (toolName, description, schema, timeoutSec) {
+            node.mcpRegisteredTools[toolName] = { description, schema, timeoutMs: (timeoutSec || 30) * 1000 };
+            node.log('MCP tool registered: ' + toolName);
+        };
+
+        node.unregisterMCPTool = function (toolName) {
+            delete node.mcpRegisteredTools[toolName];
+            node.log('MCP tool unregistered: ' + toolName);
+        };
+
+        node.resolveMCPCall = function (callId, text) {
+            const pending = node.mcpPendingCalls[callId];
+            if (!pending) { node.warn('resolveMCPCall: no pending call for ' + callId); return; }
+            clearTimeout(pending.timer);
+            delete node.mcpPendingCalls[callId];
+            pending.resolve(text);
+        };
         let   hbList = [];
 
         node.debug("Max listeners set to " + node.maxlisteners);
@@ -347,7 +370,14 @@ module.exports = function(RED) {
 
             // ── Token validation ───────────────────────────────────────────────
 
+            const localDebugToken = (node.credentials && node.credentials.localDebugToken) || '';
+
             async function validateToken(token) {
+                // Local debug token bypass — skips PocketID entirely
+                if (localDebugToken && token === localDebugToken) {
+                    return { sub: 'debug', name: 'Local debug user' };
+                }
+
                 const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
                 if (tokenCache[cacheKey] && tokenCache[cacheKey].exp >= Date.now()) {
                     return tokenCache[cacheKey].user;
@@ -550,6 +580,9 @@ module.exports = function(RED) {
                 if (method === 'tools/list') {
                     const tools = [...MCP_TOOLS];
                     if (adminEnabled) tools.push(...MCP_TOOLS_ADMIN);
+                    for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
+                        tools.push({ name, description: t.description, inputSchema: t.schema || { type: 'object', properties: {} } });
+                    }
                     return respond({ tools });
                 }
 
@@ -931,6 +964,27 @@ module.exports = function(RED) {
                         }
                     }
 
+                    // Dynamically registered tools (hal2MCPIn/Out)
+                    if (node.mcpRegisteredTools[toolName]) {
+                        try {
+                            const callId     = crypto.randomBytes(16).toString('hex');
+                            const timeoutMs  = node.mcpRegisteredTools[toolName].timeoutMs || 30000;
+                            const result = await new Promise((resolve, reject) => {
+                                const timer = setTimeout(() => {
+                                    delete node.mcpPendingCalls[callId];
+                                    reject(new Error('timeout'));
+                                }, timeoutMs);
+                                node.mcpPendingCalls[callId] = { resolve, reject, timer };
+                                node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId });
+                            });
+                            node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                            return toolOk(result);
+                        } catch (e) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'timeout' });
+                            return toolOk(JSON.stringify({ error: e.message === 'timeout' ? 'Tool timed out: ' + toolName : e.message }));
+                        }
+                    }
+
                     return rpcErr(-32601, 'Unknown tool: ' + toolName);
                 }
 
@@ -943,6 +997,13 @@ module.exports = function(RED) {
         // ── Close ─────────────────────────────────────────────────────────────
 
         node.on('close', function () {
+            // Reject any pending dynamic tool calls
+            for (const [, pending] of Object.entries(node.mcpPendingCalls)) {
+                clearTimeout(pending.timer);
+                pending.reject(new Error('Event handler closing'));
+            }
+            node.mcpPendingCalls = {};
+
             node.log('MCP close: mcpEnabled=' + !!config.mcpEnabled);
             if (config.mcpEnabled) {
                 tokenCache = {};
@@ -959,7 +1020,8 @@ module.exports = function(RED) {
         credentials: {
             pocketidClientId     : { type: 'text' },
             pocketidClientSecret : { type: 'password' },
-            adminToken           : { type: 'password' }
+            adminToken           : { type: 'password' },
+            localDebugToken      : { type: 'password' }
         }
     });
 };
