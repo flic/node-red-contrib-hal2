@@ -119,6 +119,23 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'get_history',
+        description : 'Returns logged historical values for a specific device item. ' +
+                      'Only items with history logging enabled are available. ' +
+                      'Use get_all_states to find thing_id and item_id. ' +
+                      'Returns an array of {ts, state} objects sorted oldest-first.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
+                thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
+                item_id    : { type: 'string', description: 'Item ID (from get_all_states)' },
+                item_name  : { type: 'string', description: 'Item name, partial case-insensitive match (alternative to item_id)' },
+                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 0.1 }
+            }
+        }
+    },
+    {
         name        : 'set_light',
         description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
                       'thing_name supports partial, case-insensitive match against the thing name OR against ' +
@@ -304,6 +321,36 @@ module.exports = function(RED) {
             node.debug("Removed heartbeat TTL check for " + id);
         };
 
+        // ── History ───────────────────────────────────────────────────────────
+
+        let historyDb = null;
+
+        if (config.historyEnabled && config.historyDbPath) {
+            const Datastore = require('@seald-io/nedb');
+            const retentionMs = (Number(config.historyRetentionDays) || 30) * 24 * 60 * 60 * 1000;
+
+            (async () => {
+                try {
+                    historyDb = new Datastore({ filename: config.historyDbPath });
+                    await historyDb.loadDatabaseAsync();
+                    await historyDb.ensureIndexAsync({ fieldName: 'ts' });
+                    await historyDb.ensureIndexAsync({ fieldName: 'thing_id' });
+                    node.log('History enabled, db: ' + config.historyDbPath);
+
+                    const pruneHistory = async () => {
+                        const n = await historyDb.removeAsync({ ts: { $lt: Date.now() - retentionMs } }, { multi: true });
+                        if (n > 0) { node.log('History pruned ' + n + ' records'); }
+                    };
+                    await pruneHistory();
+                    const historyPruneInterval = setInterval(pruneHistory, 60 * 60 * 1000);
+                    node.on('close', () => clearInterval(historyPruneInterval));
+                } catch (err) {
+                    node.error('History init failed: ' + err.message);
+                    historyDb = null;
+                }
+            })();
+        }
+
         // ── Event bus ─────────────────────────────────────────────────────────
 
         node.subscribe = function (event, id, listener) {
@@ -328,12 +375,28 @@ module.exports = function(RED) {
         };
 
         node.publishUpdate = function (thingtypeid, thingid, itemid, payload) {
+            if (historyDb && thingtypeid) {
+                const thingType = RED.nodes.getNode(thingtypeid);
+                if (thingType && thingType.items) {
+                    const item = thingType.items.find(i => i.id === itemid);
+                    if (item && item.history) {
+                        historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now() });
+                    }
+                }
+            }
             if (thingtypeid !== null) {
                 node.debug("Update event: Thingtype " + thingtypeid + " Item " + itemid);
                 this.emit("update_" + thingtypeid, thingtypeid, thingid, itemid, payload);
             }
             node.debug("Update event: Thing " + thingid + " Item " + itemid);
             this.emit("update_" + thingid, thingtypeid, thingid, itemid, payload);
+        };
+
+        node.queryHistory = function (thingid, itemid, fromMs, toMs, cb) {
+            if (!historyDb) { cb(null, []); return; }
+            historyDb.find({ thing_id: thingid, item_id: itemid, ts: { $gte: fromMs, $lte: toMs } })
+                .sort({ ts: 1 })
+                .exec(cb);
         };
 
         node.publishLog = function (payload) {
@@ -449,6 +512,7 @@ module.exports = function(RED) {
                         type_name  : tt.name,
                         items
                     });
+
                 });
                 return devices;
             }
@@ -565,7 +629,8 @@ module.exports = function(RED) {
                         protocolVersion : '2024-11-05',
                         capabilities    : { tools: {} },
                         serverInfo      : { name: mcpServerName, version: '1.0.0' },
-                        instructions    : 'Always call the appropriate tool to fetch live data — never rely on ' +
+                        instructions    : (config.locationName ? 'This MCP server controls devices at location: ' + config.locationName + '. ' : '') +
+                                          'Always call the appropriate tool to fetch live data — never rely on ' +
                                           'previously seen results. Device states, presence, sensor values and ' +
                                           'scene status can change at any time. When in doubt, call get_all_states ' +
                                           'or the relevant tool again before answering.'
@@ -596,9 +661,10 @@ module.exports = function(RED) {
 
                     // get_all_states
                     if (toolName === 'get_all_states') {
-                        const states = getAllStates();
+                        const result = { devices: getAllStates() };
+                        if (config.locationName) result.location = config.locationName;
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify(states, null, 2));
+                        return toolOk(JSON.stringify(result, null, 2));
                     }
 
                     // get_presence
@@ -961,6 +1027,65 @@ module.exports = function(RED) {
                         } catch (e) {
                             node.status({ fill: 'red', shape: 'ring', text: 'admin error' });
                             return toolOk('Fel vid admin-anrop: ' + e.message);
+                        }
+                    }
+
+                    // get_history
+                    if (toolName === 'get_history') {
+                        if (!historyDb) {
+                            return toolOk(JSON.stringify({ error: 'History is not enabled on this event handler' }));
+                        }
+                        let targetThing = null;
+                        if (args.thing_id) {
+                            targetThing = RED.nodes.getNode(args.thing_id);
+                            if (!targetThing || targetThing.type !== 'hal2Thing') {
+                                return toolOk(JSON.stringify({ error: 'Thing not found: ' + args.thing_id }));
+                            }
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            RED.nodes.eachNode(cfg => {
+                                if (targetThing || cfg.type !== 'hal2Thing') return;
+                                const t = RED.nodes.getNode(cfg.id);
+                                if (t && t.eventHandler && t.eventHandler.id === node.id && t.name.toLowerCase().includes(needle)) {
+                                    targetThing = t;
+                                }
+                            });
+                            if (!targetThing) return toolOk(JSON.stringify({ error: 'No thing matching: ' + args.thing_name }));
+                        } else {
+                            return toolOk(JSON.stringify({ error: 'Provide thing_id or thing_name' }));
+                        }
+
+                        let itemId = args.item_id;
+                        if (!itemId && args.item_name) {
+                            const needle = args.item_name.toLowerCase();
+                            const found = targetThing.thingType.items.find(i => i.name.toLowerCase().includes(needle));
+                            if (!found) return toolOk(JSON.stringify({ error: 'No item matching: ' + args.item_name }));
+                            if (!found.history) return toolOk(JSON.stringify({ error: 'History not enabled for item: ' + found.name }));
+                            itemId = found.id;
+                        } else if (itemId) {
+                            const found = targetThing.thingType.items.find(i => i.id === itemId);
+                            if (found && !found.history) return toolOk(JSON.stringify({ error: 'History not enabled for item: ' + found.name }));
+                        } else {
+                            return toolOk(JSON.stringify({ error: 'Provide item_id or item_name' }));
+                        }
+
+                        const hours  = Number(args.hours) || 24;
+                        const fromMs = Date.now() - hours * 3600000;
+                        try {
+                            const docs = await new Promise((resolve, reject) => {
+                                node.queryHistory(targetThing.id, itemId, fromMs, Date.now(), (err, d) => err ? reject(err) : resolve(d));
+                            });
+                            node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                            return toolOk(JSON.stringify({
+                                thing_id  : targetThing.id,
+                                thing_name: targetThing.name,
+                                item_id   : itemId,
+                                hours,
+                                count     : docs.length,
+                                data      : docs.map(d => ({ ts: d.ts, state: d.state }))
+                            }));
+                        } catch (e) {
+                            return toolOk(JSON.stringify({ error: 'History query failed: ' + e.message }));
                         }
                     }
 

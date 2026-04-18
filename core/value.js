@@ -8,9 +8,48 @@ module.exports = function(RED) {
         this.outputValue = config.outputValue;
         this.outputType = config.outputType;
         this.info = config.info;
+        this.historyMode = config.historyMode;
+        this.historyFrom = config.historyFrom;
+        this.historyFromUnit = config.historyFromUnit;
         var node = this;
 
         if (typeof node.action == 'undefined') { node.action = 'get' }
+
+        function addInfo(thing, msg) {
+            var i;
+            for (i in thing.thingType.items) {
+                if (thing.thingType.items[i].id == node.item) { break; }
+            }
+            var attribute = [];
+            if (typeof thing.thingType.attributes === 'object') {
+                for (var d in thing.thingType.attributes) {
+                    attribute[thing.thingType.attributes[d].name] = '';
+                    if (typeof thing.attributes === 'object') {
+                        for (var a in thing.attributes) {
+                            if (thing.attributes[a].id == thing.thingType.attributes[d].id) {
+                                attribute[thing.thingType.attributes[d].name] = thing.attributes[a].val;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            msg.thing = {
+                name: thing.name,
+                id: thing.id,
+                last_update: thing.heartbeat[node.item],
+                last_change: thing.last_change[node.item]
+            };
+            msg.item = {
+                name: thing.thingType.items[i].name,
+                id: thing.thingType.items[i].id,
+                last_update: thing.heartbeat[thing.thingType.items[i].id],
+                last_change: thing.last_change[thing.thingType.items[i].id]
+            };
+            if (Object.keys(attribute).length !== 0) {
+                msg.thing.attributes = Object.assign({}, attribute);
+            }
+        }
 
         node.on('input', function(msg) {
             var thing;
@@ -37,6 +76,18 @@ module.exports = function(RED) {
 
             var oVal;
             var oProp = RED.util.normalisePropertyExpression(node.outputValue);
+            if (node.action == 'get' && node.historyMode) {
+                const unitMs = { minutes: 60000, hours: 3600000, days: 86400000 };
+                const fromMs = Date.now() - (Number(node.historyFrom) || 24) * (unitMs[node.historyFromUnit] || unitMs.hours);
+                if (!thing.eventHandler) { node.error('No event handler on thing'); return; }
+                thing.eventHandler.queryHistory(thing.id, node.item, fromMs, Date.now(), function(err, docs) {
+                    if (err) { node.error('History query failed: ' + err.message); return; }
+                    RED.util.setMessageProperty(msg, node.outputValue, docs.map(d => ({ state: d.state, ts: d.ts })), true);
+                    if (node.info) { addInfo(thing, msg); }
+                    node.send(msg);
+                });
+                return;
+            }
             if (node.action == 'get') {
                 if (!thing.state.hasOwnProperty(node.item)) {
                     // No value stored in item
@@ -89,43 +140,7 @@ module.exports = function(RED) {
                 thing.showState();
             }
 
-            if (node.info) {
-                var i;
-                for (i in thing.thingType.items) {
-                    if (thing.thingType.items[i].id == node.item) { break; }
-                }
-                var attribute = [];
-                if (typeof thing.thingType.attributes === 'object') {
-                    for (d in thing.thingType.attributes) {
-                        attribute[thing.thingType.attributes[d].name] = ""
-                        if (typeof thing.attributes === 'object') {
-                            for (let a in thing.attributes) {
-                                if (thing.attributes[a].id == thing.thingType.attributes[d].id) {
-                                    attribute[thing.thingType.attributes[d].name] = thing.attributes[a].val;
-                                    break;
-                                }
-                            }
-                        
-                        }
-                    }
-                }
-                msg.thing = {
-                    name: thing.name,
-                    id: thing.id,
-                    last_update: thing.heartbeat[node.item],
-                    last_change: thing.last_change[node.item]
-
-                }
-                msg.item = {
-                    name: thing.thingType.items[i].name,
-                    id: thing.thingType.items[i].id,
-                    last_update: thing.heartbeat[thing.thingType.items[i].id],
-                    last_change: thing.last_change[thing.thingType.items[i].id]
-                }
-                if (Object.keys(attribute) != 0) {
-                    msg.thing.attributes = Object.assign({},attribute);
-                }
-            }
+            if (node.info) { addInfo(thing, msg); }
             node.send(msg);
         });
     }

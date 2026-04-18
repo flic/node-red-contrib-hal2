@@ -179,7 +179,8 @@
                     ingress:item.find(".node-config-thingtype-ingress-property").val(),
                     egress:item.find(".node-config-thingtype-egress-property").val(),
                     notes:item.find(".node-config-thingtype-notes-property").val(),
-                    output:item.find(".node-config-thingtype-output-property").val()
+                    output:item.find(".node-config-thingtype-output-property").val(),
+                    history:item.find(".node-config-thingtype-history-property").prop('checked')
                 }
                 items.push(r);
             })
@@ -570,6 +571,7 @@
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowOutput = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowHistory = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
 
                     // Show a clickable expand icon
                     var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
@@ -625,7 +627,10 @@
                         .append(' Topic')
                     var labelOutput = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-random"})
                         .appendTo(rowOutput)
-                        .append(' Output')                        
+                        .append(' Output')
+                    var labelHistory = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-history"})
+                        .appendTo(rowHistory)
+                        .append(' History')
                   
                     //Name property
                     var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
@@ -723,6 +728,9 @@
                             egressProperty.append($("<option></option>").val(id).text(name));
                         })                    
                     
+                    var historyProperty = $('<input/>',{style:"width:auto",class:"node-config-thingtype-history-property",type:"checkbox"})
+                        .appendTo(rowHistory)
+
                     // Notes
                     var notesProperty = $('<textarea/>',{class:"node-config-thingtype-notes-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowNotes)
@@ -783,6 +791,7 @@
                         if (typeof item.output == 'undefined') { item.output = 1; }
                         outputProperty.val(item.output);
                         haTypeProperty.val(item.haType || '');
+                        historyProperty.prop('checked', item.history || false);
                     }
                     itemTypeProperty.trigger('change');
                 },
