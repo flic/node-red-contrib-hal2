@@ -19,9 +19,9 @@ const MCP_TOOLS = [
         name        : 'get_history',
         description : 'Returns logged historical values for a specific device item. ' +
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
-                      '"how often", "when was", "last time", or similar time-based questions. ' +
+                      'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
-                      'Returns an array of {ts, state} objects sorted oldest-first.',
+                      'Returns an array of objects with ts and state fields, sorted oldest-first.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -29,7 +29,7 @@ const MCP_TOOLS = [
                 thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
                 item_id    : { type: 'string', description: 'Item ID (from get_all_states)' },
                 item_name  : { type: 'string', description: 'Item name, partial case-insensitive match (alternative to item_id)' },
-                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 0.1 }
+                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 1 }
             }
         }
     },
