@@ -115,6 +115,22 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'control_climate',
+        description : 'Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, case-insensitive). ' +
+                      'Current status is available via get_all_states. All parameters are optional — only provided ones are sent.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
+                thing_name : { type: 'string', description: 'Partial, case-insensitive name match' },
+                mode       : { type: 'string', enum: ['off','cool','heat','fan_only','dry','heat_cool'], description: 'HVAC mode' },
+                target_temp: { type: 'number', description: 'Target temperature in °C' },
+                fan_mode   : { type: 'string', enum: ['auto','diffuse','low','medium','middle','high'], description: 'Fan speed/mode' },
+                swing_mode : { type: 'string', enum: ['off','vertical'], description: 'Swing direction' }
+            }
+        }
+    },
+    {
         name        : 'get_presence',
         description : 'Returns presence information for all people/persons tracked in the system. ' +
                       'Shows who is home, who is away, and which room each person is in. ' +
@@ -850,6 +866,52 @@ module.exports = function(RED) {
                                 if (ht === 'airjets' && args.airjets !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.airjets);
                                     sent.push({ item_name: itm.item_name, value: args.airjets });
+                                }
+                            }
+                            results.push({ thing_name: device.thing_name, commands: sent });
+                        }
+
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ success: true, results }));
+                    }
+
+                    // control_climate
+                    if (toolName === 'control_climate') {
+                        const allStates = getAllStates();
+                        let matched = [];
+                        if (args.thing_id) {
+                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                            if (device) matched = [device];
+                        } else if (args.thing_name) {
+                            const needle = args.thing_name.toLowerCase();
+                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        }
+
+                        if (matched.length === 0) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({ error: 'No matching climate device found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                        }
+
+                        const results = [];
+                        for (const device of matched) {
+                            const sent = [];
+                            for (const itm of device.items) {
+                                const ht = (itm.ha_type || '').toLowerCase();
+                                if (ht === 'ac mode' && args.mode !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.mode);
+                                    sent.push({ item_name: itm.item_name, value: args.mode });
+                                }
+                                if (ht === 'target temperature' && args.target_temp !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.target_temp);
+                                    sent.push({ item_name: itm.item_name, value: args.target_temp });
+                                }
+                                if (ht === 'fan mode' && args.fan_mode !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.fan_mode);
+                                    sent.push({ item_name: itm.item_name, value: args.fan_mode });
+                                }
+                                if (ht === 'swing mode' && args.swing_mode !== undefined) {
+                                    node.publishCommand(device.thing_id, itm.item_id, args.swing_mode);
+                                    sent.push({ item_name: itm.item_name, value: args.swing_mode });
                                 }
                             }
                             results.push({ thing_name: device.thing_name, commands: sent });
