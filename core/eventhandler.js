@@ -14,8 +14,16 @@ const MCP_TOOLS = [
                       'property this server controls, and a devices array where each device has thing_id, ' +
                       'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value. ' +
                       'Each device has a top-level alive field (true/false) and an Alive item (ha_type: binary_sensor) — if false the device is offline and should be noted and communicated. ' +
-                      'Only items with a ha_type are included.',
-        inputSchema : { type: 'object', properties: {} }
+                      'Only items with a ha_type are included. ' +
+                      'Use offset and limit to page through devices (default limit: 20). ' +
+                      'The response includes total so you know how many calls are needed.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                offset : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
+                limit  : { type: 'integer', description: 'Max devices to return (default: 20)' }
+            }
+        }
     },
     {
         name        : 'get_history',
@@ -678,7 +686,15 @@ module.exports = function(RED) {
 
                     // get_all_states
                     if (toolName === 'get_all_states') {
-                        const result = { devices: getAllStates() };
+                        const all    = getAllStates();
+                        const offset = parseInt(args.offset) || 0;
+                        const limit  = parseInt(args.limit)  || 20;
+                        const result = {
+                            total   : all.length,
+                            offset,
+                            limit,
+                            devices : all.slice(offset, offset + limit)
+                        };
                         if (config.locationName) result.location = config.locationName;
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify(result, null, 2));
