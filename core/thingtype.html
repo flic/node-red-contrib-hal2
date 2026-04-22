@@ -168,19 +168,28 @@
             .editableList('items')
             .each(function() {
                 let item = $(this);
+                var itemTopicFilters = [];
+                item.find(".node-config-thingtype-filter-list").editableList('items').each(function() {
+                    var row = $(this);
+                    itemTopicFilters.push({
+                        field:     row.find('.tt-filter-field').typedInput('value'),
+                        matchType: row.find('.tt-filter-match').typedInput('type'),
+                        value:     row.find('.tt-filter-match').typedInput('value')
+                    });
+                });
                 let r = {
-                    name:item.find(".node-config-thingtype-name-property").val(),
-                    id:item.find(".node-config-thingtype-id-property").val(),
-                    topicFilterType:item.find(".node-config-thingtype-topicfilter-property").typedInput('type'),
-                    topicFilterValue:item.find(".node-config-thingtype-topicfilter-property").typedInput('value'),
-                    topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
-                    type:item.find(".node-config-thingtype-itemtype-property").val(),
-                    haType:item.find(".node-config-thingtype-hatype-property").val(),
-                    ingress:item.find(".node-config-thingtype-ingress-property").val(),
-                    egress:item.find(".node-config-thingtype-egress-property").val(),
-                    notes:item.find(".node-config-thingtype-notes-property").val(),
-                    output:item.find(".node-config-thingtype-output-property").val(),
-                    history:item.find(".node-config-thingtype-history-property").prop('checked')
+                    name:            item.find(".node-config-thingtype-name-property").val(),
+                    id:              item.find(".node-config-thingtype-id-property").val(),
+                    topicFilters:    itemTopicFilters,
+                    topicFilterMode: item.find(".node-config-thingtype-filtermode-property").val() || 'and',
+                    topicSuffix:     item.find(".node-config-thingtype-topicsuffix-property").val(),
+                    type:            item.find(".node-config-thingtype-itemtype-property").val(),
+                    haType:          item.find(".node-config-thingtype-hatype-property").val(),
+                    ingress:         item.find(".node-config-thingtype-ingress-property").val(),
+                    egress:          item.find(".node-config-thingtype-egress-property").val(),
+                    notes:           item.find(".node-config-thingtype-notes-property").val(),
+                    output:          item.find(".node-config-thingtype-output-property").val(),
+                    history:         item.find(".node-config-thingtype-history-property").prop('checked')
                 }
                 items.push(r);
             })
@@ -567,6 +576,7 @@
                     var rowHaType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
                     var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowFilterList  = $('<div/>',{style:"margin-top:4px; margin-left:115px;"}).appendTo(rowDetails);
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
@@ -612,7 +622,7 @@
                         .append(' HA type')
                     var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowTopicFilter)
-                        .append(' Topic filter')
+                        .append(' Filter')
                     var labelItemType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
                         .appendTo(rowItemType)
                         .append(' Type')
@@ -679,13 +689,31 @@
                         .append($("<option></option>").val('binary_sensor').text('Binary sensor (generic)'))
                         .append($("<option></option>").val('sensor').text('Sensor (generic)'))
                         .append($("<option></option>").val('other').text('Other'))
-                    //MQTT topic filter
-                    var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
+                    // Filter mode + nested filter list
+                    var filterModeProperty = $('<select/>',{class:"node-config-thingtype-filtermode-property",style:"width:70px;"})
                         .appendTo(rowTopicFilter)
-                        .typedInput({
-                            default:MQTTType,
-                            types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
-                        });
+                        .append($('<option/>').val('and').text('AND'))
+                        .append($('<option/>').val('or').text('OR'));
+
+                    var filterListEl = $('<ol/>',{class:"node-config-thingtype-filter-list"}).appendTo(rowFilterList);
+                    filterListEl.editableList({
+                        addItem: function(c, idx, filter) {
+                            var row = $('<div/>').appendTo(c);
+                            var fieldInput = $('<input/>',{type:'text',class:'tt-filter-field',style:'width:130px; margin-right:5px;'}).appendTo(row);
+                            fieldInput.typedInput({ types: ['msg'] });
+                            fieldInput.typedInput('value', filter.field || 'topic');
+
+                            var matchInput = $('<input/>',{type:'text',class:'tt-filter-match',style:'width:calc(100% - 145px)'}).appendTo(row);
+                            matchInput.typedInput({ default:MQTTType, types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType] });
+                            if (filter.matchType) {
+                                matchInput.typedInput('type', filter.matchType);
+                                matchInput.typedInput('value', filter.value || '');
+                            }
+                        },
+                        removable: true,
+                        sortable: false,
+                        addButton: 'Add filter'
+                    });
                     var outputProperty = $('<input/>',{style: "width: 60px",class:"node-config-thingtype-output-property",type:"text"})
                         .appendTo(rowOutput)
                         .val(1)
@@ -746,35 +774,35 @@
                         let val = itemTypeProperty.val();
                         switch(val) {
                             case 'both':
-                                rowTopicFilter.show();
+                                rowTopicFilter.show(); rowFilterList.show();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.show();
                                 rowOutput.show();
                                 break;
                             case 'status':
-                                rowTopicFilter.show();
+                                rowTopicFilter.show(); rowFilterList.show();
                                 rowTopicSuffix.hide();
                                 rowEgress.hide();
                                 rowIngress.show();
                                 rowOutput.hide();
                                 break;
                             case 'command':
-                                rowTopicFilter.hide();
+                                rowTopicFilter.hide(); rowFilterList.hide();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.hide();
                                 rowOutput.show();
                                 break;
                             case 'loopback_command':
-                                rowTopicFilter.hide();
+                                rowTopicFilter.hide(); rowFilterList.hide();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.hide();
                                 rowOutput.hide();
                                 break;
                             case 'loopback_both':
-                                rowTopicFilter.show();
+                                rowTopicFilter.show(); rowFilterList.show();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.show();
@@ -787,8 +815,17 @@
                     if (Object.keys(item).length != 0) {
                         nameProperty.val(item.name);
                         idProperty.val(item.id);
-                        topicFilterProperty.typedInput('type',item.topicFilterType);
-                        topicFilterProperty.typedInput('value',item.topicFilterValue);
+                        filterModeProperty.val(item.topicFilterMode || 'and');
+
+                        // Load filters — migrate old single-filter format if needed
+                        var existingFilters = item.topicFilters;
+                        if ((!existingFilters || existingFilters.length === 0) && item.topicFilterValue) {
+                            existingFilters = [{ field: 'topic', matchType: item.topicFilterType || 'mqtt', value: item.topicFilterValue }];
+                        }
+                        if (existingFilters && existingFilters.length > 0) {
+                            existingFilters.forEach(function(f) { filterListEl.editableList('addItem', f); });
+                        }
+
                         topicSuffixProperty.val(item.topicSuffix);
                         itemTypeProperty.val(item.type);
                         ingressProperty.val(item.ingress);

@@ -10,9 +10,14 @@
         <input type="text" id="node-input-thingType" style="width:calc(100% - 125px)" placeholder="Type">
     </div>
     <div class="form-row">
-        <label for="node-input-topicFilter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Topic filter</label>
-        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:calc(100% - 170px)">
-        <input type="hidden" id="node-input-topicFilterType">
+        <label for="node-input-topicFilterMode" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filters</label>
+        <select id="node-input-topicFilterMode" style="width:70px; vertical-align:top; margin-top:3px;">
+            <option value="and">AND</option>
+            <option value="or">OR</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <ol id="thing-filter-list"></ol>
     </div>
     <div class="form-row">
         <label for="node-input-topicPrefix" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
@@ -70,7 +75,9 @@
                 }
             },
             attributes:         {},
-            topicFilter:        { value: "" },
+            topicFilters:       { value: [] },
+            topicFilterMode:    { value: 'and' },
+            topicFilter:        {},
             topicFilterType:    {},
             topicPrefix:        { value: "" },
             notes:              {},
@@ -86,15 +93,40 @@
         oneditprepare: function () {
             var node = this;
             var typeMQTT = halTypeMQTT();
-            //Incoming topic filter
-            $('#node-input-topicFilter').typedInput({
-                default: 'mqtt',
-                typeField: $("#node-input-topicFilterType"),
-                types: ['str','re',typeMQTT],
+            var StrStartType   = { value: "StrStart",   label: "starts with", hasValue: true };
+            var StrEndType     = { value: "StrEnd",     label: "ends with",   hasValue: true };
+            var StrContainsType= { value: "StrContain", label: "contains",    hasValue: true };
+
+            // Incoming filter list
+            $('#thing-filter-list').editableList({
+                addItem: function(container, i, filter) {
+                    var row = $('<div/>').appendTo(container);
+                    var fieldInput = $('<input/>', {type:'text', class:'thing-filter-field', style:'width:160px; margin-right:5px;'}).appendTo(row);
+                    fieldInput.typedInput({ types: ['msg'] });
+                    fieldInput.typedInput('value', filter.field || 'topic');
+
+                    var matchInput = $('<input/>', {type:'text', class:'thing-filter-match', style:'width:calc(100% - 175px)'}).appendTo(row);
+                    matchInput.typedInput({ default:'mqtt', types:['str','re',typeMQTT,StrStartType,StrEndType,StrContainsType] });
+                    if (filter.matchType) {
+                        matchInput.typedInput('type', filter.matchType);
+                        matchInput.typedInput('value', filter.value || '');
+                    }
+                },
+                removable: true,
+                sortable: false,
+                addButton: 'Add filter'
             });
-            if (this.topicFilter) {
-                $("#node-input-topicFilter").typedInput('value',this.topicFilter).typedInput('type',this.topicFilterType);                           
+
+            // Load existing filters — migrate old single-filter format if needed
+            var filters = this.topicFilters;
+            if ((!filters || filters.length === 0) && this.topicFilter) {
+                filters = [{ field: 'topic', matchType: this.topicFilterType || 'mqtt', value: this.topicFilter }];
             }
+            if (filters && filters.length > 0) {
+                var list = $('#thing-filter-list');
+                filters.forEach(function(f) { list.editableList('addItem', f); });
+            }
+
             //Outgoing topic
             if (this.topicPrefix) {
                 $("#node-input-topicPrefix").val(this.topicPrefix);                         
@@ -239,6 +271,19 @@
         },
         oneditsave: function () {
             var node = this;
+
+            node.topicFilters = [];
+            $('#thing-filter-list').editableList('items').each(function() {
+                var item = $(this);
+                node.topicFilters.push({
+                    field:     item.find('.thing-filter-field').typedInput('value'),
+                    matchType: item.find('.thing-filter-match').typedInput('type'),
+                    value:     item.find('.thing-filter-match').typedInput('value')
+                });
+            });
+            node.topicFilter = '';
+            node.topicFilterType = '';
+
             let TT = $("#node-input-thingType").val();
             if (TT) {
                 var thingType = RED.nodes.node(TT);

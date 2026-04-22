@@ -30,15 +30,32 @@ module.exports = function(RED) {
         return topic;
     }
 
-    //a=msg.topic, b=filter
+    //a=msg value, b=filter pattern
     var topicFilter = {
-        'str': function (a, b) { return a === b; },
-        're': function (a, b) { return (new RegExp(b)).test(a+""); },
-        'mqtt': function (a,b) { return matchTopic(b,a); },
-        'StrStart': function (a,b) { return (a.startsWith(b)) },
-        'StrEnd': function (a,b) { return (a.endsWith(b)) },
-        'StrContain': function (a,b) { return (a.includes(b)) }
+        'str':       function (a, b) { return a === b; },
+        're':        function (a, b) { return (new RegExp(b)).test(a+""); },
+        'mqtt':      function (a, b) { return matchTopic(b, a); },
+        'StrStart':  function (a, b) { return (a+"").startsWith(b); },
+        'StrEnd':    function (a, b) { return (a+"").endsWith(b); },
+        'StrContain':function (a, b) { return (a+"").includes(b); }
     };
+
+    function applyFilters(msg, filters, mode, topicPrefix) {
+        if (!filters || filters.length === 0) return true;
+        for (var i = 0; i < filters.length; i++) {
+            var f = filters[i];
+            var val = RED.util.getMessageProperty(msg, f.field);
+            var filterVal = f.value;
+            if (f.field === 'topic' && f.matchType === 'str' && topicPrefix) {
+                filterVal = fixTopic(filterVal, topicPrefix);
+            }
+            var fn = topicFilter[f.matchType];
+            var matched = fn ? fn(val, filterVal) : false;
+            if (mode === 'or') { if (matched) return true; }
+            else               { if (!matched) return false; }
+        }
+        return mode !== 'or';
+    }
 
     function hal2Thing(config) {
         RED.nodes.createNode(this,config);
@@ -48,9 +65,18 @@ module.exports = function(RED) {
         this.name = config.name;
         this.notes = config.notes;
         this.topicPrefix = config.topicPrefix;
-        this.topicFilter = config.topicFilter;
-        this.topicFilterType = config.topicFilterType;
         this.attributes = config.attributes;
+
+        if (config.topicFilters && config.topicFilters.length > 0) {
+            this.topicFilters    = config.topicFilters;
+            this.topicFilterMode = config.topicFilterMode || 'and';
+        } else if (config.topicFilter) {
+            this.topicFilters    = [{ field: 'topic', matchType: config.topicFilterType || 'mqtt', value: config.topicFilter }];
+            this.topicFilterMode = 'and';
+        } else {
+            this.topicFilters    = [];
+            this.topicFilterMode = 'and';
+        }
         var node = this;
         var nodeContext = this.context();
         var date;
@@ -115,8 +141,8 @@ module.exports = function(RED) {
             var attribute;
             var item;
 
-            if (node.topicFilter) {
-                if (topicFilter[node.topicFilterType](msg.topic,node.topicFilter) === false) { return; }
+            if (node.topicFilters.length > 0) {
+                if (!applyFilters(msg, node.topicFilters, node.topicFilterMode)) { return; }
             }
 
             if (!node.thingType.items) {
@@ -147,12 +173,13 @@ module.exports = function(RED) {
             for (var i in node.thingType.items) {
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'ttl')) { continue; }
 
-                if (node.thingType.items[i].topicFilterValue) {
-                    var topic = node.thingType.items[i].topicFilterValue;
-                    if (node.thingType.items[i].topicFilterType == 'str') {
-                        topic = fixTopic(topic,node.topicPrefix);
-                    }
-                    if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,topic) == false) { continue; }
+                var itemFilters = node.thingType.items[i].topicFilters;
+                var itemFilterMode = node.thingType.items[i].topicFilterMode || 'and';
+                if ((!itemFilters || itemFilters.length === 0) && node.thingType.items[i].topicFilterValue) {
+                    itemFilters = [{ field: 'topic', matchType: node.thingType.items[i].topicFilterType || 'mqtt', value: node.thingType.items[i].topicFilterValue }];
+                }
+                if (itemFilters && itemFilters.length > 0) {
+                    if (!applyFilters(msg, itemFilters, itemFilterMode, node.topicPrefix)) { continue; }
                 }
 
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'timestamp')) {
