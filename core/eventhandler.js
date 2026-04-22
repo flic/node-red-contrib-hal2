@@ -16,6 +16,7 @@ const MCP_TOOLS = [
                       'Each device has a top-level alive field (true/false) and an Alive item (ha_type: binary_sensor) — if false the device is offline and should be noted and communicated. ' +
                       'Only items with a ha_type are included. ' +
                       'Use offset and limit to page through devices (default limit: 20). ' +
+                      'Always use the default limit of 20 and paginate using offset — do not pass a higher limit.' +
                       'The response includes total so you know how many calls are needed.',
         inputSchema : {
             type       : 'object',
@@ -32,7 +33,7 @@ const MCP_TOOLS = [
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
                       'Returns an array of objects with ts and state fields, sorted oldest-first. ' +
-                      'Use offset and limit to page through large result sets (default limit: 500). ' +
+                      'Use offset and limit to page through large result sets (default limit: 500). Do not try to pass a higher limit.' +
                       'The response includes total so you know how many calls are needed.',
         inputSchema : {
             type       : 'object',
