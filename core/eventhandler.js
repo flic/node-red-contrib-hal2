@@ -13,7 +13,8 @@ const MCP_TOOLS = [
                       'The response includes a location field (e.g. "Hemma" or "Landet") identifying which ' +
                       'property this server controls, and a devices array where each device has thing_id, ' +
                       'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value. ' +
-                      'If the item Alive is false that means the device is offline, which should be noted and communicated.',
+                      'Each device has a top-level alive field (true/false) and an Alive item (ha_type: binary_sensor) — if false the device is offline and should be noted and communicated. ' +
+                      'Only items with a ha_type are included.',
         inputSchema : { type: 'object', properties: {} }
     },
     {
@@ -505,12 +506,13 @@ module.exports = function(RED) {
                     const items = [];
                     for (const i in tt.items) {
                         const itm = tt.items[i];
-                        if (itm.id === '1') continue; // skip heartbeat alive item
+                        const ha_type = itm.id === '1' ? 'binary_sensor' : (itm.haType || '');
+                        if (!ha_type) continue;
                         const label = attrMap[normalise(itm.name)] || null;
                         const entry = {
                             item_id   : itm.id,
                             item_name : itm.name,
-                            ha_type   : itm.haType || '',
+                            ha_type,
                             value     : (thing.state[itm.id] !== undefined) ? thing.state[itm.id] : 'no value'
                         };
                         if (label) entry.label = label;
@@ -523,6 +525,7 @@ module.exports = function(RED) {
                         thing_name : thing.name,
                         type_id    : tt.id,
                         type_name  : tt.name,
+                        alive      : thing.state['1'] !== false,
                         items
                     });
 
