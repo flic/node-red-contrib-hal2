@@ -50,9 +50,12 @@
                     </div>                    
                 </div>
                 <div class="form-row" id="heartbeat-filter" hidden>
-                    <label for="node-config-input-hbFilterVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Topic filter</label>
-                    <input type="text" id="node-config-input-hbFilterVal" style="width: calc(100% - 185px)">
-                    <input type="hidden" id="node-config-input-hbFilterType">
+                    <label style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Filters</label>
+                    <select id="node-config-input-hbFilterMode" style="width:70px; vertical-align:top; margin-top:3px;">
+                        <option value="and">AND</option>
+                        <option value="or">OR</option>
+                    </select>
+                    <ol id="hb-filter-list" style="margin-top:8px;"></ol>
                 </div>
                 <div class="form-row" id="heartbeat-lwt" hidden>
                     <div class="form-row">
@@ -347,6 +350,8 @@
             hbType:         { value:'lwt' },
             hbTTL:          { value:3600 },
             hbLWT:          {},
+            hbFilters:      { value: [] },
+            hbFilterMode:   { value: 'and' },
             hbFilterVal:    {},
             hbFilterType:   {},
             hbPropVal:      {},
@@ -547,11 +552,31 @@
                     $("#heartbeat-timestamp").show();
                 }
             });
-            $('#node-config-input-hbFilterVal').typedInput({
-                default: 'str',
-                typeField: $("#node-config-input-hbFilterType"),
-                types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
-            });              
+            $('#hb-filter-list').editableList({
+                addItem: function(container, i, filter) {
+                    var row = $('<div/>').appendTo(container);
+                    var fieldInput = $('<input/>', {type:'text', class:'hb-filter-field', style:'width:160px; margin-right:5px;'}).appendTo(row);
+                    fieldInput.typedInput({ types: ['msg'] });
+                    fieldInput.typedInput('value', filter.field || 'topic');
+                    var matchInput = $('<input/>', {type:'text', class:'hb-filter-match', style:'width:calc(100% - 175px)'}).appendTo(row);
+                    matchInput.typedInput({ default:'mqtt', types:['str','re',MQTTType,StrStartType,StrEndType,StrContainsType] });
+                    if (filter.matchType) {
+                        matchInput.typedInput('type', filter.matchType);
+                        matchInput.typedInput('value', filter.value || '');
+                    }
+                },
+                removable: true,
+                sortable: false,
+                addButton: 'Add filter'
+            });
+            // Migrate old single filter or load existing
+            var hbFilters = node.hbFilters;
+            if ((!hbFilters || hbFilters.length === 0) && node.hbFilterVal) {
+                hbFilters = [{ field: 'topic', matchType: node.hbFilterType || 'mqtt', value: node.hbFilterVal }];
+            }
+            if (hbFilters && hbFilters.length > 0) {
+                hbFilters.forEach(function(f) { $('#hb-filter-list').editableList('addItem', f); });
+            }
             $('#node-config-input-hbPropVal').typedInput({
                 default: 'msg',
                 typeField: $("#node-config-input-hbPropType"),
@@ -1171,14 +1196,31 @@
                         set: function(v) { $("#node-config-input-hbTTL").val(v) }
                     },
                     {
-                        name: 'heartbeat_topicfilter',
-                        get: function() { return $("#node-config-input-hbFilterVal").typedInput('value'); },
-                        set: function(v) { $("#node-config-input-hbFilterVal").typedInput('value',v) }
+                        name: 'heartbeat_filters',
+                        get: function() {
+                            var filters = [];
+                            $('#hb-filter-list').editableList('items').each(function() {
+                                var item = $(this);
+                                filters.push({
+                                    field:     item.find('.hb-filter-field').typedInput('value'),
+                                    matchType: item.find('.hb-filter-match').typedInput('type'),
+                                    value:     item.find('.hb-filter-match').typedInput('value')
+                                });
+                            });
+                            return JSON.stringify(filters);
+                        },
+                        set: function(v) {
+                            try {
+                                var filters = JSON.parse(v);
+                                $('#hb-filter-list').editableList('empty');
+                                filters.forEach(function(f) { $('#hb-filter-list').editableList('addItem', f); });
+                            } catch(e) {}
+                        }
                     },
                     {
-                        name: 'heartbeat_topicfilterType',
-                        get: function() { return $("#node-config-input-hbFilterVal").typedInput('type'); },
-                        set: function(v) { $("#node-config-input-hbFilterVal").typedInput('type',v); }
+                        name: 'heartbeat_filterMode',
+                        get: function() { return $("#node-config-input-hbFilterMode").val() || 'and'; },
+                        set: function(v) { $("#node-config-input-hbFilterMode").val(v || 'and'); }
                     },
                     {
                         name: 'heartbeat_ingress',
@@ -1241,13 +1283,26 @@
                 }
             }
 
+            // Save hbFilters from list and clear legacy fields
+            node.hbFilters = [];
+            $('#hb-filter-list').editableList('items').each(function() {
+                var item = $(this);
+                node.hbFilters.push({
+                    field:     item.find('.hb-filter-field').typedInput('value'),
+                    matchType: item.find('.hb-filter-match').typedInput('type'),
+                    value:     item.find('.hb-filter-match').typedInput('value')
+                });
+            });
+            node.hbFilterVal = '';
+            node.hbFilterType = '';
+
             // Create heartbeat item
             if ($("#node-config-input-hbCheck").is(":checked")) {
                 let r = {
                         name: "Alive",
                         id: "1",
-                        topicFilterType:$("#node-config-input-hbFilterType").val(),
-                        topicFilterValue:$("#node-config-input-hbFilterVal").val(),
+                        topicFilters: node.hbFilters,
+                        topicFilterMode: $("#node-config-input-hbFilterMode").val() || 'and',
                         topicSuffix: "",
                         readOnly: true,
                         type: 'status',
