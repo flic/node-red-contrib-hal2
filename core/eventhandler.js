@@ -12,7 +12,8 @@ const MCP_TOOLS = [
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
                       'The response includes a location field (e.g. "Hemma" or "Landet") identifying which ' +
                       'property this server controls, and a devices array where each device has thing_id, ' +
-                      'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value.',
+                      'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value. ' +
+                      'If the item Alive is false that means the device is offline, which should be noted and communicated.',
         inputSchema : { type: 'object', properties: {} }
     },
     {
