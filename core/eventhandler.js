@@ -31,7 +31,9 @@ const MCP_TOOLS = [
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
-                      'Returns an array of objects with ts and state fields, sorted oldest-first.',
+                      'Returns an array of objects with ts and state fields, sorted oldest-first. ' +
+                      'Use offset and limit to page through large result sets (default limit: 500). ' +
+                      'The response includes total so you know how many calls are needed.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -39,7 +41,9 @@ const MCP_TOOLS = [
                 thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
                 item_id    : { type: 'string', description: 'Item ID (from get_all_states)' },
                 item_name  : { type: 'string', description: 'Item name, partial case-insensitive match (alternative to item_id)' },
-                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 1 }
+                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 1 },
+                offset     : { type: 'integer', description: 'Number of records to skip (default: 0)' },
+                limit      : { type: 'integer', description: 'Max records to return (default: 500)' }
             }
         }
     },
@@ -1147,13 +1151,18 @@ module.exports = function(RED) {
                                 node.queryHistory(targetThing.id, itemId, fromMs, Date.now(), (err, d) => err ? reject(err) : resolve(d));
                             });
                             node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                            const offset = parseInt(args.offset) || 0;
+                            const limit  = parseInt(args.limit)  || 500;
+                            const page   = docs.slice(offset, offset + limit);
                             return toolOk(JSON.stringify({
                                 thing_id  : targetThing.id,
                                 thing_name: targetThing.name,
                                 item_id   : itemId,
                                 hours,
-                                count     : docs.length,
-                                data      : docs.map(d => ({ ts: d.ts, state: d.state }))
+                                total     : docs.length,
+                                offset,
+                                limit,
+                                data      : page.map(d => ({ ts: d.ts, state: d.state }))
                             }));
                         } catch (e) {
                             return toolOk(JSON.stringify({ error: 'History query failed: ' + e.message }));
