@@ -1154,7 +1154,9 @@ module.exports = function(RED) {
                                 node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId });
                             });
                             node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                            return toolOk(result);
+                            return Array.isArray(result)
+                                ? respond({ content: result })
+                                : toolOk(result);
                         } catch (e) {
                             node.status({ fill: 'red', shape: 'dot', text: 'timeout' });
                             return toolOk(JSON.stringify({ error: e.message === 'timeout' ? 'Tool timed out: ' + toolName : e.message }));

@@ -20,8 +20,10 @@ module.exports = function (RED) {
                 node.status({ fill: 'red', shape: 'dot', text: 'missing _mcpCallId' });
                 return;
             }
-            const text = typeof msg.payload === 'string' ? msg.payload : JSON.stringify(msg.payload);
-            node.eventHandler.resolveMCPCall(callId, text);
+            const content = Array.isArray(msg.payload)
+                ? msg.payload
+                : (typeof msg.payload === 'string' ? msg.payload : JSON.stringify(msg.payload));
+            node.eventHandler.resolveMCPCall(callId, content);
             node.status({ fill: 'green', shape: 'dot', text: 'responded' });
             setTimeout(() => node.status({ fill: 'grey', shape: 'ring', text: 'idle' }), 1000);
         });
