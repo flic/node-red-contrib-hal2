@@ -15,14 +15,14 @@ const MCP_TOOLS = [
                       'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value. ' +
                       'Each device has a top-level alive field (true/false) and an Alive item (ha_type: binary_sensor) — if false the device is offline and should be noted and communicated. ' +
                       'Only items with a ha_type are included. ' +
-                      'Use offset and limit to page through devices (default limit: 20). ' +
-                      'Always use the default limit of 20 and paginate using offset — do not pass a higher limit.' +
+                      'Use offset and limit to page through devices (default limit: 30). ' +
+                      'Always use the default limit and paginate using offset — do not pass a higher limit.' +
                       'The response includes total so you know how many calls are needed.',
         inputSchema : {
             type       : 'object',
             properties : {
                 offset : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
-                limit  : { type: 'integer', description: 'Max devices to return (default: 20)' }
+                limit  : { type: 'integer', description: 'Max devices to return (default: 30)' }
             }
         }
     },
@@ -693,7 +693,7 @@ module.exports = function(RED) {
                     if (toolName === 'get_all_states') {
                         const all    = getAllStates();
                         const offset = parseInt(args.offset) || 0;
-                        const limit  = parseInt(args.limit)  || 20;
+                        const limit  = parseInt(args.limit)  || 30;
                         const result = {
                             total   : all.length,
                             offset,
