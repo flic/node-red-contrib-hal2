@@ -676,7 +676,11 @@ module.exports = function(RED) {
                     const tools = [...MCP_TOOLS];
                     if (adminEnabled) tools.push(...MCP_TOOLS_ADMIN);
                     for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
-                        tools.push({ name, description: t.description, inputSchema: t.schema || { type: 'object', properties: {} } });
+                        const s = t.schema;
+                        const inputSchema = (s && s.type === 'object')
+                            ? s
+                            : { type: 'object', properties: s || {} };
+                        tools.push({ name, description: t.description, inputSchema });
                     }
                     return respond({ tools });
                 }
