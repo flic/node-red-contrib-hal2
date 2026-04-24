@@ -7,6 +7,10 @@
         <label for="node-input-eventHandler"><i class="fa fa-cog"></i> Event handler</label>
         <input type="text" id="node-input-eventHandler">
     </div>
+    <div class="form-row">
+        <label for="node-input-emptyMessage"><i class="fa fa-comment-o"></i> Empty response</label>
+        <input type="text" id="node-input-emptyMessage" placeholder="No results found.">
+    </div>
 </script>
 
 <script type="text/javascript">
@@ -15,7 +19,8 @@
         color: '#b3b3ff',
         defaults  : {
             name         : { value: '' },
-            eventHandler : { value: '', type: 'hal2EventHandler' }
+            eventHandler : { value: '', type: 'hal2EventHandler' },
+            emptyMessage : { value: 'No results found.' }
         },
         inputs    : 1,
         outputs   : 0,
