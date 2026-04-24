@@ -538,7 +538,7 @@ module.exports = function(RED) {
                         thing_name : thing.name,
                         type_id    : tt.id,
                         type_name  : tt.name,
-                        alive      : thing.state['1'] !== false,
+                        alive      : tt.hbCheck === false ? true : thing.state['1'] !== false,
                         items
                     });
 
