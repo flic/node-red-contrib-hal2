@@ -10,19 +10,35 @@ const MCP_TOOLS = [
     {
         name        : 'get_all_states',
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
-                      'The response includes a location field (e.g. "Hemma" or "Landet") identifying which ' +
-                      'property this server controls, and a devices array where each device has thing_id, ' +
-                      'thing_name, type_name and a list of items with item_id, item_name, ha_type and current value. ' +
-                      'Each device has a top-level alive field (true/false) and an Alive item (ha_type: binary_sensor) — if false the device is offline and should be noted and communicated. ' +
-                      'Only items with a ha_type are included. ' +
-                      'Use offset and limit to page through devices (default limit: 30). ' +
-                      'Always use the default limit and paginate using offset — do not pass a higher limit.' +
-                      'The response includes total so you know how many calls are needed.',
+                      'The response includes a location field (e.g. "Hemma" or "Landet") identifying which property this server controls. ' +
+                      'Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. ' +
+                      'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
+                      'Each device has an alive field (true/false) — if false the device is offline. ' +
+                      'Only items with a ha_type are included in full mode. ' +
+                      'Use ha_type to limit results to devices that have at least one item of that type (e.g. "light", "scene"). ' +
+                      'Supports optional pagination via offset and limit. The response includes total.',
         inputSchema : {
             type       : 'object',
             properties : {
-                offset : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
-                limit  : { type: 'integer', description: 'Max devices to return (default: 30)' }
+                fields  : { type: 'string', enum: ['summary', 'full'], description: 'Level of detail — "summary" (default): thing_id, thing_name, type_name, alive; "full": includes all items' },
+                ha_type : { type: 'string', description: 'Filter to devices that have at least one item with this ha_type (e.g. "light", "scene", "cover")' },
+                offset  : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
+                limit   : { type: 'integer', description: 'Max devices to return (default: all)' }
+            }
+        }
+    },
+    {
+        name        : 'get_state',
+        description : 'Returns the complete state for a specific device. ' +
+                      'Use this after get_all_states (summary) to fetch full details for one device by its thing_id. ' +
+                      'Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. ' +
+                      'Optionally provide item_id to return only a single item value.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                thing_id   : { type: 'string', description: 'Exact thing node ID' },
+                thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
+                item_id    : { type: 'string', description: 'If provided, returns only this item within the device' }
             }
         }
     },
@@ -695,18 +711,61 @@ module.exports = function(RED) {
 
                     // get_all_states
                     if (toolName === 'get_all_states') {
-                        const all    = getAllStates();
+                        let devices = getAllStates();
+
+                        if (args.ha_type) {
+                            const filterType = args.ha_type.toLowerCase();
+                            devices = devices.filter(d => d.items.some(i => i.ha_type.toLowerCase() === filterType));
+                        }
+
+                        const total  = devices.length;
                         const offset = parseInt(args.offset) || 0;
-                        const limit  = parseInt(args.limit)  || 30;
-                        const result = {
-                            total   : all.length,
-                            offset,
-                            limit,
-                            devices : all.slice(offset, offset + limit)
-                        };
+                        const limit  = args.limit ? parseInt(args.limit) : undefined;
+                        let paged    = limit !== undefined ? devices.slice(offset, offset + limit) : devices.slice(offset);
+
+                        const fields = (args.fields || 'summary').toLowerCase();
+                        if (fields === 'summary') {
+                            paged = paged.map(d => ({
+                                thing_id   : d.thing_id,
+                                thing_name : d.thing_name,
+                                type_name  : d.type_name,
+                                alive      : d.alive
+                            }));
+                        }
+
+                        const result = { total, offset, devices: paged };
+                        if (limit !== undefined) result.limit = limit;
                         if (config.locationName) result.location = config.locationName;
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify(result, null, 2));
+                    }
+
+                    // get_state
+                    if (toolName === 'get_state') {
+                        if (!args.thing_id && !args.thing_name) {
+                            return toolOk(JSON.stringify({ error: 'Provide thing_id or thing_name' }));
+                        }
+                        const all = getAllStates();
+                        let device;
+                        if (args.thing_id) {
+                            device = all.find(d => d.thing_id === args.thing_id);
+                        } else {
+                            const q = args.thing_name.toLowerCase();
+                            device = all.find(d => d.thing_name.toLowerCase().includes(q));
+                        }
+                        if (!device) {
+                            return toolOk(JSON.stringify({ error: 'Device not found' }));
+                        }
+                        if (args.item_id) {
+                            const item = device.items.find(i => i.item_id === args.item_id);
+                            if (!item) return toolOk(JSON.stringify({ error: 'Item not found' }));
+                            return toolOk(JSON.stringify({
+                                thing_id   : device.thing_id,
+                                thing_name : device.thing_name,
+                                ...item
+                            }, null, 2));
+                        }
+                        return toolOk(JSON.stringify(device, null, 2));
                     }
 
                     // get_presence

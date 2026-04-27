@@ -1,0 +1,213 @@
+[
+  {
+    "id": "tab-owntone-mcp",
+    "type": "tab",
+    "label": "OwnTone MCP",
+    "disabled": false,
+    "info": ""
+  },
+
+  {
+    "id": "ot-c1",
+    "type": "comment",
+    "z": "tab-owntone-mcp",
+    "name": "owntone_get_outputs – MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ot-in-get-outputs",
+    "type": "hal2MCPIn",
+    "z": "tab-owntone-mcp",
+    "name": "Get outputs",
+    "eventHandler": "",
+    "toolName": "owntone_get_outputs",
+    "description": "List AirPlay speakers available in OwnTone. Apple TVs requiring pairing and the virtual Computer output are excluded. Use this to see available speaker names before calling owntone_set_outputs.",
+    "inputSchema": "{\"type\":\"object\",\"properties\":{}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 80,
+    "wires": [["ot-fn-get-outputs"]]
+  },
+  {
+    "id": "ot-fn-get-outputs",
+    "type": "function",
+    "z": "tab-owntone-mcp",
+    "name": "GET /api/outputs",
+    "func": "const httpReq = (method, path, body) => new Promise((resolve, reject) => {\n    const b = body !== undefined ? JSON.stringify(body) : '';\n    const headers = { 'Accept': 'application/json' };\n    if (b) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(b); }\n    const req = http.request({ hostname: 'owntone.caddy', port: 3689, path, method, headers }, res => {\n        let x = ''; res.on('data', c => x += c);\n        res.on('end', () => { try { resolve({ status: res.statusCode, body: x ? JSON.parse(x) : null }); } catch(e) { resolve({ status: res.statusCode, body: x || null }); } });\n    });\n    req.on('error', reject); if (b) req.write(b); req.end();\n});\nconst r = await httpReq('GET', '/api/outputs');\nif (r.status >= 400) { msg.payload = { error: 'OwnTone error: HTTP ' + r.status }; return msg; }\nmsg.payload = { outputs: (r.body && r.body.outputs ? r.body.outputs : [])\n    .filter(o => o.type !== 'dummy' && !o.requires_auth)\n    .map(o => ({ id: o.id, name: o.name, selected: o.selected, volume: o.volume })) };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [{"var": "http", "module": "http"}],
+    "x": 360,
+    "y": 80,
+    "wires": [["ot-out-get-outputs"]]
+  },
+  {
+    "id": "ot-out-get-outputs",
+    "type": "hal2MCPOut",
+    "z": "tab-owntone-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 80,
+    "wires": []
+  },
+
+  {
+    "id": "ot-c2",
+    "type": "comment",
+    "z": "tab-owntone-mcp",
+    "name": "owntone_set_outputs – MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ot-in-set-outputs",
+    "type": "hal2MCPIn",
+    "z": "tab-owntone-mcp",
+    "name": "Set outputs",
+    "eventHandler": "",
+    "toolName": "owntone_set_outputs",
+    "description": "Select which rooms/speakers should receive audio. Call this first when the user wants music in specific rooms. OwnTone then distributes audio to the selected speakers via AirPlay 2. Workflow: 1) owntone_set_outputs to pick rooms, 2) owntone_play_spotify to start music.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"names\"],\"properties\":{\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Speaker names to activate (case-insensitive) — use owntone_get_outputs for available names. All others will be deactivated.\"},\"volume\":{\"type\":\"integer\",\"description\":\"Volume 0-100 to set on activated outputs (optional)\",\"minimum\":0,\"maximum\":100}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 200,
+    "wires": [["ot-fn-set-outputs"]]
+  },
+  {
+    "id": "ot-fn-set-outputs",
+    "type": "function",
+    "z": "tab-owntone-mcp",
+    "name": "PUT /api/outputs",
+    "func": "const httpReq = (method, path, body) => new Promise((resolve, reject) => {\n    const b = body !== undefined ? JSON.stringify(body) : '';\n    const headers = { 'Accept': 'application/json' };\n    if (b) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(b); }\n    const req = http.request({ hostname: 'owntone.caddy', port: 3689, path, method, headers }, res => {\n        let x = ''; res.on('data', c => x += c);\n        res.on('end', () => { try { resolve({ status: res.statusCode, body: x ? JSON.parse(x) : null }); } catch(e) { resolve({ status: res.statusCode, body: x || null }); } });\n    });\n    req.on('error', reject); if (b) req.write(b); req.end();\n});\nconst { names, volume } = msg.payload;\nif (!names || !Array.isArray(names)) { msg.payload = { error: 'names must be an array of speaker names' }; return msg; }\nconst lowerNames = names.map(s => s.toLowerCase());\nconst gr = await httpReq('GET', '/api/outputs');\nif (gr.status >= 400) { msg.payload = { error: 'Failed to get outputs: HTTP ' + gr.status }; return msg; }\nconst allOutputs = (gr.body && gr.body.outputs ? gr.body.outputs : []).filter(o => o.type !== 'dummy' && !o.requires_auth);\nconst matched = [];\nconst notFound = names.filter(s => !allOutputs.some(o => o.name.toLowerCase() === s.toLowerCase()));\nfor (const o of allOutputs) {\n    const match = lowerNames.includes(o.name.toLowerCase());\n    const body = { selected: match };\n    if (match && volume != null) body.volume = volume;\n    const r = await httpReq('PUT', '/api/outputs/' + o.id, body);\n    if (r.status >= 400) { msg.payload = { error: 'Failed to update ' + o.name + ': HTTP ' + r.status }; return msg; }\n    if (match) matched.push(o.name);\n}\nmsg.payload = { success: true, activated: matched, not_found: notFound };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [{"var": "http", "module": "http"}],
+    "x": 360,
+    "y": 200,
+    "wires": [["ot-out-set-outputs"]]
+  },
+  {
+    "id": "ot-out-set-outputs",
+    "type": "hal2MCPOut",
+    "z": "tab-owntone-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 200,
+    "wires": []
+  },
+
+  {
+    "id": "ot-c3",
+    "type": "comment",
+    "z": "tab-owntone-mcp",
+    "name": "owntone_play_spotify – MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ot-in-get-player",
+    "type": "hal2MCPIn",
+    "z": "tab-owntone-mcp",
+    "name": "Play Spotify",
+    "eventHandler": "",
+    "toolName": "owntone_play_spotify",
+    "description": "Play a Spotify item on the currently active OwnTone outputs. Call owntone_set_outputs first to select rooms. Accepts any Spotify URI: track, playlist, album or artist.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"uri\"],\"properties\":{\"uri\":{\"type\":\"string\",\"description\":\"Spotify URI to play — e.g. spotify:playlist:37i9dQZF1DX... or spotify:track:4iV5W9uY...\"},\"shuffle\":{\"type\":\"boolean\",\"description\":\"Enable shuffle mode before playing\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 320,
+    "wires": [["ot-fn-get-player"]]
+  },
+  {
+    "id": "ot-fn-get-player",
+    "type": "function",
+    "z": "tab-owntone-mcp",
+    "name": "POST /api/queue/items/add",
+    "func": "const httpReq = (method, path, body) => new Promise((resolve, reject) => {\n    const b = body !== undefined ? JSON.stringify(body) : '';\n    const headers = { 'Accept': 'application/json' };\n    if (b) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(b); }\n    const req = http.request({ hostname: 'owntone.caddy', port: 3689, path, method, headers }, res => {\n        let x = ''; res.on('data', c => x += c);\n        res.on('end', () => { try { resolve({ status: res.statusCode, body: x ? JSON.parse(x) : null }); } catch(e) { resolve({ status: res.statusCode, body: x || null }); } });\n    });\n    req.on('error', reject); if (b) req.write(b); req.end();\n});\nconst { uri, shuffle } = msg.payload;\nif (!uri) { msg.payload = { error: 'uri is required (e.g. spotify:playlist:...)' }; return msg; }\nlet params = 'uris=' + encodeURIComponent(uri) + '&clear=true&playback=start';\nif (shuffle) params += '&shuffle=true';\nconst r = await httpReq('POST', '/api/queue/items/add?' + params);\nif (r.status >= 400) { msg.payload = { error: 'Play failed: HTTP ' + r.status + ' ' + JSON.stringify(r.body) }; return msg; }\nmsg.payload = { success: true, uri, shuffle: !!shuffle };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [{"var": "http", "module": "http"}],
+    "x": 400,
+    "y": 320,
+    "wires": [["ot-out-get-player"]]
+  },
+  {
+    "id": "ot-out-get-player",
+    "type": "hal2MCPOut",
+    "z": "tab-owntone-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 320,
+    "wires": []
+  },
+
+  {
+    "id": "ot-c4",
+    "type": "comment",
+    "z": "tab-owntone-mcp",
+    "name": "owntone_player – MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "ot-in-set-volume",
+    "type": "hal2MCPIn",
+    "z": "tab-owntone-mcp",
+    "name": "Player control",
+    "eventHandler": "",
+    "toolName": "owntone_player",
+    "description": "Control OwnTone playback and get player status. Use action=\"status\" (or omit) to get current state. Actions: play, pause, stop, next, previous, status. Optionally set master volume 0-100 alongside any action.",
+    "inputSchema": "{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"play\",\"pause\",\"stop\",\"next\",\"previous\",\"status\"],\"description\":\"Playback action — omit or use status to get player state\"},\"volume\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100,\"description\":\"Master volume 0-100 (can be combined with action)\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 440,
+    "wires": [["ot-fn-set-volume"]]
+  },
+  {
+    "id": "ot-fn-set-volume",
+    "type": "function",
+    "z": "tab-owntone-mcp",
+    "name": "Player control",
+    "func": "const httpReq = (method, path, body) => new Promise((resolve, reject) => {\n    const b = body !== undefined ? JSON.stringify(body) : '';\n    const headers = { 'Accept': 'application/json' };\n    if (b) { headers['Content-Type'] = 'application/json'; headers['Content-Length'] = Buffer.byteLength(b); }\n    const req = http.request({ hostname: 'owntone.caddy', port: 3689, path, method, headers }, res => {\n        let x = ''; res.on('data', c => x += c);\n        res.on('end', () => { try { resolve({ status: res.statusCode, body: x ? JSON.parse(x) : null }); } catch(e) { resolve({ status: res.statusCode, body: x || null }); } });\n    });\n    req.on('error', reject); if (b) req.write(b); req.end();\n});\nconst { action, volume } = msg.payload;\nconst results = {};\nif (volume != null) {\n    const vr = await httpReq('PUT', '/api/player/volume', { volume });\n    if (vr.status >= 400) { msg.payload = { error: 'Volume failed: HTTP ' + vr.status }; return msg; }\n    results.volume_set = volume;\n}\nif (!action || action === 'status') {\n    const r = await httpReq('GET', '/api/player');\n    if (r.status >= 400) { msg.payload = { error: 'Status failed: HTTP ' + r.status }; return msg; }\n    const p = r.body || {};\n    msg.payload = { ...results, state: p.state, volume: p.volume, item_progress_ms: p.item_progress_ms, item_length_ms: p.item_length_ms, shuffle: p.shuffle, repeat: p.repeat };\n    return msg;\n}\nconst paths = { play: '/api/player/play', pause: '/api/player/pause', stop: '/api/player/stop', next: '/api/player/next', previous: '/api/player/previous' };\nconst p = paths[action];\nif (!p) { msg.payload = { error: 'Unknown action: ' + action + '. Valid: play, pause, stop, next, previous, status' }; return msg; }\nconst r = await httpReq('PUT', p);\nif (r.status >= 400) { msg.payload = { error: action + ' failed: HTTP ' + r.status }; return msg; }\nmsg.payload = { success: true, action, ...results };\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [{"var": "http", "module": "http"}],
+    "x": 360,
+    "y": 440,
+    "wires": [["ot-out-set-volume"]]
+  },
+  {
+    "id": "ot-out-set-volume",
+    "type": "hal2MCPOut",
+    "z": "tab-owntone-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 440,
+    "wires": []
+  }
+]
