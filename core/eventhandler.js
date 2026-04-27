@@ -171,9 +171,9 @@ const MCP_TOOLS = [
     },
     {
         name        : 'get_alerts',
-        description : 'Returns water leak sensor status and devices with low battery in one call. ' +
+        description : 'Returns water leak sensor status, devices with low battery, and offline devices in one call. ' +
                       'Use this to answer "is there a water leak?", "which sensors have low battery?", ' +
-                      '"what needs attention?" or similar questions about sensor alerts.',
+                      '"are any devices offline?", "what needs attention?" or similar questions about sensor alerts.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -1014,7 +1014,11 @@ module.exports = function(RED) {
                         const threshold = args.battery_threshold !== undefined ? Number(args.battery_threshold) : 20;
                         const sensors = [];
                         const low = [];
+                        const offline = [];
                         for (const device of getAllStates()) {
+                            if (!device.alive) {
+                                offline.push({ thing_id: device.thing_id, thing_name: device.thing_name, type_name: device.type_name });
+                            }
                             const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
                             if (waterItem) {
                                 const wet = waterItem.value === true || waterItem.value === 'true';
@@ -1037,8 +1041,9 @@ module.exports = function(RED) {
                         }
                         sensors.sort((a, b) => (b.wet ? 1 : 0) - (a.wet ? 1 : 0));
                         low.sort((a, b) => a.battery - b.battery);
-                        node.status({ fill: sensors.some(s => s.wet) ? 'red' : 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify({ water_sensors: sensors, any_wet: sensors.some(s => s.wet), low_battery_devices: low, battery_threshold: threshold }));
+                        const hasAlert = sensors.some(s => s.wet) || offline.length > 0;
+                        node.status({ fill: hasAlert ? 'red' : 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({ water_sensors: sensors, any_wet: sensors.some(s => s.wet), low_battery_devices: low, battery_threshold: threshold, offline_devices: offline }));
                     }
 
                     // control_device
