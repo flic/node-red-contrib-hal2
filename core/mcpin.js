@@ -4,10 +4,10 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         const node = this;
 
-        node.eventHandler = RED.nodes.getNode(config.eventHandler);
-        if (!node.eventHandler) {
-            node.error('No event handler configured');
-            node.status({ fill: 'red', shape: 'ring', text: 'no event handler' });
+        const mcpServer = RED.nodes.getNode(config.mcpServer);
+        if (!mcpServer) {
+            node.error('No MCP server configured');
+            node.status({ fill: 'red', shape: 'ring', text: 'no MCP server' });
             return;
         }
 
@@ -23,7 +23,7 @@ module.exports = function (RED) {
             schema = { type: 'object', properties: {} };
         }
 
-        node.eventHandler.registerMCPTool(toolName, config.description, schema, timeoutSec);
+        mcpServer.registerMCPTool(toolName, config.description, schema, timeoutSec);
 
         node.listener = function ({ args, _mcpCallId }) {
             node.status({ fill: 'blue', shape: 'dot', text: 'called' });
@@ -35,14 +35,12 @@ module.exports = function (RED) {
             setTimeout(() => node.status({ fill: 'green', shape: 'dot', text: 'ready' }), 1000);
         };
 
-        node.eventHandler.on('mcp_tool_' + toolName, node.listener);
+        mcpServer.on('mcp_tool_' + toolName, node.listener);
         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
 
         node.on('close', function () {
-            if (node.eventHandler) {
-                node.eventHandler.unregisterMCPTool(toolName);
-                node.eventHandler.removeListener('mcp_tool_' + toolName, node.listener);
-            }
+            mcpServer.unregisterMCPTool(toolName);
+            mcpServer.removeListener('mcp_tool_' + toolName, node.listener);
         });
     }
 

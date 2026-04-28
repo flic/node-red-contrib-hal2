@@ -4,8 +4,8 @@
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
     <div class="form-row">
-        <label for="node-input-eventHandler"><i class="fa fa-cog"></i> Event handler</label>
-        <input type="text" id="node-input-eventHandler">
+        <label for="node-input-mcpServer"><i class="fa fa-server"></i> MCP Server</label>
+        <input type="text" id="node-input-mcpServer">
     </div>
     <div class="form-row">
         <label for="node-input-toolName"><i class="fa fa-terminal"></i> Tool name</label>
@@ -34,13 +34,13 @@
         category: 'Home Automation',
         color: '#b3b3ff',
         defaults  : {
-            name         : { value: '' },
-            eventHandler : { value: '', type: 'hal2EventHandler' },
-            toolName     : { value: '', required: true },
-            description  : { value: '' },
-            inputSchema  : { value: '' },
-            topic        : { value: '' },
-            timeout      : { value: 30 }
+            name        : { value: '' },
+            mcpServer   : { value: '', type: 'hal2MCPServer', required: true },
+            toolName    : { value: '', required: true },
+            description : { value: '' },
+            inputSchema : { value: '' },
+            topic       : { value: '' },
+            timeout     : { value: 30 }
         },
         inputs    : 0,
         outputs   : 1,

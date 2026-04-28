@@ -4,10 +4,10 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         const node = this;
 
-        node.eventHandler = RED.nodes.getNode(config.eventHandler);
-        if (!node.eventHandler) {
-            node.error('No event handler configured');
-            node.status({ fill: 'red', shape: 'ring', text: 'no event handler' });
+        const mcpServer = RED.nodes.getNode(config.mcpServer);
+        if (!mcpServer) {
+            node.error('No MCP server configured');
+            node.status({ fill: 'red', shape: 'ring', text: 'no MCP server' });
             return;
         }
 
@@ -32,7 +32,7 @@ module.exports = function (RED) {
                     ? payload
                     : (typeof payload === 'string' ? payload : JSON.stringify(payload));
             }
-            node.eventHandler.resolveMCPCall(callId, content);
+            mcpServer.resolveMCPCall(callId, content);
             node.status({ fill: 'green', shape: 'dot', text: 'responded' });
             setTimeout(() => node.status({ fill: 'grey', shape: 'ring', text: 'idle' }), 1000);
         });

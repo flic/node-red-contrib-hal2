@@ -598,6 +598,8 @@ module.exports = function(RED) {
                 return user;
             }
 
+            node.requireBearer = requireBearer;
+
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
             node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-protected-resource');
