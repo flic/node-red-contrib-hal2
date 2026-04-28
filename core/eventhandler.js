@@ -49,7 +49,7 @@ const MCP_TOOLS = [
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
                       'Returns an array of objects with ts and state fields, sorted oldest-first. ' +
-                      'Use offset and limit to page through large result sets (default limit: 500). Do not try to pass a higher limit.' +
+                      'Use offset and limit to page through large result sets (default limit: 500).' +
                       'The response includes total so you know how many calls are needed.',
         inputSchema : {
             type       : 'object',
