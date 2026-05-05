@@ -389,29 +389,27 @@ module.exports = function(RED) {
         let historyDb = null;
 
         if (config.historyEnabled && config.historyDbPath) {
-            const Datastore = require('@seald-io/nedb');
             const retentionMs = (Number(config.historyRetentionDays) || 30) * 24 * 60 * 60 * 1000;
+            try {
+                const createHistoryDb = require('./historyDb');
+                historyDb = createHistoryDb(config.historyDbPath);
+                node.log('History enabled (SQLite), db: ' + config.historyDbPath);
 
-            (async () => {
-                try {
-                    historyDb = new Datastore({ filename: config.historyDbPath });
-                    await historyDb.loadDatabaseAsync();
-                    await historyDb.ensureIndexAsync({ fieldName: 'ts' });
-                    await historyDb.ensureIndexAsync({ fieldName: 'thing_id' });
-                    node.log('History enabled, db: ' + config.historyDbPath);
-
-                    const pruneHistory = async () => {
-                        const n = await historyDb.removeAsync({ ts: { $lt: Date.now() - retentionMs } }, { multi: true });
-                        if (n > 0) { node.log('History pruned ' + n + ' records'); }
-                    };
-                    await pruneHistory();
-                    const historyPruneInterval = setInterval(pruneHistory, 60 * 60 * 1000);
-                    node.on('close', () => clearInterval(historyPruneInterval));
-                } catch (err) {
-                    node.error('History init failed: ' + err.message);
+                const pruneHistory = () => {
+                    const n = historyDb.prune(Date.now() - retentionMs);
+                    if (n > 0) { node.log('History pruned ' + n + ' records'); }
+                };
+                pruneHistory();
+                const historyPruneInterval = setInterval(pruneHistory, 60 * 60 * 1000);
+                node.on('close', () => {
+                    clearInterval(historyPruneInterval);
+                    historyDb.close();
                     historyDb = null;
-                }
-            })();
+                });
+            } catch (err) {
+                node.warn('History unavailable (better-sqlite3 not installed): ' + err.message);
+                historyDb = null;
+            }
         }
 
         // ── Event bus ─────────────────────────────────────────────────────────
@@ -457,16 +455,12 @@ module.exports = function(RED) {
 
         node.queryHistory = function (thingid, itemid, fromMs, toMs, cb) {
             if (!historyDb) { cb(null, []); return; }
-            historyDb.find({ thing_id: thingid, item_id: itemid, ts: { $gte: fromMs, $lte: toMs } })
-                .sort({ ts: 1 })
-                .exec(cb);
+            historyDb.queryHistory(thingid, itemid, fromMs, toMs, cb);
         };
 
         node.queryHistoryAll = function (fromMs, toMs, cb) {
             if (!historyDb) { cb(null, []); return; }
-            historyDb.find({ ts: { $gte: fromMs, $lte: toMs } })
-                .sort({ ts: 1 })
-                .exec(cb);
+            historyDb.queryHistoryAll(fromMs, toMs, cb);
         };
 
         node.publishLog = function (payload) {
