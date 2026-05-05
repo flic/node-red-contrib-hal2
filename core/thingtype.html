@@ -192,7 +192,8 @@
                     egress:          item.find(".node-config-thingtype-egress-property").val(),
                     notes:           item.find(".node-config-thingtype-notes-property").val(),
                     output:          item.find(".node-config-thingtype-output-property").val(),
-                    history:         item.find(".node-config-thingtype-history-property").prop('checked')
+                    history:            item.find(".node-config-thingtype-history-property").prop('checked'),
+                    historyAllUpdates:  item.find(".node-config-thingtype-historyall-property").prop('checked')
                 }
                 items.push(r);
             })
@@ -789,6 +790,11 @@
                     
                     var historyProperty = $('<input/>',{style:"width:auto",class:"node-config-thingtype-history-property",type:"checkbox"})
                         .appendTo(rowHistory)
+                    $('<span/>',{style:"margin-left:10px; margin-right:5px; font-size:0.85em; color:#888;"})
+                        .text('all updates')
+                        .appendTo(rowHistory)
+                    var historyAllProperty = $('<input/>',{style:"width:auto",class:"node-config-thingtype-historyall-property",type:"checkbox"})
+                        .appendTo(rowHistory)
 
                     // Notes
                     var notesProperty = $('<textarea/>',{class:"node-config-thingtype-notes-property",style:"width:calc(100% - 125px)"})
@@ -860,6 +866,7 @@
                         outputProperty.val(item.output);
                         haTypeProperty.val(item.haType || '');
                         historyProperty.prop('checked', item.history || false);
+                        historyAllProperty.prop('checked', item.historyAllUpdates || false);
                     }
                     itemTypeProperty.trigger('change');
                 },

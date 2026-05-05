@@ -441,7 +441,9 @@ module.exports = function(RED) {
                 if (thingType && thingType.items) {
                     const item = thingType.items.find(i => i.id === itemid);
                     if (item && item.history) {
-                        historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now() });
+                        if (item.historyAllUpdates || payload.state !== payload.laststate) {
+                            historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now() });
+                        }
                     }
                 }
             }
