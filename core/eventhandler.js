@@ -1,6 +1,7 @@
-const http   = require('http');
-const https  = require('https');
-const crypto = require('crypto');
+const http            = require('http');
+const https           = require('https');
+const crypto          = require('crypto');
+const analyzePatterns = require('./analyzePatterns');
 
 console.log('[hal2EventHandler] module loaded, version check: ' + new Date().toISOString());
 
@@ -200,6 +201,26 @@ const MCP_TOOLS = [
                 color      : { type: 'string',  description: 'Color as HSB string "H,S,B" where H=0-360 (hue), S=0-100 (saturation), B=0-100 (brightness). E.g. "0,100,100"=red, "120,100,100"=green, "240,100,100"=blue.' }
             }
         }
+    },
+    {
+        name        : 'analyze_patterns',
+        description : 'Analyzes the history database to detect recurring behavioral patterns — ' +
+                      'e.g. "Living Room Light turns ON around 07:30, 85% consistent". ' +
+                      'Detects state transitions (actual changes), groups them into time-of-day windows, ' +
+                      'and returns suggestions sorted by consistency score. ' +
+                      'Also reports stale items (no activity in 30+ days). ' +
+                      'Requires history to be enabled on the event handler. ' +
+                      'Use when the user asks about automating routines or finding patterns in device usage.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                days            : { type: 'number',  description: 'Lookback period in days (default: 30, max: 365)', minimum: 1, maximum: 365 },
+                window_minutes  : { type: 'number',  description: 'Time-of-day bucket size in minutes (default: 30)', minimum: 5, maximum: 120 },
+                threshold       : { type: 'number',  description: 'Minimum consistency ratio 0–1 to include a pattern (default: 0.7)', minimum: 0, maximum: 1 },
+                min_occurrences : { type: 'integer', description: 'Minimum number of occurrences to qualify (default: 2)', minimum: 1 },
+                include_sensors : { type: 'boolean', description: 'If true, include continuous sensors (temperature, humidity, battery) — default: false' }
+            }
+        }
     }
 ];
 
@@ -368,29 +389,27 @@ module.exports = function(RED) {
         let historyDb = null;
 
         if (config.historyEnabled && config.historyDbPath) {
-            const Datastore = require('@seald-io/nedb');
             const retentionMs = (Number(config.historyRetentionDays) || 30) * 24 * 60 * 60 * 1000;
+            try {
+                const createHistoryDb = require('./historyDb');
+                historyDb = createHistoryDb(config.historyDbPath);
+                node.log('History enabled (SQLite), db: ' + config.historyDbPath);
 
-            (async () => {
-                try {
-                    historyDb = new Datastore({ filename: config.historyDbPath });
-                    await historyDb.loadDatabaseAsync();
-                    await historyDb.ensureIndexAsync({ fieldName: 'ts' });
-                    await historyDb.ensureIndexAsync({ fieldName: 'thing_id' });
-                    node.log('History enabled, db: ' + config.historyDbPath);
-
-                    const pruneHistory = async () => {
-                        const n = await historyDb.removeAsync({ ts: { $lt: Date.now() - retentionMs } }, { multi: true });
-                        if (n > 0) { node.log('History pruned ' + n + ' records'); }
-                    };
-                    await pruneHistory();
-                    const historyPruneInterval = setInterval(pruneHistory, 60 * 60 * 1000);
-                    node.on('close', () => clearInterval(historyPruneInterval));
-                } catch (err) {
-                    node.error('History init failed: ' + err.message);
+                const pruneHistory = () => {
+                    const n = historyDb.prune(Date.now() - retentionMs);
+                    if (n > 0) { node.log('History pruned ' + n + ' records'); }
+                };
+                pruneHistory();
+                const historyPruneInterval = setInterval(pruneHistory, 60 * 60 * 1000);
+                node.on('close', () => {
+                    clearInterval(historyPruneInterval);
+                    historyDb.close();
                     historyDb = null;
-                }
-            })();
+                });
+            } catch (err) {
+                node.warn('History unavailable (better-sqlite3 not installed): ' + err.message);
+                historyDb = null;
+            }
         }
 
         // ── Event bus ─────────────────────────────────────────────────────────
@@ -422,7 +441,9 @@ module.exports = function(RED) {
                 if (thingType && thingType.items) {
                     const item = thingType.items.find(i => i.id === itemid);
                     if (item && item.history) {
-                        historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now() });
+                        if (item.historyAllUpdates || payload.state !== payload.laststate) {
+                            historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now() });
+                        }
                     }
                 }
             }
@@ -436,9 +457,12 @@ module.exports = function(RED) {
 
         node.queryHistory = function (thingid, itemid, fromMs, toMs, cb) {
             if (!historyDb) { cb(null, []); return; }
-            historyDb.find({ thing_id: thingid, item_id: itemid, ts: { $gte: fromMs, $lte: toMs } })
-                .sort({ ts: 1 })
-                .exec(cb);
+            historyDb.queryHistory(thingid, itemid, fromMs, toMs, cb);
+        };
+
+        node.queryHistoryAll = function (fromMs, toMs, cb) {
+            if (!historyDb) { cb(null, []); return; }
+            historyDb.queryHistoryAll(fromMs, toMs, cb);
         };
 
         node.publishLog = function (payload) {
@@ -1237,6 +1261,42 @@ module.exports = function(RED) {
                             }));
                         } catch (e) {
                             return toolOk(JSON.stringify({ error: 'History query failed: ' + e.message }));
+                        }
+                    }
+
+                    // analyze_patterns
+                    if (toolName === 'analyze_patterns') {
+                        if (!historyDb) {
+                            return toolOk(JSON.stringify({ error: 'History is not enabled on this event handler' }));
+                        }
+                        const days           = Math.max(1, Math.min(365, Number(args.days)            || 30));
+                        const windowMinutes  = Math.max(5, Math.min(120, Number(args.window_minutes)  || 30));
+                        const threshold      = Math.max(0, Math.min(1,   Number(args.threshold)       || 0.7));
+                        const minOccurrences = Math.max(1,               Number(args.min_occurrences) || 2);
+                        const fromMs         = Date.now() - days * 24 * 3600000;
+
+                        const thingNameMap = new Map();
+                        for (const d of getAllStates()) {
+                            const itemMap = new Map();
+                            for (const itm of d.items) {
+                                itemMap.set(itm.item_id, { item_name: itm.item_name, ha_type: itm.ha_type });
+                            }
+                            thingNameMap.set(d.thing_id, { thing_name: d.thing_name, items: itemMap });
+                        }
+
+                        try {
+                            const docs = await new Promise((resolve, reject) => {
+                                node.queryHistoryAll(fromMs, Date.now(), (err, d) => err ? reject(err) : resolve(d));
+                            });
+                            const result = analyzePatterns(docs, thingNameMap, {
+                                windowMinutes, threshold, minOccurrences,
+                                includeSensors: args.include_sensors === true
+                            });
+                            result.lookback_days = days;
+                            node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                            return toolOk(JSON.stringify(result, null, 2));
+                        } catch (e) {
+                            return toolOk(JSON.stringify({ error: 'Pattern analysis failed: ' + e.message }));
                         }
                     }
 
