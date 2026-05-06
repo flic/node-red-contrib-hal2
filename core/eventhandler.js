@@ -49,19 +49,27 @@ const MCP_TOOLS = [
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
-                      'Returns an array of objects with ts and state fields, sorted oldest-first. ' +
-                      'Use offset and limit to page through large result sets (default limit: 500).' +
+                      'Returns an array of objects with ts (epoch ms) and state fields, sorted oldest-first. ' +
+                      'Time window — use one of these forms: ' +
+                      '(1) hours: number of hours back from now (default: 24); ' +
+                      '(2) from + to: explicit ISO datetime strings or epoch ms, e.g. from="2026-05-01T00:00:00" to="2026-05-02T00:00:00"; ' +
+                      '(3) from only: from that point until now; ' +
+                      '(4) at: returns the single most recent record at or before that moment — useful for "what was the value at time X?". ' +
+                      'Use offset and limit to page through large result sets (default limit: 500). ' +
                       'The response includes total so you know how many calls are needed.',
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
-                thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
-                item_id    : { type: 'string', description: 'Item ID (from get_all_states)' },
-                item_name  : { type: 'string', description: 'Item name, partial case-insensitive match (alternative to item_id)' },
-                hours      : { type: 'number', description: 'How many hours back to fetch (default: 24)', minimum: 1 },
-                offset     : { type: 'integer', description: 'Number of records to skip (default: 0)' },
-                limit      : { type: 'integer', description: 'Max records to return (default: 500)' }
+                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to thing_id)' },
+                item_id    : { type: 'string',  description: 'Item ID (from get_all_states)' },
+                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id)' },
+                hours      : { type: 'number',  description: 'Hours back from now (default: 24). Ignored if from/to/at are provided.', minimum: 1 },
+                from       : { type: 'string',  description: 'Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string' },
+                to         : { type: 'string',  description: 'End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted.' },
+                at         : { type: 'string',  description: 'Point-in-time lookup — ISO datetime string or epoch ms. Returns the single most recent record at or before this moment.' },
+                offset     : { type: 'integer', description: 'Number of records to skip (default: 0). Not applicable when using at.' },
+                limit      : { type: 'integer', description: 'Max records to return (default: 500). Not applicable when using at.' }
             }
         }
     },
@@ -1239,13 +1247,38 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'Provide item_id or item_name' }));
                         }
 
-                        const hours  = Number(args.hours) || 24;
-                        const fromMs = Date.now() - hours * 3600000;
+                        function parseTimeArg(v) {
+                            if (!v) return null;
+                            const n = Number(v);
+                            return isNaN(n) ? new Date(v).getTime() : n;
+                        }
+
+                        const nowMs  = Date.now();
+                        const atMs   = parseTimeArg(args.at);
+                        const fromMs = atMs ? null : (parseTimeArg(args.from) ?? (nowMs - (Number(args.hours) || 24) * 3600000));
+                        const toMs   = atMs ? null : (parseTimeArg(args.to)   ?? nowMs);
+
+                        if ((fromMs !== null && isNaN(fromMs)) || (toMs !== null && isNaN(toMs)) || (atMs !== null && isNaN(atMs))) {
+                            return toolOk(JSON.stringify({ error: 'Invalid date/time value in from, to, or at' }));
+                        }
+
                         try {
                             const docs = await new Promise((resolve, reject) => {
-                                node.queryHistory(targetThing.id, itemId, fromMs, Date.now(), (err, d) => err ? reject(err) : resolve(d));
+                                node.queryHistory(targetThing.id, itemId, atMs ? 0 : fromMs, atMs ?? toMs, (err, d) => err ? reject(err) : resolve(d));
                             });
                             node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+
+                            if (atMs !== null) {
+                                const record = docs.length ? docs[docs.length - 1] : null;
+                                return toolOk(JSON.stringify({
+                                    thing_id  : targetThing.id,
+                                    thing_name: targetThing.name,
+                                    item_id   : itemId,
+                                    at        : new Date(atMs).toISOString(),
+                                    record    : record ? { ts: record.ts, state: record.state } : null
+                                }));
+                            }
+
                             const offset = parseInt(args.offset) || 0;
                             const limit  = parseInt(args.limit)  || 500;
                             const page   = docs.slice(offset, offset + limit);
@@ -1253,7 +1286,8 @@ module.exports = function(RED) {
                                 thing_id  : targetThing.id,
                                 thing_name: targetThing.name,
                                 item_id   : itemId,
-                                hours,
+                                from      : new Date(fromMs).toISOString(),
+                                to        : new Date(toMs).toISOString(),
                                 total     : docs.length,
                                 offset,
                                 limit,
