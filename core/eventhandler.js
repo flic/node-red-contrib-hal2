@@ -324,11 +324,13 @@ module.exports = function(RED) {
         RED.nodes.createNode(this, config);
         console.log('[hal2EventHandler] constructor called, id=' + config.id + ', mcpEnabled=' + !!config.mcpEnabled);
 
-        this.host         = config.name;
-        this.contextStore = config.contextStore;
-        this.maxlisteners = config.maxlisteners;
-        this.heartbeat    = config.heartbeat;
-        this.items        = config.items;
+        this.host           = config.name;
+        this.contextStore   = config.contextStore;
+        this.maxlisteners   = config.maxlisteners;
+        this.heartbeat      = config.heartbeat;
+        this.items          = config.items;
+        this.ingressLibrary = config.ingressLibrary || [];
+        this.egressLibrary  = config.egressLibrary  || [];
 
         if (typeof this.contextStore === 'undefined') { this.contextStore = ''; }
 
@@ -338,6 +340,15 @@ module.exports = function(RED) {
 
         node.mcpRegisteredTools = {};
         node.mcpPendingCalls    = {};
+
+        // ── Shared function library lookup helpers ────────────────────────────
+
+        node.findIngressFn = function (id) {
+            return (node.ingressLibrary || []).find(f => f.id === id);
+        };
+        node.findEgressFn = function (id) {
+            return (node.egressLibrary || []).find(f => f.id === id);
+        };
 
         node.registerMCPTool = function (toolName, description, schema, timeoutSec) {
             node.mcpRegisteredTools[toolName] = { description, schema, timeoutMs: (timeoutSec || 30) * 1000 };
