@@ -82,6 +82,9 @@
             <div class="form-row">
                 <ol id="node-config-thingtype-list-items"></ol>
             </div>
+            <div class="form-row">
+                <button type="button" id="thingtype-copy-item-btn" class="red-ui-button" style="padding:4px 12px;"><i class="fa fa-clone"></i> Copy item from...</button>
+            </div>
         </div>
         <!-- Ingress tab -->
         <div id="tab-ingress" style="display:none">
@@ -221,6 +224,184 @@
         return f;
     }
 
+    // Discover central functions (ingress/egress library) on all EventHandler configs
+    function getCentralFunctions(fn_type) {
+        const result = [];
+        const prop = fn_type + 'Library';
+        RED.nodes.eachConfig(function(cfg) {
+            if (cfg.type !== 'hal2EventHandler') return;
+            // Always read from the live node object (may have unsaved mutations)
+            const live = RED.nodes.node(cfg.id) || cfg;
+            const lib = live[prop] || cfg[prop] || [];
+            lib.forEach(function(f) {
+                result.push({ name: f.name, id: f.id, fn: f.fn, _ehId: cfg.id, _ehName: cfg.name || cfg.label || 'EventHandler' });
+            });
+        });
+        return result;
+    }
+
+    // Find a central function by id
+    function findCentralFunction(fn_type, id) {
+        return getCentralFunctions(fn_type).find(f => f.id === id) || null;
+    }
+
+    // List all EventHandler configs (for promote target picker)
+    function getAllEventHandlers() {
+        const ehs = [];
+        RED.nodes.eachConfig(function(cfg) {
+            if (cfg.type === 'hal2EventHandler') {
+                ehs.push({ id: cfg.id, name: cfg.name || cfg.label || cfg.id });
+            }
+        });
+        return ehs;
+    }
+
+    // Refresh all items' ingress/egress dropdowns (preserve selected value)
+    function refreshAllItemDropdowns() {
+        let itemCount = 0, ingressDropdowns = 0, egressDropdowns = 0;
+        const centralIngressCount = getCentralFunctions('ingress').length;
+        const centralEgressCount  = getCentralFunctions('egress').length;
+        $('#node-config-thingtype-list-items > li').each(function() {
+            itemCount++;
+            const row = $(this);
+            const ingressSel = row.find('.node-config-thingtype-ingress-property');
+            if (ingressSel.length) {
+                ingressDropdowns++;
+                const prev = ingressSel.val();
+                populateFnSelect(ingressSel, 'ingress');
+                ingressSel.val(prev).trigger('change');
+            }
+            const egressSel = row.find('.node-config-thingtype-egress-property');
+            if (egressSel.length) {
+                egressDropdowns++;
+                const prev = egressSel.val();
+                populateFnSelect(egressSel, 'egress');
+                egressSel.val(prev).trigger('change');
+            }
+        });
+        return { itemCount: itemCount, ingressDropdowns: ingressDropdowns, egressDropdowns: egressDropdowns, centralIngressCount: centralIngressCount, centralEgressCount: centralEgressCount };
+    }
+
+    // Modal picker — shows items from all ThingTypes, calls callback with selected item
+    function pickItemFromThingTypes(opts, callback) {
+        opts = opts || {};
+        const candidates = [];
+        RED.nodes.eachConfig(function(cfg) {
+            if (cfg.type !== 'hal2ThingType') return;
+            if (cfg.id === opts.excludeTtId) return;
+            const items = cfg.items || [];
+            items.forEach(function(item) {
+                if (opts.filterHaType && item.haType !== opts.filterHaType) return;
+                if (item.id === '1') return; // skip heartbeat
+                candidates.push({ ttName: cfg.name || cfg.label || cfg.id, ttId: cfg.id, item: item });
+            });
+        });
+        if (candidates.length === 0) {
+            RED.notify('No matching items found in other ThingTypes.', 'warning');
+            return;
+        }
+
+        const overlay = $('<div/>',{style:'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;'}).appendTo('body');
+        const modal = $('<div/>',{style:'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:4px;width:640px;max-height:70vh;display:flex;flex-direction:column;'}).appendTo(overlay);
+
+        $('<h4/>',{style:'margin-top:0;'}).text(opts.title || 'Pick an item').appendTo(modal);
+        if (opts.subtitle) $('<p/>',{style:'color:#888;font-size:0.9em;margin:0 0 10px;'}).text(opts.subtitle).appendTo(modal);
+
+        const searchInput = $('<input/>',{type:'text',placeholder:'Search by ThingType, item name, haType, or ID...',style:'width:100%;margin-bottom:10px;padding:6px;'}).appendTo(modal);
+        const listContainer = $('<div/>',{style:'overflow-y:auto;flex:1;border:1px solid #ddd;padding:0;min-height:300px;max-height:400px;'}).appendTo(modal);
+
+        function renderList(filterText) {
+            listContainer.empty();
+            const filter = (filterText || '').toLowerCase();
+            const grouped = {};
+            candidates.forEach(c => {
+                const text = c.ttName + ' / ' + c.item.name + ' (' + (c.item.haType || 'no type') + ') id=' + c.item.id;
+                if (filter && !text.toLowerCase().includes(filter)) return;
+                if (!grouped[c.ttName]) grouped[c.ttName] = [];
+                grouped[c.ttName].push(c);
+            });
+            Object.keys(grouped).sort().forEach(ttName => {
+                $('<div/>',{style:'padding:6px 10px;background:#f5f5f5;font-weight:bold;border-bottom:1px solid #ddd;'}).text(ttName).appendTo(listContainer);
+                grouped[ttName].forEach(c => {
+                    const entry = $('<div/>',{style:'padding:6px 14px;cursor:pointer;border-bottom:1px solid #f0f0f0;'})
+                        .html('<strong>'+$('<div/>').text(c.item.name).html()+'</strong> <span style="color:#888;">'+(c.item.haType || 'no type')+'</span> <span style="color:#aaa;font-size:0.85em;float:right;">'+c.item.id+'</span>')
+                        .appendTo(listContainer);
+                    entry.hover(function(){$(this).css('background','#e8f4ff');}, function(){$(this).css('background','white');});
+                    entry.click(function() {
+                        overlay.remove();
+                        callback(c.item, c);
+                    });
+                });
+            });
+            if (listContainer.children().length === 0) {
+                $('<div/>',{style:'padding:20px;text-align:center;color:#888;'}).text('No matches').appendTo(listContainer);
+            }
+        }
+        renderList();
+        searchInput.on('input', function() { renderList($(this).val()); });
+        searchInput.focus();
+
+        const btnRow = $('<div/>',{style:'margin-top:10px;text-align:right;'}).appendTo(modal);
+        $('<button/>',{type:'button',class:'red-ui-button',style:'padding:4px 12px;'}).text('Cancel').appendTo(btnRow).click(function() { overlay.remove(); });
+        overlay.click(function(e) { if (e.target === overlay[0]) overlay.remove(); });
+    }
+
+    // Enable Override button only when the currently selected option is in the Shared optgroup
+    function updateOverrideBtnState(selectEl, btn) {
+        const opt = selectEl.find('option:selected');
+        const isShared = opt.length && opt.parent('optgroup').attr('label') === 'Shared';
+        btn.prop('disabled', !isShared).css('opacity', isShared ? 1 : 0.4);
+    }
+
+    // Copy a central function to the local list with same id (per-ThingType override)
+    function overrideCentralFunctionLocally(fn_type, fnId, selectToRefresh) {
+        if (!fnId) { RED.notify('No function selected.', 'warning'); return; }
+        // Already local?
+        let localExists = false;
+        $("#node-config-"+fn_type+"-list-items").editableList('items').each(function() {
+            if ($(this).find(".node-config-"+fn_type+"-id-property").val() === fnId) localExists = true;
+        });
+        if (localExists) { RED.notify('Function is already local — no override needed.', 'info'); return; }
+
+        const central = findCentralFunction(fn_type, fnId);
+        if (!central) { RED.notify('Central function not found.', 'warning'); return; }
+
+        // Add as a new local entry with the same ID
+        $("#node-config-"+fn_type+"-list-items").editableList('addItem', {
+            name: central.name + ' (local override)',
+            id:   central.id,
+            fn:   central.fn
+        });
+
+        // Refresh ALL items' dropdowns so the new local entry shows up everywhere
+        refreshAllItemDropdowns();
+        RED.notify('Override created locally. Edit the local copy to customise.', 'success');
+    }
+
+    // Populate a select with local + central options grouped via optgroup
+    function populateFnSelect(selectEl, fn_type) {
+        const seenIds = new Set();
+        selectEl.empty();
+        const localGroup = $('<optgroup label="Local"></optgroup>').appendTo(selectEl);
+        $("#node-config-"+fn_type+"-list-items").editableList('items').each(function() {
+            const item = $(this);
+            const name = item.find(".node-config-"+fn_type+"-name-property").val();
+            const id   = item.find(".node-config-"+fn_type+"-id-property").val();
+            if (id && !seenIds.has(id)) {
+                localGroup.append($("<option></option>").val(id).text(name));
+                seenIds.add(id);
+            }
+        });
+        const central = getCentralFunctions(fn_type).filter(f => f.id && !seenIds.has(f.id));
+        if (central.length) {
+            const centralGroup = $('<optgroup label="Shared"></optgroup>').appendTo(selectEl);
+            central.forEach(function(f) {
+                centralGroup.append($("<option></option>").val(f.id).text(f.name));
+                seenIds.add(f.id);
+            });
+        }
+    }
+
     function addAttributes(attributes) {
         $("#node-config-thingtype-list-attributes").editableList().children().remove();
         if (attributes) {
@@ -254,71 +435,32 @@
     }    
 
     function updateMainTab(id) {
-        var items = [];
-        $("#node-config-"+id+"-list-items")
-            .editableList('items')
-            .each(function() {
-                let item = $(this);
-                let params = {
-                    name:item.find(".node-config-"+id+"-name-property").val(),
-                    id:item.find(".node-config-"+id+"-id-property").val()
-                }
-                items.push(params);
-            })
-            
-        $("#node-config-thingtype-list-items")
-            .editableList('items')
-            .each(function() {
-                var property = this.find(".node-config-thingtype-"+id+"-property");
-                let saveValue = property.val();
-                property.children().remove();
-                for (let i in items) {
-                    property.append($("<option></option>").val(items[i].id).text(items[i].name));
-                }
-                property.val(saveValue);                                 
-            });                     
+        $('#node-config-thingtype-list-items > li').each(function() {
+            const property = $(this).find(".node-config-thingtype-"+id+"-property");
+            if (!property.length) return;
+            const saveValue = property.val();
+            populateFnSelect(property, id);
+            property.val(saveValue);
+        });
     }
 
     function updateHbFunctions(savedFn) {
-        // Add ingress items to heartbeat
-        selectedFn = $("#node-config-input-hbLWT").val()
-        $("#node-config-input-hbLWT").children().remove();
-        $("#node-config-ingress-list-items")
-            .editableList('items')
-            .each(function() {
-                var item = $(this);
-                let name = item.find(".node-config-ingress-name-property").val();
-                let id = item.find(".node-config-ingress-id-property").val();
-                $("#node-config-input-hbLWT").append($("<option></option>").val(id).text(name));
-            })
-        if (savedFn) {
-            $("#node-config-input-hbLWT").val(savedFn);
-        } else {
-            $("#node-config-input-hbLWT").val(selectedFn);
-        }
+        const sel = $("#node-config-input-hbLWT");
+        const selectedFn = sel.val();
+        populateFnSelect(sel, 'ingress');
+        sel.val(savedFn || selectedFn);
         $("#node-config-input-hbType").trigger('change');
     }
 
     function updateFilterFunctions(savedFn) {
-        // Add ingress items to filter functions
-        selectedFn = $("#node-config-input-filterFunction").val()
-        $("#node-config-input-filterFunction").children().remove();
-        $("#node-config-input-filterFunction").append($("<option></option>").val('0').text("<<No filter>>"));
-        $("#node-config-ingress-list-items")
-            .editableList('items')
-            .each(function() {
-                var item = $(this);
-                let name = item.find(".node-config-ingress-name-property").val();
-                let id = item.find(".node-config-ingress-id-property").val();
-                $("#node-config-input-filterFunction").append($("<option></option>").val(id).text(name));
-            })
-        if (savedFn) {
-            $("#node-config-input-filterFunction").val(savedFn);
-        } else {
-            $("#node-config-input-filterFunction").val(selectedFn);
-        }
-        $("#node-config-input-filterFunction").trigger('change');
-    }    
+        const sel = $("#node-config-input-filterFunction");
+        const selectedFn = sel.val();
+        populateFnSelect(sel, 'ingress');
+        sel.prepend($("<option></option>").val('0').text("<<No filter>>"));
+        sel.val(savedFn || selectedFn || '0');
+        sel.trigger('change');
+    }
+
 
     RED.nodes.registerType('hal2ThingType', {
         category: 'config',
@@ -669,12 +811,37 @@
                         .append(' History')
                   
                     //Name property
-                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 215px)",class:"node-config-thingtype-name-property",type:"text"})
                         .appendTo(rowName)
                         .prop('required',true);
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(halCreateId())
+
+                    // Copy ID from another item button
+                    var copyIdButton = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy ID from an item of the same haType in another ThingType'})
+                        .html('<i class="fa fa-link"></i> Copy ID')
+                        .appendTo(rowName);
+                    copyIdButton.click(function(e) {
+                        e.preventDefault();
+                        const currentHaType = haTypeProperty.val();
+                        pickItemFromThingTypes({
+                            title: 'Copy ID from another item' + (currentHaType ? ' (haType: ' + currentHaType + ')' : ''),
+                            subtitle: 'Only the item ID will be replaced — name, ingress/egress and other fields are kept.',
+                            excludeTtId: node.id,
+                            filterHaType: currentHaType || null
+                        }, function(srcItem) {
+                            // Validate against collision in this TT
+                            let collision = false;
+                            $("#node-config-thingtype-list-items").editableList('items').each(function() {
+                                const otherId = $(this).find(".node-config-thingtype-id-property").val();
+                                if (otherId === srcItem.id && otherId !== idProperty.val()) collision = true;
+                            });
+                            if (collision && !confirm('Another item in this ThingType already has id ' + srcItem.id + '. Apply anyway?')) return;
+                            idProperty.val(srcItem.id);
+                            RED.notify('ID changed to ' + srcItem.id, 'success');
+                        });
+                    });
                     // HA type
                     var haTypeProperty = $('<select/>',{class:"node-config-thingtype-hatype-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowHaType)
@@ -764,29 +931,32 @@
                     var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
                     .appendTo(rowTopicSuffix)
                     //Ingress
-                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 125px)"})
+                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 225px)"})
                         .appendTo(rowIngress);
+                    populateFnSelect(ingressProperty, 'ingress');
+                    var ingressOverrideBtn = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy this shared function to local (override locally for this ThingType)'})
+                        .html('<i class="fa fa-code-fork"></i> Override')
+                        .appendTo(rowIngress);
+                    ingressOverrideBtn.click(function(e) {
+                        e.preventDefault();
+                        overrideCentralFunctionLocally('ingress', ingressProperty.val(), ingressProperty);
+                    });
+                    ingressProperty.on('change', function() { updateOverrideBtnState(ingressProperty, ingressOverrideBtn); });
+                    updateOverrideBtnState(ingressProperty, ingressOverrideBtn);
 
-                    $("#node-config-ingress-list-items")
-                        .editableList('items')
-                        .each(function() {
-                            var item = $(this);
-                            let name = item.find(".node-config-ingress-name-property").val();
-                            let id = item.find(".node-config-ingress-id-property").val();
-                            ingressProperty.append($("<option></option>").val(id).text(name));
-                        })
                     //Egress
-                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 125px)"})
+                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 225px)"})
                         .appendTo(rowEgress);
-
-                    $("#node-config-egress-list-items")
-                        .editableList('items')
-                        .each(function() {
-                            var item = $(this);
-                            let name = item.find(".node-config-egress-name-property").val();
-                            let id = item.find(".node-config-egress-id-property").val();
-                            egressProperty.append($("<option></option>").val(id).text(name));
-                        })                    
+                    populateFnSelect(egressProperty, 'egress');
+                    var egressOverrideBtn = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy this shared function to local (override locally for this ThingType)'})
+                        .html('<i class="fa fa-code-fork"></i> Override')
+                        .appendTo(rowEgress);
+                    egressOverrideBtn.click(function(e) {
+                        e.preventDefault();
+                        overrideCentralFunctionLocally('egress', egressProperty.val(), egressProperty);
+                    });
+                    egressProperty.on('change', function() { updateOverrideBtnState(egressProperty, egressOverrideBtn); });
+                    updateOverrideBtnState(egressProperty, egressOverrideBtn);
                     
                     var historyProperty = $('<input/>',{style:"width:auto",class:"node-config-thingtype-history-property",type:"checkbox"})
                         .appendTo(rowHistory)
@@ -859,8 +1029,8 @@
 
                         topicSuffixProperty.val(item.topicSuffix);
                         itemTypeProperty.val(item.type);
-                        ingressProperty.val(item.ingress);
-                        egressProperty.val(item.egress);
+                        ingressProperty.val(item.ingress).trigger('change');
+                        egressProperty.val(item.egress).trigger('change');
                         notesProperty.val(item.notes);
                         if (typeof item.output == 'undefined') { item.output = 1; }
                         outputProperty.val(item.output);
@@ -1006,11 +1176,67 @@
                             .appendTo(rowEditor)
 
                         //Name property
-                        var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 115px)",class:"node-config-"+fn_type+"-name-property",type:"text"})
+                        var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 195px)",class:"node-config-"+fn_type+"-name-property",type:"text"})
                             .appendTo(rowName)
                         var idProperty = $('<input/>',{class:"node-config-"+fn_type+"-id-property",type:"hidden"})
                             .appendTo(rowName)
                             .val(halCreateId())
+
+                        // Promote-to-central button
+                        var promoteButton = $('<button/>',{type:'button',style:'margin-left:5px; padding:2px 8px; font-size:0.8em;',title:'Move this function to the EventHandler\'s shared library'})
+                            .html('<i class="fa fa-arrow-up"></i> Promote')
+                            .appendTo(rowName);
+                        promoteButton.click(function(e) {
+                            e.preventDefault();
+                            const ehs = getAllEventHandlers();
+                            if (ehs.length === 0) {
+                                RED.notify('No EventHandler config found.', 'warning');
+                                return;
+                            }
+                            let targetEh;
+                            if (ehs.length === 1) {
+                                targetEh = ehs[0];
+                            } else {
+                                const choice = prompt('Promote to which EventHandler?\n' + ehs.map((e,i) => (i+1)+'. '+e.name).join('\n'), '1');
+                                const idx = parseInt(choice, 10) - 1;
+                                if (isNaN(idx) || idx < 0 || idx >= ehs.length) return;
+                                targetEh = ehs[idx];
+                            }
+                            const id = idProperty.val();
+                            const name = nameProperty.val();
+                            const editorId = (fn_type + '-' + id).split('.').join('');
+                            const fn = editors[editorId] ? editors[editorId].getValue() : '';
+
+                            const ehNode = RED.nodes.node(targetEh.id);
+                            if (!ehNode) {
+                                RED.notify('Cannot access EventHandler ' + targetEh.name, 'error');
+                                return;
+                            }
+                            const propName = fn_type + 'Library';
+                            ehNode[propName] = ehNode[propName] || [];
+                            if (ehNode[propName].some(f => f.id === id)) {
+                                if (!confirm('A function with id ' + id + ' already exists in '+targetEh.name+'. Overwrite?')) return;
+                                ehNode[propName] = ehNode[propName].filter(f => f.id !== id);
+                            }
+                            ehNode[propName].push({ name: name, id: id, fn: fn });
+                            ehNode.changed = true;
+                            RED.nodes.dirty(true);
+
+                            // Remove this row from the local list
+                            try {
+                                $("#node-config-" + fn_type + "-list-items").editableList('removeItem', opt);
+                            } catch (err) {
+                                const li = container.closest('li');
+                                li.find('.red-ui-editableList-item-remove').first().click();
+                            }
+                            delete editors[editorId];
+
+                            refreshAllItemDropdowns();
+                            setTimeout(function() {
+                                refreshAllItemDropdowns();
+                                RED.notify('Promoted "' + name + '" to ' + targetEh.name + '. Local copy removed.', 'success');
+                            }, 100);
+                        });
 
                         //Add name+id values
                         if (Object.keys(opt).length != 0) {
@@ -1113,6 +1339,27 @@
             }
             addAttributes(this.attributes);
             addItems(this.items);
+
+            // ── Copy item from another ThingType ──────────────────────────────
+            $('#thingtype-copy-item-btn').click(function(e) {
+                e.preventDefault();
+                pickItemFromThingTypes({
+                    title: 'Copy item from another ThingType',
+                    subtitle: 'The full item (incl. ID, ingress/egress refs) will be cloned into this ThingType.',
+                    excludeTtId: node.id
+                }, function(srcItem) {
+                    // Deep-clone to avoid sharing references
+                    const cloned = JSON.parse(JSON.stringify(srcItem));
+                    // Warn on ID collision within this TT
+                    let collision = false;
+                    $("#node-config-thingtype-list-items").editableList('items').each(function() {
+                        if ($(this).find(".node-config-thingtype-id-property").val() === cloned.id) collision = true;
+                    });
+                    if (collision && !confirm('An item with id ' + cloned.id + ' already exists in this ThingType. Add anyway?')) return;
+                    $("#node-config-thingtype-list-items").editableList('addItem', cloned);
+                    RED.notify('Item "' + cloned.name + '" copied.', 'success');
+                });
+            });
 
             // Add ingress items to heartbeat
             updateHbFunctions(node.hbLWT);

@@ -131,10 +131,51 @@
                 </div>
             </div>
         </div>
+
+        <!-- Shared Functions tab -->
+        <div id="hal2eh-tab-libraries" style="display:none">
+            <div class="form-row">
+                <p>Shared ingress and egress functions available to any ThingType using this EventHandler. Items in ThingTypes can reference these by ID — local TT functions take priority on collision.</p>
+            </div>
+            <div class="form-row">
+                <label style="width:150px"><i class="fa fa-sign-in"></i> Ingress library</label>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-ingress-list-items"></ol>
+            </div>
+            <div class="form-row" style="margin-top:18px;">
+                <label style="width:150px"><i class="fa fa-sign-out"></i> Egress library</label>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-egress-list-items"></ol>
+            </div>
+        </div>
     </div>
 </script>
 
 <script type="text/javascript">
+    var hal2ehEditors = {};
+
+    function hal2ehGetFunctions(fn_type) {
+        let f = [];
+        $("#node-config-eh-"+fn_type+"-list-items")
+            .editableList('items')
+            .each(function() {
+                let item = $(this);
+                let name = item.find(".node-config-eh-"+fn_type+"-name-property").val();
+                let id = item.find(".node-config-eh-"+fn_type+"-id-property").val();
+                let editorId = "eh-"+fn_type+"-"+id;
+                editorId = editorId.split('.').join("");
+                let fn = hal2ehEditors[editorId] ? hal2ehEditors[editorId].getValue() : '';
+                f.push({ name: name, id: id, fn: fn });
+            });
+        return f;
+    }
+
+    function hal2ehCreateId() {
+        return ((Math.random() + 1).toString(16) + "0000000").substring(2,12);
+    }
+
     RED.nodes.registerType('hal2EventHandler', {
         category: 'config',
         defaults: {
@@ -157,7 +198,10 @@
             pocketidUrl:       { value: '' },
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },
-            adminPort:         { value: 1880 }
+            adminPort:         { value: 1880 },
+            // Shared function libraries
+            ingressLibrary:    { value: [], required: false },
+            egressLibrary:     { value: [], required: false }
         },
         credentials: {
             pocketidClientId:     { type: 'text' },
@@ -179,9 +223,10 @@
                     $('#' + tab.id).show();
                 }
             });
-            tabs.addTab({ id: 'hal2eh-tab-general', label: 'General' });
-            tabs.addTab({ id: 'hal2eh-tab-history', label: 'History' });
-            tabs.addTab({ id: 'hal2eh-tab-mcp',     label: 'MCP' });
+            tabs.addTab({ id: 'hal2eh-tab-general',   label: 'General' });
+            tabs.addTab({ id: 'hal2eh-tab-history',   label: 'History' });
+            tabs.addTab({ id: 'hal2eh-tab-mcp',       label: 'MCP' });
+            tabs.addTab({ id: 'hal2eh-tab-libraries', label: 'Shared Functions' });
 
             // ── Context stores ────────────────────────────────────────────────
             var contextStores = RED.settings.context.stores;
@@ -284,6 +329,71 @@
             }
             $('#node-config-input-adminToolsEnabled').on('change', toggleAdmin);
             toggleAdmin();
+
+            // ── Shared Function libraries (ingress + egress) ──────────────────
+            function createLibraryList(fn_type, defaultBody) {
+                $('#node-config-eh-'+fn_type+'-list-items').editableList({
+                    addItem: function(container, i, opt) {
+                        opt = opt || {};
+                        container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                        var rowName   = $('<div/>').appendTo(container);
+                        var rowEditor = $('<div/>',{style:"margin-top:8px;"}).appendTo(container).hide();
+
+                        var expandButton = $('<span/>',{style:"margin-left:5px;margin-right:10px;"})
+                            .html('<i class="fa fa-angle-right"></i>')
+                            .appendTo(rowName);
+                        expandButton.click(function(e) {
+                            e.preventDefault();
+                            var icon = this.firstElementChild;
+                            icon.className = (icon.className === "fa fa-angle-right") ? "fa fa-angle-down" : "fa fa-angle-right";
+                            rowEditor.change();
+                        });
+                        rowEditor.change(function () {
+                            if (expandButton.children()[0].className === "fa fa-angle-down") rowEditor.show();
+                            else rowEditor.hide();
+                        });
+
+                        $('<div/>',{style:"display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;",class:"fa fa-tag"})
+                            .appendTo(rowName).append(' Name');
+                        $('<div/>',{style:"display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;",class:"fa fa-cog"})
+                            .appendTo(rowEditor).append(" Function");
+
+                        var nameProperty = $('<input/>',{style:"padding-right:10px;width:calc(100% - 115px)",class:"node-config-eh-"+fn_type+"-name-property",type:"text"})
+                            .appendTo(rowName);
+                        var idProperty = $('<input/>',{class:"node-config-eh-"+fn_type+"-id-property",type:"hidden"})
+                            .appendTo(rowName)
+                            .val(opt.id || hal2ehCreateId());
+
+                        if (opt.name) nameProperty.val(opt.name);
+                        else nameProperty.val(fn_type.charAt(0).toUpperCase()+fn_type.slice(1)+" function");
+
+                        var editorId = "eh-"+fn_type+"-"+idProperty.val();
+                        editorId = editorId.split('.').join("");
+                        $('<div/>',{id:editorId,style:"height:250px;min-height:150px;width:calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
+                            .appendTo(rowEditor);
+
+                        hal2ehEditors[editorId] = RED.editor.createEditor({
+                            id: editorId,
+                            mode: "ace/mode/nrjavascript",
+                            value: opt.fn || defaultBody,
+                            globals: { msg:true, context:true, RED:true, util:true, flow:true, global:true, console:true, Buffer:true, setTimeout:true, clearTimeout:true, setInterval:true, clearInterval:true }
+                        });
+                    },
+                    removable: true,
+                    sortable:  true,
+                    addButton: "Add "+fn_type+" function"
+                });
+            }
+            createLibraryList('ingress', '// return value from msg\nreturn msg.payload;');
+            createLibraryList('egress',  '// return msg to send\nmsg.payload = item;\nreturn msg;');
+
+            (node.ingressLibrary || []).forEach(function(f) {
+                $("#node-config-eh-ingress-list-items").editableList('addItem', f);
+            });
+            (node.egressLibrary || []).forEach(function(f) {
+                $("#node-config-eh-egress-list-items").editableList('addItem', f);
+            });
         },
         oneditsave: function () {
             var node = this;
@@ -301,6 +411,9 @@
                         unit: item.find(".node-config-eventhandler-item-unit-property").val()
                     });
                 });
+
+            node.ingressLibrary = hal2ehGetFunctions('ingress');
+            node.egressLibrary  = hal2ehGetFunctions('egress');
         }
     });
 </script>

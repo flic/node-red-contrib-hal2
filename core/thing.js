@@ -1,4 +1,19 @@
 module.exports = function(RED) {
+    // Hybrid function lookup — local ThingType.{type} first, then EventHandler.{type}Library
+    function resolveFn(thing, type, id) {
+        const local = (thing.thingType && thing.thingType[type]) || [];
+        for (let n in local) {
+            if (local[n].id == id) return local[n].fn;
+        }
+        if (thing.eventHandler) {
+            const lib = thing.eventHandler[type + 'Library'] || [];
+            for (let n in lib) {
+                if (lib[n].id == id) return lib[n].fn;
+            }
+        }
+        return null;
+    }
+
     function matchTopic(ts,t) {
         if (ts == "#") {
             return true;
@@ -151,12 +166,7 @@ module.exports = function(RED) {
             }
 
             if (node.thingType.filterFunction != '0') {
-                for (let n in node.thingType.ingress) {
-                    if (node.thingType.ingress[n].id == node.thingType.filterFunction){
-                        var fn = node.thingType.ingress[n].fn;
-                        break;
-                    }
-                }
+                var fn = resolveFn(node, 'ingress', node.thingType.filterFunction);
                 var attribute = getAttributes();
                 var item = getItems();
                 msgClone =  RED.util.cloneMessage(msg);
@@ -205,12 +215,7 @@ module.exports = function(RED) {
                     continue;
                 }                
 
-                for (let n in node.thingType.ingress) {
-                    if (node.thingType.ingress[n].id == node.thingType.items[i].ingress){
-                        var fn = node.thingType.ingress[n].fn;
-                        break;
-                    }
-                }
+                var fn = resolveFn(node, 'ingress', node.thingType.items[i].ingress);
 
                 msgClone = RED.util.cloneMessage(msg);
                 attribute = getAttributes();
@@ -379,13 +384,8 @@ module.exports = function(RED) {
 
                 let attribute = getAttributes();
                 let items = getItems();
-                for (let i in node.thingType.egress) {
-                    if (node.thingType.egress[i].id == item.egress){
-                        var fn = node.thingType.egress[i].fn;
-                        break;
-                    }
-                }
-             
+                var fn = resolveFn(node, 'egress', item.egress);
+
                 let _egressFn = new Function('msg','attribute','item',fn);
                 try {
                     command = _egressFn(command,attribute,items);
