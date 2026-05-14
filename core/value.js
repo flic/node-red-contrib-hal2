@@ -7,7 +7,7 @@ module.exports = function(RED) {
         this.item = config.item;
         this.outputValue = config.outputValue;
         this.outputType = config.outputType;
-        this.info = config.info;
+        this.outputInfo = (typeof config.outputInfo !== 'undefined') ? config.outputInfo : (config.info || false);
         this.historyMode = config.historyMode;
         this.historyRangeMode = config.historyRangeMode || 'relative';
         this.historyFrom = config.historyFrom;
@@ -123,7 +123,7 @@ module.exports = function(RED) {
                         rows = deduped;
                     }
                     RED.util.setMessageProperty(msg, node.outputValue, rows.map(d => ({ state: d.state, ts: d.ts, source: d.source || 'external' })), true);
-                    if (node.info) { addInfo(thing, msg); }
+                    if (node.outputInfo) { addInfo(thing, msg); }
                     node.send(msg);
                 });
                 return;
@@ -180,7 +180,7 @@ module.exports = function(RED) {
                 thing.showState();
             }
 
-            if (node.info) { addInfo(thing, msg); }
+            if (node.outputInfo) { addInfo(thing, msg); }
             node.send(msg);
         });
     }

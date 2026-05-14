@@ -43,8 +43,8 @@
             <input type="hidden" id="node-input-outputType">
         </div>
         <div class="form-row">
-            <label for="node-input-info" style="width:95px; padding-right:10px;"><i class="fa fa-info"></i> Item info</label>
-            <input type="checkbox" id="node-input-info" style="display: inline-block; width: auto; vertical-align: top;">
+            <label for="node-input-outputInfo" style="width:95px; padding-right:10px;"><i class="fa fa-info"></i> Item info</label>
+            <input type="checkbox" id="node-input-outputInfo" style="display: inline-block; width: auto; vertical-align: top;">
         </div>
         <div class="form-row" id="row-history-mode" hidden>
             <label for="node-input-historyMode" style="width:95px; padding-right:10px;"><i class="fa fa-history"></i> History</label>
@@ -127,7 +127,7 @@
             item:           { required: true   },           
             outputValue:      { value: "payload" },
             outputType:       { required: true   },
-            info:             { value: false     },
+            outputInfo:       { value: false     },
             historyMode:             { value: false      },
             historyRangeMode:        { value: 'relative' },
             historyFrom:             { value: 24         },
@@ -387,6 +387,12 @@
             if (typeof this.action == 'undefined') {
                 $("#node-input-action").val('get');
             }
+
+            // `info` is reserved by Node-RED as the per-node markdown documentation
+            // and crashes marked() if non-string. Field renamed; old value preserved.
+            var outputInfoVal = (typeof this.outputInfo !== 'undefined') ? this.outputInfo : (this.info || false);
+            $("#node-input-outputInfo").prop('checked', outputInfoVal);
+            this.info = undefined;
 
             $("#node-input-historyMode").prop('checked', this.historyMode || false);
             $("#node-input-historyRangeMode").val(this.historyRangeMode || 'relative');
