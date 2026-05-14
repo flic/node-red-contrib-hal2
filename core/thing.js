@@ -296,7 +296,7 @@ module.exports = function(RED) {
             if (Object.keys(attribute) != 0) {
                 eventmsg.thing.attributes = Object.assign({},attribute);
             }
-            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg);
+            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg,logtype);
             eventmsg.logtype = logtype;
             node.eventHandler.publishLog(eventmsg);
             node.showState();            

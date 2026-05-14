@@ -25,7 +25,10 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
     const windowMinutes  = opts.windowMinutes  || 30;
     const threshold      = opts.threshold      || 0.7;
     const minOccurrences = opts.minOccurrences || 2;
+    const includeInternal = opts.includeInternal === true;
     const excludeTypes   = opts.includeSensors ? new Set() : EXCLUDED_HA_TYPES;
+
+    let excludedInternal = 0;
 
     // Phase 1: group records by series key
     const seriesMap = new Map();
@@ -37,6 +40,12 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
         if (doc.item_id === '1') continue;
         if (excludeTypes.has(itemInfo.ha_type)) continue;
         if (doc.state === null || doc.state === undefined || doc.state === 'no value') continue;
+
+        const src = doc.source || 'external';
+        if (!includeInternal && (src === 'hal2' || src === 'heartbeat')) {
+            excludedInternal++;
+            continue;
+        }
 
         const key = doc.thing_id + '::' + doc.item_id;
         if (!seriesMap.has(key)) {
@@ -139,9 +148,10 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
     suggestions.sort((a, b) => b.consistency - a.consistency || b.occurrences - a.occurrences);
 
     return {
-        analyzed_records: docs.length,
-        window_minutes  : windowMinutes,
+        analyzed_records : docs.length,
+        excluded_internal: excludedInternal,
+        window_minutes   : windowMinutes,
         suggestions,
-        stale_items     : staleItems
+        stale_items      : staleItems
     };
 };

@@ -217,16 +217,18 @@ const MCP_TOOLS = [
                       'Detects state transitions (actual changes), groups them into time-of-day windows, ' +
                       'and returns suggestions sorted by consistency score. ' +
                       'Also reports stale items (no activity in 30+ days). ' +
+                      'By default, state changes caused by hal2 itself are excluded so existing automations are not re-suggested as patterns. ' +
                       'Requires history to be enabled on the event handler. ' +
                       'Use when the user asks about automating routines or finding patterns in device usage.',
         inputSchema : {
             type       : 'object',
             properties : {
-                days            : { type: 'number',  description: 'Lookback period in days (default: 30, max: 365)', minimum: 1, maximum: 365 },
-                window_minutes  : { type: 'number',  description: 'Time-of-day bucket size in minutes (default: 30)', minimum: 5, maximum: 120 },
-                threshold       : { type: 'number',  description: 'Minimum consistency ratio 0–1 to include a pattern (default: 0.7)', minimum: 0, maximum: 1 },
-                min_occurrences : { type: 'integer', description: 'Minimum number of occurrences to qualify (default: 2)', minimum: 1 },
-                include_sensors : { type: 'boolean', description: 'If true, include continuous sensors (temperature, humidity, battery) — default: false' }
+                days             : { type: 'number',  description: 'Lookback period in days (default: 30, max: 365)', minimum: 1, maximum: 365 },
+                window_minutes   : { type: 'number',  description: 'Time-of-day bucket size in minutes (default: 30)', minimum: 5, maximum: 120 },
+                threshold        : { type: 'number',  description: 'Minimum consistency ratio 0–1 to include a pattern (default: 0.7)', minimum: 0, maximum: 1 },
+                min_occurrences  : { type: 'integer', description: 'Minimum number of occurrences to qualify (default: 2)', minimum: 1 },
+                include_sensors  : { type: 'boolean', description: 'If true, include continuous sensors (temperature, humidity, battery) — default: false' },
+                include_internal : { type: 'boolean', description: 'If true, include state changes caused by hal2 itself (default: false). Useful for debugging or verifying that automations actually run.' }
             }
         }
     }
@@ -431,6 +433,27 @@ module.exports = function(RED) {
             }
         }
 
+        // ── Hal2 command correlation ──────────────────────────────────────────
+        // When hal2 issues a command via publishCommand, we mark (thing_id, item_id)
+        // for a short window. A subsequent ingress event for the same pair is then
+        // attributed to hal2 (source='hal2'), so analyze_patterns can ignore it.
+
+        const correlationCfg = Number(config.hal2CorrelationMs);
+        node.hal2CorrelationMs   = Number.isFinite(correlationCfg) && correlationCfg >= 0 ? correlationCfg : 5000;
+        node.pendingHal2Commands = new Map();
+
+        const correlationCleanupInterval = setInterval(() => {
+            const now = Date.now();
+            for (const [key, expiresAt] of node.pendingHal2Commands) {
+                if (expiresAt <= now) node.pendingHal2Commands.delete(key);
+            }
+        }, 60_000);
+
+        node.on('close', () => {
+            clearInterval(correlationCleanupInterval);
+            node.pendingHal2Commands.clear();
+        });
+
         // ── Event bus ─────────────────────────────────────────────────────────
 
         node.subscribe = function (event, id, listener) {
@@ -451,17 +474,41 @@ module.exports = function(RED) {
             if (payload === 'off' || payload === 'false') payload = false;
             const listenerCount = this.listenerCount("command_" + id);
             console.log('[hal2EventHandler] publishCommand: thing=' + id + ', item=' + itemid + ', payload=' + JSON.stringify(payload) + ', listeners=' + listenerCount);
+
+            // Mark this (thing, item) as hal2-driven so the incoming HA confirmation
+            // can be attributed to us. Lazy-cleanup expired markers while we're here.
+            if (node.hal2CorrelationMs > 0) {
+                const now = Date.now();
+                for (const [k, expiresAt] of node.pendingHal2Commands) {
+                    if (expiresAt <= now) node.pendingHal2Commands.delete(k);
+                }
+                node.pendingHal2Commands.set(id + '::' + itemid, now + node.hal2CorrelationMs);
+            }
+
             this.emit("command_" + id, itemid, payload);
         };
 
-        node.publishUpdate = function (thingtypeid, thingid, itemid, payload) {
+        node.publishUpdate = function (thingtypeid, thingid, itemid, payload, logtype) {
             if (historyDb && thingtypeid) {
                 const thingType = RED.nodes.getNode(thingtypeid);
                 if (thingType && thingType.items) {
                     const item = thingType.items.find(i => i.id === itemid);
                     if (item && item.history) {
                         if (item.historyAllUpdates || payload.state !== payload.laststate) {
-                            historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now() });
+                            let source = 'external';
+                            if (logtype === 'heartbeat') {
+                                source = 'heartbeat';
+                            } else if (logtype === 'egress') {
+                                source = 'hal2';
+                            } else if (logtype === 'ingress') {
+                                const key = thingid + '::' + itemid;
+                                const expiresAt = node.pendingHal2Commands.get(key);
+                                if (expiresAt && expiresAt > Date.now()) {
+                                    source = 'hal2';
+                                    node.pendingHal2Commands.delete(key);
+                                }
+                            }
+                            historyDb.insert({ thing_id: thingid, item_id: itemid, state: payload.state, ts: Date.now(), source });
                         }
                     }
                 }
@@ -1335,7 +1382,8 @@ module.exports = function(RED) {
                             });
                             const result = analyzePatterns(docs, thingNameMap, {
                                 windowMinutes, threshold, minOccurrences,
-                                includeSensors: args.include_sensors === true
+                                includeSensors : args.include_sensors === true,
+                                includeInternal: args.include_internal === true
                             });
                             result.lookback_days = days;
                             node.status({ fill: 'green', shape: 'dot', text: 'ready' });
