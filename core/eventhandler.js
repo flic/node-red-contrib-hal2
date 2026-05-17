@@ -234,7 +234,20 @@ const MCP_TOOLS = [
     }
 ];
 
-console.log('[hal2EventHandler] MCP_TOOLS loaded: ' + MCP_TOOLS.map(t => t.name).join(', '));
+console.log('[hal2EventHandler] MCP_TOOLS catalog (static, pre-filter): ' + MCP_TOOLS.map(t => t.name).join(', '));
+
+// Maps tool name → list of ha_types where at least one must be present on this
+// location for the tool to be exposed. Tools not listed here are unconditional.
+// Extend freely if a location uses non-standard ha_types for a category.
+const TOOL_HARDWARE_REQUIREMENTS = {
+    control_fan     : ['fan'],
+    control_cover   : ['cover'],
+    control_spa     : ['heater', 'circulation pump', 'airjets'],
+    control_climate : ['ac mode', 'fan mode', 'swing mode'],
+    set_light       : ['light', 'dimmer'],
+    activate_scene  : ['scene'],
+    get_scenes      : ['scene']
+};
 
 const MCP_TOOLS_ADMIN = [
     {
@@ -652,6 +665,36 @@ module.exports = function(RED) {
                 return devices;
             }
 
+            function hasAnyHaType(wantedTypes) {
+                const wanted = new Set(wantedTypes.map(s => s.toLowerCase()));
+                for (const thing of getAllStates()) {
+                    for (const item of thing.items) {
+                        if (item.ha_type && wanted.has(item.ha_type.toLowerCase())) return true;
+                    }
+                }
+                return false;
+            }
+
+            function getNotConfiguredError(toolName) {
+                const reqs = TOOL_HARDWARE_REQUIREMENTS[toolName];
+                if (!reqs) return null;
+                if (hasAnyHaType(reqs)) return null;
+                return {
+                    error             : 'not_configured',
+                    tool              : toolName,
+                    required_ha_types : reqs,
+                    message           : 'No matching hardware is configured at this location (' +
+                                        (config.locationName || 'unnamed') + ').'
+                };
+            }
+
+            // Log the per-location effective tool list once flows are fully loaded,
+            // so all hal2Thing nodes have registered and hasAnyHaType can see them.
+            RED.events.once('flows:started', () => {
+                const exposed = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name)).map(t => t.name);
+                console.log('[hal2EventHandler] MCP_TOOLS exposed @ ' + (config.locationName || 'unnamed') + ': ' + exposed.join(', '));
+            });
+
             function controlDevice(thingId, itemId, value) {
                 console.log('[hal2EventHandler] controlDevice: thingId=' + thingId + ', itemId=' + itemId + ', value=' + JSON.stringify(value));
                 const thing = RED.nodes.getNode(thingId);
@@ -771,7 +814,10 @@ module.exports = function(RED) {
                                           'previously seen results. Device states, presence, sensor values and ' +
                                           'scene status can change at any time. When in doubt, call get_all_states ' +
                                           'or the relevant tool again before answering. ' +
-                                          'Available tools: ' + [...MCP_TOOLS, ...(adminEnabled ? MCP_TOOLS_ADMIN : [])].map(t => t.name).join(', ') + '.'
+                                          'Available tools: ' + [
+                                              ...MCP_TOOLS.filter(t => !getNotConfiguredError(t.name)),
+                                              ...(adminEnabled ? MCP_TOOLS_ADMIN : [])
+                                          ].map(t => t.name).join(', ') + '.'
                     });
                 }
 
@@ -781,7 +827,7 @@ module.exports = function(RED) {
 
                 // ── tools/list ────────────────────────────────────────────────
                 if (method === 'tools/list') {
-                    const tools = [...MCP_TOOLS];
+                    const tools = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name));
                     if (adminEnabled) tools.push(...MCP_TOOLS_ADMIN);
                     for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
                         const s = t.schema;
@@ -800,6 +846,12 @@ module.exports = function(RED) {
                     console.log('[hal2EventHandler] tools/call: tool=' + toolName + ', args=' + JSON.stringify(args));
 
                     node.status({ fill: 'blue', shape: 'dot', text: toolName });
+
+                    const notConfigured = getNotConfiguredError(toolName);
+                    if (notConfigured) {
+                        console.log('[hal2EventHandler] tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
+                        return toolOk(JSON.stringify(notConfigured));
+                    }
 
                     // get_all_states
                     if (toolName === 'get_all_states') {
