@@ -17,7 +17,8 @@ const MCP_TOOLS = [
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
                       'Only items with a ha_type are included in full mode. ' +
                       'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Sjövatten Sensor" notes: "lake water temperature at the dock"). ' +
-                      'Use ha_type to limit results to devices that have at least one item of that type (e.g. "light", "scene"). ' +
+                      'Each device also includes a categories field listing which control categories it falls into (climate, spa, light, fan, cover, scene), derived from its items — use this to identify what kind of device it is at a glance. ' +
+                      'ha_type accepts both literal item types (e.g. "light", "temperature") and category aliases that expand to their underlying types — e.g. "climate" matches devices with target temperature / ac mode / fan mode / swing mode. Supported aliases: climate, spa, light, fan, cover, scene. ' +
                       'Use tag to limit results to devices/items tagged with a specific keyword. ' +
                       'Supports optional pagination via offset and limit. The response includes total.',
         inputSchema : {
@@ -240,18 +241,47 @@ const MCP_TOOLS = [
 
 console.log('[hal2EventHandler] MCP_TOOLS catalog (static, pre-filter): ' + MCP_TOOLS.map(t => t.name).join(', '));
 
+// Single source of truth for which item ha_types define each device category.
+// Used both for tool exposure (TOOL_HARDWARE_REQUIREMENTS below) and for ha_type
+// filter expansion + categories derivation in get_all_states.
+// Extend freely if a location uses non-standard ha_types for a category.
+const HA_TYPE_GROUPS = {
+    climate : ['target temperature', 'ac mode', 'fan mode', 'swing mode'],
+    spa     : ['heater', 'circulation pump', 'airjets'],
+    light   : ['light', 'dimmer'],
+    fan     : ['fan'],
+    cover   : ['cover'],
+    scene   : ['scene']
+};
+
 // Maps tool name → list of ha_types where at least one must be present on this
 // location for the tool to be exposed. Tools not listed here are unconditional.
-// Extend freely if a location uses non-standard ha_types for a category.
 const TOOL_HARDWARE_REQUIREMENTS = {
-    control_fan     : ['fan'],
-    control_cover   : ['cover'],
-    control_spa     : ['heater', 'circulation pump', 'airjets'],
-    control_climate : ['ac mode', 'fan mode', 'swing mode'],
-    set_light       : ['light', 'dimmer'],
-    activate_scene  : ['scene'],
-    get_scenes      : ['scene']
+    control_fan     : HA_TYPE_GROUPS.fan,
+    control_cover   : HA_TYPE_GROUPS.cover,
+    control_spa     : HA_TYPE_GROUPS.spa,
+    control_climate : HA_TYPE_GROUPS.climate,
+    set_light       : HA_TYPE_GROUPS.light,
+    activate_scene  : HA_TYPE_GROUPS.scene,
+    get_scenes      : HA_TYPE_GROUPS.scene
 };
+
+function expandHaTypeFilter(input) {
+    const key = (input || '').toLowerCase();
+    if (HA_TYPE_GROUPS[key]) {
+        return new Set([key, ...HA_TYPE_GROUPS[key].map(s => s.toLowerCase())]);
+    }
+    return new Set([key]);
+}
+
+function deriveCategories(items) {
+    const itemTypes = new Set(items.map(i => (i.ha_type || '').toLowerCase()));
+    const cats = [];
+    for (const [cat, types] of Object.entries(HA_TYPE_GROUPS)) {
+        if (types.some(t => itemTypes.has(t.toLowerCase()))) cats.push(cat);
+    }
+    return cats;
+}
 
 const MCP_TOOLS_ADMIN = [
     {
@@ -668,6 +698,8 @@ module.exports = function(RED) {
                     };
                     if (thing.notes) deviceEntry.notes = thing.notes;
                     if (Array.isArray(thing.tags) && thing.tags.length) deviceEntry.tags = thing.tags;
+                    const categories = deriveCategories(items);
+                    if (categories.length) deviceEntry.categories = categories;
                     devices.push(deviceEntry);
 
                 });
@@ -867,8 +899,8 @@ module.exports = function(RED) {
                         let devices = getAllStates();
 
                         if (args.ha_type) {
-                            const filterType = args.ha_type.toLowerCase();
-                            devices = devices.filter(d => d.items.some(i => i.ha_type.toLowerCase() === filterType));
+                            const wanted = expandHaTypeFilter(args.ha_type);
+                            devices = devices.filter(d => d.items.some(i => wanted.has(i.ha_type.toLowerCase())));
                         }
 
                         if (args.tag) {
@@ -893,8 +925,9 @@ module.exports = function(RED) {
                                     type_name  : d.type_name,
                                     alive      : d.alive
                                 };
-                                if (d.notes) o.notes = d.notes;
-                                if (d.tags)  o.tags  = d.tags;
+                                if (d.notes)      o.notes      = d.notes;
+                                if (d.tags)       o.tags       = d.tags;
+                                if (d.categories) o.categories = d.categories;
                                 return o;
                             });
                         }
