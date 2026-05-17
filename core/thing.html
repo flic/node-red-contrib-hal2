@@ -32,6 +32,10 @@
         <label for="node-input-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
         <textarea id="node-input-notes" style="width:calc(100% - 170px)"></textarea>
     </div>
+    <div class="form-row">
+        <label for="node-input-tags" style="width:95px; padding-right:10px;"><i class="fa fa-tags"></i> Tags</label>
+        <input type="text" id="node-input-tags" placeholder="comma,separated,tags" style="width:calc(100% - 170px)">
+    </div>
     <div class="form-row" id="attributes"  style="width:100%" hidden>
         <label><i class="fa fa-tags"></i> Attributes</label>
         <ol id="attributes-list"></ol>
@@ -44,7 +48,8 @@
     <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
     <li><strong>Topic</strong>: Used for filtering and creating item specific command topics. Will become <code>msg.topic</code> for outgoing messages.</li>
     <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Action</i> and <i>Event</i> nodes.</li>    
-    <li><strong>Notes</strong>: Thing specific notes.</li>    
+    <li><strong>Notes</strong>: Thing specific notes. Exposed to MCP clients to help them understand what the device does.</li>
+    <li><strong>Tags</strong>: Comma-separated keywords (e.g. "outdoor, lake, dock"). Also exposed to MCP clients for filtering and semantic context.</li>
 </script>
 
 <script type="text/javascript">
@@ -81,6 +86,7 @@
             topicFilterType:    {},
             topicPrefix:        { value: "" },
             notes:              {},
+            tags:               { value: '' },
             outputs:            { value: 0 } //Store if outputs are enabled
         },
         inputs: 1,
@@ -92,6 +98,7 @@
         paletteLabel: "thing",
         oneditprepare: function () {
             var node = this;
+            $("#node-input-tags").val(Array.isArray(node.tags) ? node.tags.join(', ') : (node.tags || ''));
             var typeMQTT = halTypeMQTT();
             var StrStartType   = { value: "StrStart",   label: "starts with", hasValue: true };
             var StrEndType     = { value: "StrEnd",     label: "ends with",   hasValue: true };
@@ -271,6 +278,8 @@
         },
         oneditsave: function () {
             var node = this;
+
+            node.tags = ($("#node-input-tags").val() || '').split(',').map(t => t.trim()).filter(Boolean);
 
             node.topicFilters = [];
             $('#thing-filter-list').editableList('items').each(function() {

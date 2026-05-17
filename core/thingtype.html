@@ -168,6 +168,10 @@
         return attributes;
     }
 
+    function parseTags(s) {
+        return (s || '').split(',').map(t => t.trim()).filter(Boolean);
+    }
+
     function localGetItems() {
         let items = [];
         $("#node-config-thingtype-list-items")
@@ -194,6 +198,7 @@
                     ingress:         item.find(".node-config-thingtype-ingress-property").val(),
                     egress:          item.find(".node-config-thingtype-egress-property").val(),
                     notes:           item.find(".node-config-thingtype-notes-property").val(),
+                    tags:            parseTags(item.find(".node-config-thingtype-tags-property").val()),
                     output:          item.find(".node-config-thingtype-output-property").val(),
                     history:            item.find(".node-config-thingtype-history-property").prop('checked'),
                     historyAllUpdates:  item.find(".node-config-thingtype-historyall-property").prop('checked')
@@ -741,6 +746,7 @@
                         .appendTo(container)
                         .hide()
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowTags = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowHaType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
                     var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
@@ -785,6 +791,9 @@
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
+                    var labelTags = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-tags"})
+                        .appendTo(rowTags)
+                        .append(' Tags')
                     var labelHaType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-home"})
                         .appendTo(rowHaType)
                         .append(' HA type')
@@ -970,6 +979,10 @@
                     var notesProperty = $('<textarea/>',{class:"node-config-thingtype-notes-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowNotes)
 
+                    // Tags
+                    var tagsProperty = $('<input/>',{class:"node-config-thingtype-tags-property",style:"width:calc(100% - 125px)",type:"text",placeholder:"comma,separated,tags"})
+                        .appendTo(rowTags)
+
                     // Show/hide ingress/egress/command
                     itemTypeProperty.change( function() {
                         let val = itemTypeProperty.val();
@@ -1032,6 +1045,7 @@
                         ingressProperty.val(item.ingress).trigger('change');
                         egressProperty.val(item.egress).trigger('change');
                         notesProperty.val(item.notes);
+                        tagsProperty.val(Array.isArray(item.tags) ? item.tags.join(', ') : (item.tags || ''));
                         if (typeof item.output == 'undefined') { item.output = 1; }
                         outputProperty.val(item.output);
                         haTypeProperty.val(item.haType || '');

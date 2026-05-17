@@ -16,13 +16,16 @@ const MCP_TOOLS = [
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
                       'Only items with a ha_type are included in full mode. ' +
+                      'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Sjövatten Sensor" notes: "lake water temperature at the dock"). ' +
                       'Use ha_type to limit results to devices that have at least one item of that type (e.g. "light", "scene"). ' +
+                      'Use tag to limit results to devices/items tagged with a specific keyword. ' +
                       'Supports optional pagination via offset and limit. The response includes total.',
         inputSchema : {
             type       : 'object',
             properties : {
                 fields  : { type: 'string', enum: ['summary', 'full'], description: 'Level of detail — "summary" (default): thing_id, thing_name, type_name, alive; "full": includes all items' },
                 ha_type : { type: 'string', description: 'Filter to devices that have at least one item with this ha_type (e.g. "light", "scene", "cover")' },
+                tag     : { type: 'string', description: 'Filter to devices/items tagged with this value (case-insensitive, exact match)' },
                 offset  : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
                 limit   : { type: 'integer', description: 'Max devices to return (default: all)' }
             }
@@ -33,6 +36,7 @@ const MCP_TOOLS = [
         description : 'Returns the complete state for a specific device. ' +
                       'Use this after get_all_states (summary) to fetch full details for one device by its thing_id. ' +
                       'Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. ' +
+                      'Response includes notes and tags on both Thing and Item level when configured. ' +
                       'Optionally provide item_id to return only a single item value.',
         inputSchema : {
             type       : 'object',
@@ -649,17 +653,22 @@ module.exports = function(RED) {
                         };
                         if (label) entry.label = label;
                         if (itm.history) entry.history = true;
+                        if (itm.notes) entry.notes = itm.notes;
+                        if (Array.isArray(itm.tags) && itm.tags.length) entry.tags = itm.tags;
                         items.push(entry);
                     }
 
-                    devices.push({
+                    const deviceEntry = {
                         thing_id   : thing.id,
                         thing_name : thing.name,
                         type_id    : tt.id,
                         type_name  : tt.name,
                         alive      : tt.hbCheck === false ? true : thing.state['1'] !== false,
                         items
-                    });
+                    };
+                    if (thing.notes) deviceEntry.notes = thing.notes;
+                    if (Array.isArray(thing.tags) && thing.tags.length) deviceEntry.tags = thing.tags;
+                    devices.push(deviceEntry);
 
                 });
                 return devices;
@@ -862,6 +871,14 @@ module.exports = function(RED) {
                             devices = devices.filter(d => d.items.some(i => i.ha_type.toLowerCase() === filterType));
                         }
 
+                        if (args.tag) {
+                            const wanted = args.tag.toLowerCase();
+                            devices = devices.filter(d =>
+                                (d.tags || []).some(t => t.toLowerCase() === wanted) ||
+                                d.items.some(i => (i.tags || []).some(t => t.toLowerCase() === wanted))
+                            );
+                        }
+
                         const total  = devices.length;
                         const offset = parseInt(args.offset) || 0;
                         const limit  = args.limit ? parseInt(args.limit) : undefined;
@@ -869,12 +886,17 @@ module.exports = function(RED) {
 
                         const fields = (args.fields || 'summary').toLowerCase();
                         if (fields === 'summary') {
-                            paged = paged.map(d => ({
-                                thing_id   : d.thing_id,
-                                thing_name : d.thing_name,
-                                type_name  : d.type_name,
-                                alive      : d.alive
-                            }));
+                            paged = paged.map(d => {
+                                const o = {
+                                    thing_id   : d.thing_id,
+                                    thing_name : d.thing_name,
+                                    type_name  : d.type_name,
+                                    alive      : d.alive
+                                };
+                                if (d.notes) o.notes = d.notes;
+                                if (d.tags)  o.tags  = d.tags;
+                                return o;
+                            });
                         }
 
                         const result = { total, offset, devices: paged };
