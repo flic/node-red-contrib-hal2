@@ -1527,8 +1527,11 @@
             node.items = localGetItems();
 
             for (let d in node.items) {
-                if (node.items[d].output > node.outputs) { node.outputs = node.items[d].output; }
-                switch(node.items[d].type) {
+                const t = node.items[d].type;
+                if ((t === 'both' || t === 'command') && node.items[d].output > node.outputs) {
+                    node.outputs = node.items[d].output;
+                }
+                switch(t) {
                     case 'both':
                         node.thingStatus = true;
                         node.thingCommand = true;
