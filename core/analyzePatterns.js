@@ -2,7 +2,8 @@
 
 const EXCLUDED_HA_TYPES = new Set([
     'temperature', 'humidity', 'battery', 'binary_sensor',
-    'presence', 'room', 'water leak'
+    'presence', 'room', 'water leak',
+    'illuminance', 'power', 'pressure', 'depth'
 ]);
 
 const DEBOUNCE_MS = 5000;
@@ -12,6 +13,27 @@ function normaliseState(state) {
     if (state === 'on'  || state === 'true')  return true;
     if (state === 'off' || state === 'false') return false;
     return state;
+}
+
+// Round a number to a given number of significant figures, so micro-fluctuations
+// in continuous numeric series (e.g. lux 287/289/294) collapse to one value (290).
+function quantizeNumber(n, sigFigs) {
+    if (n === 0) return 0;
+    const mag    = Math.floor(Math.log10(Math.abs(n)));
+    const factor = Math.pow(10, mag - (sigFigs - 1));
+    return Math.round(n / factor) * factor;
+}
+
+// Normalise on/off → boolean, then quantize numeric values (numbers or numeric
+// strings). Discrete/enum states (e.g. "heat") pass through unchanged.
+function quantizeState(state, sigFigs) {
+    const norm = normaliseState(state);
+    if (typeof norm === 'boolean') return norm;
+    const num = (typeof norm === 'number') ? norm
+              : (typeof norm === 'string' && norm.trim() !== '' && isFinite(Number(norm))) ? Number(norm)
+              : null;
+    if (num !== null && isFinite(num)) return quantizeNumber(num, sigFigs);
+    return norm;
 }
 
 function bucketToTime(bucketIdx, windowMinutes) {
@@ -26,6 +48,7 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
     const threshold      = opts.threshold      || 0.7;
     const minOccurrences = opts.minOccurrences || 2;
     const includeInternal = opts.includeInternal === true;
+    const numericPrecision = Number.isFinite(opts.numericPrecision) ? Math.max(1, Math.min(6, opts.numericPrecision)) : 2;
     const excludeTypes   = opts.includeSensors ? new Set() : EXCLUDED_HA_TYPES;
 
     let excludedInternal = 0;
@@ -78,7 +101,7 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
         let prevTs = 0;
 
         for (const rec of records) {
-            const state = normaliseState(rec.state);
+            const state = quantizeState(rec.state, numericPrecision);
             if (state === prevState && rec.ts - prevTs < DEBOUNCE_MS) continue;
             if (state !== prevState) {
                 transitions.push({

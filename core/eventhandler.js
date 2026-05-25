@@ -232,8 +232,9 @@ const MCP_TOOLS = [
                 window_minutes   : { type: 'number',  description: 'Time-of-day bucket size in minutes (default: 30)', minimum: 5, maximum: 120 },
                 threshold        : { type: 'number',  description: 'Minimum consistency ratio 0–1 to include a pattern (default: 0.7)', minimum: 0, maximum: 1 },
                 min_occurrences  : { type: 'integer', description: 'Minimum number of occurrences to qualify (default: 2)', minimum: 1 },
-                include_sensors  : { type: 'boolean', description: 'If true, include continuous sensors (temperature, humidity, battery) — default: false' },
-                include_internal : { type: 'boolean', description: 'If true, include state changes caused by hal2 itself (default: false). Useful for debugging or verifying that automations actually run.' }
+                include_sensors  : { type: 'boolean', description: 'If true, include continuous/noisy sensors (temperature, humidity, battery, illuminance, power, pressure, depth) — default: false. co2 is always analyzed.' },
+                include_internal : { type: 'boolean', description: 'If true, include state changes caused by hal2 itself (default: false). Useful for debugging or verifying that automations actually run.' },
+                numeric_precision: { type: 'integer', description: 'Significant figures used to quantize numeric values before detecting transitions, suppressing micro-noise (e.g. lux 287/289/294 → 290). Default: 2. Range 1–6.', minimum: 1, maximum: 6 }
             }
         }
     }
@@ -1472,6 +1473,7 @@ module.exports = function(RED) {
                         const windowMinutes  = Math.max(5, Math.min(120, Number(args.window_minutes)  || 30));
                         const threshold      = Math.max(0, Math.min(1,   Number(args.threshold)       || 0.7));
                         const minOccurrences = Math.max(1,               Number(args.min_occurrences) || 2);
+                        const numericPrecision = Math.max(1, Math.min(6, Number(args.numeric_precision) || 2));
                         const fromMs         = Date.now() - days * 24 * 3600000;
 
                         const thingNameMap = new Map();
@@ -1488,7 +1490,7 @@ module.exports = function(RED) {
                                 node.queryHistoryAll(fromMs, Date.now(), (err, d) => err ? reject(err) : resolve(d));
                             });
                             const result = analyzePatterns(docs, thingNameMap, {
-                                windowMinutes, threshold, minOccurrences,
+                                windowMinutes, threshold, minOccurrences, numericPrecision,
                                 includeSensors : args.include_sensors === true,
                                 includeInternal: args.include_internal === true
                             });
