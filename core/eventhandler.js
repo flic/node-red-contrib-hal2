@@ -180,7 +180,12 @@ const MCP_TOOLS = [
         description : 'Returns presence information for all people/persons tracked in the system. ' +
                       'Shows who is home, who is away, and which room each person is in. ' +
                       'Use this to answer questions like "is anyone home?", "where is Fredrik?", ' +
-                      '"who is home right now?".',
+                      '"who is home right now?", "when did Mica come home?", "how long has Fredrik been away?". ' +
+                      'Each person includes home_since/away_since (ISO timestamp of last change) and ' +
+                      'home_for_minutes/away_for_minutes (duration in current state). When home, also includes ' +
+                      'room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up ' +
+                      'tools (get_history, set_light, etc.) can be called without an extra lookup. ' +
+                      'A summary block provides aggregated counts and name lists.',
         inputSchema : { type: 'object', properties: {} }
     },
     {
@@ -970,21 +975,63 @@ module.exports = function(RED) {
 
                     // get_presence
                     if (toolName === 'get_presence') {
+                        const nowMs = Date.now();
+                        const toIso = ms => (typeof ms === 'number' && ms > 0) ? new Date(ms).toISOString() : null;
+                        const minutesSince = ms => (typeof ms === 'number' && ms > 0) ? Math.floor((nowMs - ms) / 60000) : null;
+
                         const people = [];
                         for (const device of getAllStates()) {
                             const presenceItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'presence');
                             if (!presenceItem) continue;
                             const roomItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'room');
                             const home = presenceItem.value === true || presenceItem.value === 'true';
-                            people.push({
-                                name  : device.thing_name,
+
+                            const thing = RED.nodes.getNode(device.thing_id);
+                            const lastChange = (thing && thing.last_change) || {};
+                            const presenceChangeMs = lastChange[presenceItem.item_id];
+
+                            const entry = {
+                                name             : device.thing_name,
                                 home,
-                                room  : (home && roomItem) ? roomItem.value : null
-                            });
+                                thing_id         : device.thing_id,
+                                presence_item_id : presenceItem.item_id
+                            };
+
+                            if (home) {
+                                entry.home_since       = toIso(presenceChangeMs);
+                                entry.home_for_minutes = minutesSince(presenceChangeMs);
+                            } else {
+                                entry.away_since       = toIso(presenceChangeMs);
+                                entry.away_for_minutes = minutesSince(presenceChangeMs);
+                            }
+
+                            entry.room = (home && roomItem) ? roomItem.value : null;
+                            if (home && roomItem) {
+                                const roomChangeMs = lastChange[roomItem.item_id];
+                                entry.room_since          = toIso(roomChangeMs);
+                                entry.in_room_for_minutes = minutesSince(roomChangeMs);
+                                entry.room_item_id        = roomItem.item_id;
+                            }
+
+                            if (presenceItem.notes) entry.notes = presenceItem.notes;
+                            if (Array.isArray(presenceItem.tags) && presenceItem.tags.length) entry.tags = presenceItem.tags;
+
+                            people.push(entry);
                         }
                         people.sort((a, b) => (b.home ? 1 : 0) - (a.home ? 1 : 0));
+
+                        const people_home = people.filter(p => p.home).map(p => p.name);
+                        const people_away = people.filter(p => !p.home).map(p => p.name);
+                        const summary = {
+                            home_count  : people_home.length,
+                            away_count  : people_away.length,
+                            anyone_home : people_home.length > 0,
+                            people_home,
+                            people_away
+                        };
+
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                        return toolOk(JSON.stringify({ people }));
+                        return toolOk(JSON.stringify({ summary, people }));
                     }
 
                     // control_fan
