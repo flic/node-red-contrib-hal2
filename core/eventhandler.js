@@ -14,6 +14,7 @@ const MCP_TOOLS = [
                       'The response includes a location field (e.g. "Hemma" or "Landet") identifying which property this server controls. ' +
                       'Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. ' +
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
+                      'Each item and each device includes a last_change field (ISO 8601 UTC timestamp) when known — that is when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
                       'Only items with a ha_type are included in full mode. ' +
                       'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Sjövatten Sensor" notes: "lake water temperature at the dock"). ' +
@@ -38,6 +39,7 @@ const MCP_TOOLS = [
                       'Use this after get_all_states (summary) to fetch full details for one device by its thing_id. ' +
                       'Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. ' +
                       'Response includes notes and tags on both Thing and Item level when configured. ' +
+                      'Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. ' +
                       'Optionally provide item_id to return only a single item value.',
         inputSchema : {
             type       : 'object',
@@ -54,7 +56,7 @@ const MCP_TOOLS = [
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
-                      'Returns an array of objects with ts (epoch ms) and state fields, sorted oldest-first. ' +
+                      'Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. ' +
                       'Time window — use one of these forms: ' +
                       '(1) hours: number of hours back from now (default: 24); ' +
                       '(2) from + to: explicit ISO datetime strings or epoch ms, e.g. from="2026-05-01T00:00:00" to="2026-05-02T00:00:00"; ' +
@@ -106,8 +108,9 @@ const MCP_TOOLS = [
     },
     {
         name        : 'get_scenes',
-        description : 'Returns all scenes with their current status (active/inactive). ' +
-                      'Use this to answer "is scene X active?" or "which scenes are active right now?".',
+        description : 'Returns all scenes with their current status (active/inactive) and last_change (ISO 8601 UTC) — ' +
+                      'when the scene was last activated or deactivated. ' +
+                      'Use this to answer "is scene X active?", "which scenes are active right now?" or "when was scene Y last activated?".',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -192,7 +195,9 @@ const MCP_TOOLS = [
         name        : 'get_alerts',
         description : 'Returns water leak sensor status, devices with low battery, and offline devices in one call. ' +
                       'Use this to answer "is there a water leak?", "which sensors have low battery?", ' +
-                      '"are any devices offline?", "what needs attention?" or similar questions about sensor alerts.',
+                      '"are any devices offline?", "what needs attention?" or similar questions about sensor alerts. ' +
+                      'Each entry includes last_change (ISO 8601 UTC) where known — for water sensors this is when the wet/dry state changed, ' +
+                      'for low-battery items when the level last changed, and for offline devices when they went offline.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -664,6 +669,10 @@ module.exports = function(RED) {
                 return map;
             }
 
+            function msToIso(ms) {
+                return (typeof ms === 'number' && ms > 0) ? new Date(ms).toISOString() : null;
+            }
+
             function getAllStates() {
                 const devices = [];
                 RED.nodes.eachNode(function (cfg) {
@@ -674,6 +683,7 @@ module.exports = function(RED) {
                     if (!tt || !tt.items) return;
 
                     const attrMap = resolveAttributes(thing);
+                    const lastChange = thing.last_change || {};
 
                     const items = [];
                     for (const i in tt.items) {
@@ -681,12 +691,14 @@ module.exports = function(RED) {
                         const ha_type = itm.id === '1' ? 'binary_sensor' : (itm.haType || '');
                         if (!ha_type) continue;
                         const label = attrMap[normalise(itm.name)] || null;
+                        const itemChangeIso = msToIso(lastChange[itm.id]);
                         const entry = {
                             item_id   : itm.id,
                             item_name : itm.name,
                             ha_type,
                             value     : (thing.state[itm.id] !== undefined) ? thing.state[itm.id] : 'no value'
                         };
+                        if (itemChangeIso) entry.last_change = itemChangeIso;
                         if (label) entry.label = label;
                         if (itm.history) entry.history = true;
                         if (itm.notes) entry.notes = itm.notes;
@@ -702,6 +714,8 @@ module.exports = function(RED) {
                         alive      : tt.hbCheck === false ? true : thing.state['1'] !== false,
                         items
                     };
+                    const thingChangeIso = msToIso(lastChange[thing.id]);
+                    if (thingChangeIso) deviceEntry.last_change = thingChangeIso;
                     if (thing.notes) deviceEntry.notes = thing.notes;
                     if (Array.isArray(thing.tags) && thing.tags.length) deviceEntry.tags = thing.tags;
                     const categories = deriveCategories(items);
@@ -976,8 +990,7 @@ module.exports = function(RED) {
                     // get_presence
                     if (toolName === 'get_presence') {
                         const nowMs = Date.now();
-                        const toIso = ms => (typeof ms === 'number' && ms > 0) ? new Date(ms).toISOString() : null;
-                        const minutesSince = ms => (typeof ms === 'number' && ms > 0) ? Math.floor((nowMs - ms) / 60000) : null;
+                        const minutesSinceIso = iso => iso ? Math.floor((nowMs - Date.parse(iso)) / 60000) : null;
 
                         const people = [];
                         for (const device of getAllStates()) {
@@ -986,10 +999,6 @@ module.exports = function(RED) {
                             const roomItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'room');
                             const home = presenceItem.value === true || presenceItem.value === 'true';
 
-                            const thing = RED.nodes.getNode(device.thing_id);
-                            const lastChange = (thing && thing.last_change) || {};
-                            const presenceChangeMs = lastChange[presenceItem.item_id];
-
                             const entry = {
                                 name             : device.thing_name,
                                 home,
@@ -997,19 +1006,20 @@ module.exports = function(RED) {
                                 presence_item_id : presenceItem.item_id
                             };
 
+                            const presenceChange = presenceItem.last_change || null;
                             if (home) {
-                                entry.home_since       = toIso(presenceChangeMs);
-                                entry.home_for_minutes = minutesSince(presenceChangeMs);
+                                entry.home_since       = presenceChange;
+                                entry.home_for_minutes = minutesSinceIso(presenceChange);
                             } else {
-                                entry.away_since       = toIso(presenceChangeMs);
-                                entry.away_for_minutes = minutesSince(presenceChangeMs);
+                                entry.away_since       = presenceChange;
+                                entry.away_for_minutes = minutesSinceIso(presenceChange);
                             }
 
                             entry.room = (home && roomItem) ? roomItem.value : null;
                             if (home && roomItem) {
-                                const roomChangeMs = lastChange[roomItem.item_id];
-                                entry.room_since          = toIso(roomChangeMs);
-                                entry.in_room_for_minutes = minutesSince(roomChangeMs);
+                                const roomChange = roomItem.last_change || null;
+                                entry.room_since          = roomChange;
+                                entry.in_room_for_minutes = minutesSinceIso(roomChange);
                                 entry.room_item_id        = roomItem.item_id;
                             }
 
@@ -1080,11 +1090,13 @@ module.exports = function(RED) {
                             const sceneItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'scene');
                             if (!sceneItem) continue;
                             if (needle && !device.thing_name.toLowerCase().includes(needle)) continue;
-                            scenes.push({
+                            const entry = {
                                 thing_id   : device.thing_id,
                                 thing_name : device.thing_name,
                                 active     : sceneItem.value === true || sceneItem.value === 'true'
-                            });
+                            };
+                            if (sceneItem.last_change) entry.last_change = sceneItem.last_change;
+                            scenes.push(entry);
                         }
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ scenes }));
@@ -1264,24 +1276,31 @@ module.exports = function(RED) {
                         const offline = [];
                         for (const device of getAllStates()) {
                             if (!device.alive) {
-                                offline.push({ thing_id: device.thing_id, thing_name: device.thing_name, type_name: device.type_name });
+                                const offEntry = { thing_id: device.thing_id, thing_name: device.thing_name, type_name: device.type_name };
+                                const aliveItem = device.items.find(i => i.item_id === '1');
+                                if (aliveItem && aliveItem.last_change) offEntry.last_change = aliveItem.last_change;
+                                offline.push(offEntry);
                             }
                             const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
                             if (waterItem) {
                                 const wet = waterItem.value === true || waterItem.value === 'true';
-                                sensors.push({ thing_id: device.thing_id, thing_name: device.thing_name, wet });
+                                const sensorEntry = { thing_id: device.thing_id, thing_name: device.thing_name, wet };
+                                if (waterItem.last_change) sensorEntry.last_change = waterItem.last_change;
+                                sensors.push(sensorEntry);
                             }
                             for (const itm of device.items) {
                                 if ((itm.ha_type || '').toLowerCase() === 'battery') {
                                     const level = Number(itm.value);
                                     if (!isNaN(level) && level < threshold) {
-                                        low.push({
+                                        const lowEntry = {
                                             thing_id   : device.thing_id,
                                             thing_name : device.thing_name,
                                             item_id    : itm.item_id,
                                             item_name  : itm.item_name,
                                             battery    : level
-                                        });
+                                        };
+                                        if (itm.last_change) lowEntry.last_change = itm.last_change;
+                                        low.push(lowEntry);
                                     }
                                 }
                             }
@@ -1488,7 +1507,7 @@ module.exports = function(RED) {
                                     thing_name: targetThing.name,
                                     item_id   : itemId,
                                     at        : new Date(atMs).toISOString(),
-                                    record    : record ? { ts: record.ts, state: record.state } : null
+                                    record    : record ? { timestamp: msToIso(record.ts), state: record.state } : null
                                 }));
                             }
 
@@ -1504,7 +1523,7 @@ module.exports = function(RED) {
                                 total     : docs.length,
                                 offset,
                                 limit,
-                                data      : page.map(d => ({ ts: d.ts, state: d.state }))
+                                data      : page.map(d => ({ timestamp: msToIso(d.ts), state: d.state }))
                             }));
                         } catch (e) {
                             return toolOk(JSON.stringify({ error: 'History query failed: ' + e.message }));
