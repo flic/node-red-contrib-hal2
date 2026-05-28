@@ -14,7 +14,7 @@ const MCP_TOOLS = [
                       'The response includes a location field (e.g. "Hemma" or "Landet") identifying which property this server controls. ' +
                       'Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. ' +
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
-                      'Each item and each device includes a last_change field (ISO 8601 UTC timestamp) when known — that is when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
+                      'Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
                       'Only items with a ha_type are included in full mode. ' +
                       'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Sjövatten Sensor" notes: "lake water temperature at the dock"). ' +
@@ -196,7 +196,7 @@ const MCP_TOOLS = [
         description : 'Returns water leak sensor status, devices with low battery, and offline devices in one call. ' +
                       'Use this to answer "is there a water leak?", "which sensors have low battery?", ' +
                       '"are any devices offline?", "what needs attention?" or similar questions about sensor alerts. ' +
-                      'Each entry includes last_change (ISO 8601 UTC) where known — for water sensors this is when the wet/dry state changed, ' +
+                      'Each entry always includes last_change (ISO 8601 UTC, null if unknown) — for water sensors this is when the wet/dry state changed, ' +
                       'for low-battery items when the level last changed, and for offline devices when they went offline.',
         inputSchema : {
             type       : 'object',
@@ -691,14 +691,13 @@ module.exports = function(RED) {
                         const ha_type = itm.id === '1' ? 'binary_sensor' : (itm.haType || '');
                         if (!ha_type) continue;
                         const label = attrMap[normalise(itm.name)] || null;
-                        const itemChangeIso = msToIso(lastChange[itm.id]);
                         const entry = {
-                            item_id   : itm.id,
-                            item_name : itm.name,
+                            item_id     : itm.id,
+                            item_name   : itm.name,
                             ha_type,
-                            value     : (thing.state[itm.id] !== undefined) ? thing.state[itm.id] : 'no value'
+                            value       : (thing.state[itm.id] !== undefined) ? thing.state[itm.id] : 'no value',
+                            last_change : msToIso(lastChange[itm.id])
                         };
-                        if (itemChangeIso) entry.last_change = itemChangeIso;
                         if (label) entry.label = label;
                         if (itm.history) entry.history = true;
                         if (itm.notes) entry.notes = itm.notes;
@@ -707,15 +706,14 @@ module.exports = function(RED) {
                     }
 
                     const deviceEntry = {
-                        thing_id   : thing.id,
-                        thing_name : thing.name,
-                        type_id    : tt.id,
-                        type_name  : tt.name,
-                        alive      : tt.hbCheck === false ? true : thing.state['1'] !== false,
+                        thing_id    : thing.id,
+                        thing_name  : thing.name,
+                        type_id     : tt.id,
+                        type_name   : tt.name,
+                        alive       : tt.hbCheck === false ? true : thing.state['1'] !== false,
+                        last_change : msToIso(lastChange[thing.id]),
                         items
                     };
-                    const thingChangeIso = msToIso(lastChange[thing.id]);
-                    if (thingChangeIso) deviceEntry.last_change = thingChangeIso;
                     if (thing.notes) deviceEntry.notes = thing.notes;
                     if (Array.isArray(thing.tags) && thing.tags.length) deviceEntry.tags = thing.tags;
                     const categories = deriveCategories(items);
@@ -940,10 +938,11 @@ module.exports = function(RED) {
                         if (fields === 'summary') {
                             paged = paged.map(d => {
                                 const o = {
-                                    thing_id   : d.thing_id,
-                                    thing_name : d.thing_name,
-                                    type_name  : d.type_name,
-                                    alive      : d.alive
+                                    thing_id    : d.thing_id,
+                                    thing_name  : d.thing_name,
+                                    type_name   : d.type_name,
+                                    alive       : d.alive,
+                                    last_change : d.last_change || null
                                 };
                                 if (d.notes)      o.notes      = d.notes;
                                 if (d.tags)       o.tags       = d.tags;
@@ -1090,13 +1089,12 @@ module.exports = function(RED) {
                             const sceneItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'scene');
                             if (!sceneItem) continue;
                             if (needle && !device.thing_name.toLowerCase().includes(needle)) continue;
-                            const entry = {
-                                thing_id   : device.thing_id,
-                                thing_name : device.thing_name,
-                                active     : sceneItem.value === true || sceneItem.value === 'true'
-                            };
-                            if (sceneItem.last_change) entry.last_change = sceneItem.last_change;
-                            scenes.push(entry);
+                            scenes.push({
+                                thing_id    : device.thing_id,
+                                thing_name  : device.thing_name,
+                                active      : sceneItem.value === true || sceneItem.value === 'true',
+                                last_change : sceneItem.last_change || null
+                            });
                         }
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ scenes }));
@@ -1276,31 +1274,35 @@ module.exports = function(RED) {
                         const offline = [];
                         for (const device of getAllStates()) {
                             if (!device.alive) {
-                                const offEntry = { thing_id: device.thing_id, thing_name: device.thing_name, type_name: device.type_name };
                                 const aliveItem = device.items.find(i => i.item_id === '1');
-                                if (aliveItem && aliveItem.last_change) offEntry.last_change = aliveItem.last_change;
-                                offline.push(offEntry);
+                                offline.push({
+                                    thing_id    : device.thing_id,
+                                    thing_name  : device.thing_name,
+                                    type_name   : device.type_name,
+                                    last_change : (aliveItem && aliveItem.last_change) || null
+                                });
                             }
                             const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
                             if (waterItem) {
-                                const wet = waterItem.value === true || waterItem.value === 'true';
-                                const sensorEntry = { thing_id: device.thing_id, thing_name: device.thing_name, wet };
-                                if (waterItem.last_change) sensorEntry.last_change = waterItem.last_change;
-                                sensors.push(sensorEntry);
+                                sensors.push({
+                                    thing_id    : device.thing_id,
+                                    thing_name  : device.thing_name,
+                                    wet         : waterItem.value === true || waterItem.value === 'true',
+                                    last_change : waterItem.last_change || null
+                                });
                             }
                             for (const itm of device.items) {
                                 if ((itm.ha_type || '').toLowerCase() === 'battery') {
                                     const level = Number(itm.value);
                                     if (!isNaN(level) && level < threshold) {
-                                        const lowEntry = {
-                                            thing_id   : device.thing_id,
-                                            thing_name : device.thing_name,
-                                            item_id    : itm.item_id,
-                                            item_name  : itm.item_name,
-                                            battery    : level
-                                        };
-                                        if (itm.last_change) lowEntry.last_change = itm.last_change;
-                                        low.push(lowEntry);
+                                        low.push({
+                                            thing_id    : device.thing_id,
+                                            thing_name  : device.thing_name,
+                                            item_id     : itm.item_id,
+                                            item_name   : itm.item_name,
+                                            battery     : level,
+                                            last_change : itm.last_change || null
+                                        });
                                     }
                                 }
                             }
