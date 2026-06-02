@@ -1,6 +1,7 @@
 const http            = require('http');
 const https           = require('https');
 const crypto          = require('crypto');
+const jose            = require('jose');
 const analyzePatterns = require('./analyzePatterns');
 
 console.log('[hal2EventHandler] module loaded, version check: ' + new Date().toISOString());
@@ -36,7 +37,7 @@ const MCP_TOOLS = [
     {
         name        : 'get_state',
         description : 'Returns the complete state for a specific device. ' +
-                      'Use this after get_all_states (summary) to fetch full details for one device by its thing_id. ' +
+                      'Use this to fetch full details for one device by its thing_id. ' +
                       'Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. ' +
                       'Response includes notes and tags on both Thing and Item level when configured. ' +
                       'Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. ' +
@@ -610,6 +611,18 @@ module.exports = function(RED) {
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
             const adminEnabled  = config.adminToolsEnabled === true;
             const adminPort     = Number(config.adminPort || 1880);
+            const mcpScopesStr  = (config.mcpScopes || 'openid profile email').trim();
+            const mcpScopesArr  = mcpScopesStr.split(/\s+/).filter(Boolean);
+            const adminClaim    = (config.adminRequiredClaim || 'groups').trim();
+            const adminValue    = (config.adminRequiredValue || 'admin').trim();
+
+            function isAdmin(claims) {
+                if (!adminValue) return true;
+                if (!claims) return false;
+                const v = claims[adminClaim];
+                if (Array.isArray(v)) return v.includes(adminValue);
+                return v === adminValue;
+            }
 
             let tokenCache = {};
 
@@ -625,23 +638,33 @@ module.exports = function(RED) {
 
             const localDebugToken = (node.credentials && node.credentials.localDebugToken) || '';
 
+            // Lazy JWKS — only fetched on first real token validation.
+            let jwks = null;
+            function getJwks() {
+                if (!jwks) {
+                    jwks = jose.createRemoteJWKSet(new URL(pocketidUrl + '/.well-known/jwks.json'));
+                }
+                return jwks;
+            }
+
             async function validateToken(token) {
                 // Local debug token bypass — skips PocketID entirely
                 if (localDebugToken && token === localDebugToken) {
-                    return { sub: 'debug', name: 'Local debug user' };
+                    return { sub: 'debug', name: 'Local debug user', groups: ['admin'] };
                 }
 
                 const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
                 if (tokenCache[cacheKey] && tokenCache[cacheKey].exp >= Date.now()) {
-                    return tokenCache[cacheKey].user;
+                    return tokenCache[cacheKey].claims;
                 }
                 try {
-                    const r = await httpGet(pocketidUrl + '/api/oidc/userinfo',
-                        { 'Authorization': 'Bearer ' + token });
-                    if (r.status !== 200) return null;
-                    tokenCache[cacheKey] = { user: r.body, exp: Date.now() + tokenTTL };
-                    return r.body;
+                    const { payload } = await jose.jwtVerify(token, getJwks());
+                    const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
+                    const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
+                    tokenCache[cacheKey] = { claims: payload, exp: cacheExp };
+                    return payload;
                 } catch (e) {
+                    node.warn('MCP token verify failed: ' + e.message);
                     return null;
                 }
             }
@@ -779,15 +802,15 @@ module.exports = function(RED) {
                     res.status(401).json({ error: 'unauthorized' });
                     return null;
                 }
-                const token = authHeader.slice(7);
-                const user  = await validateToken(token);
-                if (!user) {
+                const token  = authHeader.slice(7);
+                const claims = await validateToken(token);
+                if (!claims) {
                     res.set('WWW-Authenticate',
                         `Bearer error="invalid_token", resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`);
                     res.status(401).json({ error: 'invalid_token' });
                     return null;
                 }
-                return user;
+                return claims;
             }
 
             node.requireBearer = requireBearer;
@@ -800,7 +823,7 @@ module.exports = function(RED) {
                     resource                 : mcpServerUrl,
                     authorization_servers    : [mcpServerUrl],
                     bearer_methods_supported : ['header'],
-                    scopes_supported         : ['openid', 'profile', 'email']
+                    scopes_supported         : mcpScopesArr
                 });
             });
 
@@ -815,7 +838,7 @@ module.exports = function(RED) {
                     userinfo_endpoint                     : pocketidUrl + '/api/oidc/userinfo',
                     registration_endpoint                 : mcpServerUrl + mcpPrefix + '/oauth/register',
                     jwks_uri                              : pocketidUrl + '/.well-known/jwks.json',
-                    scopes_supported                      : ['openid', 'profile', 'email'],
+                    scopes_supported                      : mcpScopesArr,
                     response_types_supported              : ['code'],
                     grant_types_supported                 : ['authorization_code', 'refresh_token'],
                     code_challenge_methods_supported      : ['S256'],
@@ -839,7 +862,7 @@ module.exports = function(RED) {
                     grant_types                : ['authorization_code', 'refresh_token'],
                     response_types             : ['code'],
                     token_endpoint_auth_method : 'client_secret_post',
-                    scope                      : 'openid profile email'
+                    scope                      : mcpScopesStr
                 });
             });
 
@@ -848,8 +871,8 @@ module.exports = function(RED) {
             node.log('MCP registering route: POST ' + mcpPrefix + '/mcp');
             RED.httpNode.post(mcpPrefix + '/mcp', async (req, res) => {
                 // Bearer token validation
-                const user = await requireBearer(req, res);
-                if (!user) return;
+                const claims = await requireBearer(req, res);
+                if (!claims) return;
 
                 const body   = req.body || {};
                 const id     = body.id     !== undefined ? body.id : null;
@@ -875,7 +898,7 @@ module.exports = function(RED) {
                                           'or the relevant tool again before answering. ' +
                                           'Available tools: ' + [
                                               ...MCP_TOOLS.filter(t => !getNotConfiguredError(t.name)),
-                                              ...(adminEnabled ? MCP_TOOLS_ADMIN : [])
+                                              ...(adminEnabled && isAdmin(claims) ? MCP_TOOLS_ADMIN : [])
                                           ].map(t => t.name).join(', ') + '.'
                     });
                 }
@@ -887,7 +910,7 @@ module.exports = function(RED) {
                 // ── tools/list ────────────────────────────────────────────────
                 if (method === 'tools/list') {
                     const tools = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name));
-                    if (adminEnabled) tools.push(...MCP_TOOLS_ADMIN);
+                    if (adminEnabled && isAdmin(claims)) tools.push(...MCP_TOOLS_ADMIN);
                     for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
                         const s = t.schema;
                         const inputSchema = (s && s.type === 'object')
@@ -1398,6 +1421,10 @@ module.exports = function(RED) {
 
                     // Admin tools — handled internally
                     if (adminEnabled && MCP_ADMIN_TOOL_NAMES.has(toolName)) {
+                        if (!isAdmin(claims)) {
+                            node.status({ fill: 'red', shape: 'ring', text: 'forbidden' });
+                            return rpcErr(-32000, 'Forbidden: admin role required');
+                        }
                         try {
                             if (toolName === 'get_flow') {
                                 if (!args.id) {
@@ -1581,7 +1608,7 @@ module.exports = function(RED) {
                                     reject(new Error('timeout'));
                                 }, timeoutMs);
                                 node.mcpPendingCalls[callId] = { resolve, reject, timer };
-                                node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId });
+                                node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId, _mcpClaims: claims });
                             });
                             node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                             return Array.isArray(result)

@@ -86,8 +86,8 @@ module.exports = function (RED) {
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 
         RED.httpNode.post(mcpPath, async (req, res) => {
-            const user = await eventHandler.requireBearer(req, res);
-            if (!user) return;
+            const claims = await eventHandler.requireBearer(req, res);
+            if (!claims) return;
 
             const body   = req.body || {};
             const id     = body.id     !== undefined ? body.id : null;
@@ -140,7 +140,7 @@ module.exports = function (RED) {
                                 reject(new Error('timeout'));
                             }, timeoutMs);
                             node.mcpPendingCalls[callId] = { resolve, reject, timer };
-                            node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId });
+                            node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId, _mcpClaims: claims });
                         });
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return Array.isArray(result)

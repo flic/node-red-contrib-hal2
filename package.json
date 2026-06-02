@@ -36,6 +36,9 @@
       "hal2MCPServer": "core/mcpserver.js"
     }
   },
+  "dependencies": {
+    "jose": "^4.15.5"
+  },
   "optionalDependencies": {
     "better-sqlite3": "^11.10.0"
   }

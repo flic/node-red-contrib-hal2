@@ -25,13 +25,17 @@ module.exports = function (RED) {
 
         mcpServer.registerMCPTool(toolName, config.description, schema, timeoutSec);
 
-        node.listener = function ({ args, _mcpCallId }) {
+        const exposeClaims = config.exposeClaims === true;
+
+        node.listener = function ({ args, _mcpCallId, _mcpClaims }) {
             node.status({ fill: 'blue', shape: 'dot', text: 'called' });
-            node.send({
+            const msg = {
                 payload    : args,
                 _mcpCallId : _mcpCallId,
                 topic      : topic
-            });
+            };
+            if (exposeClaims && _mcpClaims) msg.jwtClaims = _mcpClaims;
+            node.send(msg);
             setTimeout(() => node.status({ fill: 'green', shape: 'dot', text: 'ready' }), 1000);
         };
 

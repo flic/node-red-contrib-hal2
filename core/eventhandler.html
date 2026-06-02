@@ -98,6 +98,13 @@
                     <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
                     <input type="password" id="node-config-input-pocketidClientSecret" placeholder="Client secret" style="width:calc(100% - 185px)" autocomplete="off">
                 </div>
+                <div class="form-row">
+                    <label for="node-config-input-mcpScopes" style="width:150px"><i class="fa fa-list"></i> OIDC scopes</label>
+                    <input type="text" id="node-config-input-mcpScopes" placeholder="openid profile email" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Space-separerad lista. Lägg t.ex. till <code>groups</code> för att få med gruppmedlemskap i JWT — kräver att PocketID är konfigurerad att skicka claimet för det scopet.</small>
+                </div>
 
                 <hr style="margin:12px 0">
 
@@ -127,6 +134,17 @@
                     <div class="form-row">
                         <label for="node-config-input-adminPort" style="width:150px"><i class="fa fa-plug"></i> Admin API port</label>
                         <input type="number" id="node-config-input-adminPort" style="width:80px" min="1" max="65535" value="1880">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-adminRequiredClaim" style="width:150px"><i class="fa fa-user-secret"></i> Required claim</label>
+                        <input type="text" id="node-config-input-adminRequiredClaim" placeholder="groups" style="width:calc(100% - 185px)">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-adminRequiredValue" style="width:150px"><i class="fa fa-check"></i> Required value</label>
+                        <input type="text" id="node-config-input-adminRequiredValue" placeholder="admin" style="width:calc(100% - 185px)">
+                    </div>
+                    <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                        <small>JWT-claimet (default <code>groups</code>) måste innehålla värdet (default <code>admin</code>) för att adminverktygen ska få anropas. Lämna värdet tomt för att tillåta alla autentiserade.</small>
                     </div>
                     <div class="form-row" style="background:#fff8e1; border:1px solid #ffe082; border-radius:4px; padding:8px 12px; margin-top:4px;">
                         <i class="fa fa-info-circle" style="color:#f9a825;"></i>
@@ -204,9 +222,12 @@
             mcpServerUrl:      { value: '' },
             httpPathPrefix:    { value: '' },
             pocketidUrl:       { value: '' },
+            mcpScopes:         { value: 'openid profile email' },
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },
             adminPort:         { value: 1880 },
+            adminRequiredClaim:{ value: 'groups' },
+            adminRequiredValue:{ value: 'admin' },
             // Shared function libraries
             ingressLibrary:    { value: [], required: false },
             egressLibrary:     { value: [], required: false }
