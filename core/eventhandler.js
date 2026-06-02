@@ -661,10 +661,25 @@ module.exports = function(RED) {
                 }
                 try {
                     const { payload } = await jose.jwtVerify(token, getJwks());
+                    // Enrich with userinfo — access tokens are minimal by OIDC convention,
+                    // rich claims (email, name, groups) live in the userinfo response.
+                    // JWT payload wins on collisions so verified fields stay authoritative.
+                    let claims = payload;
+                    try {
+                        const r = await httpGet(pocketidUrl + '/api/oidc/userinfo',
+                            { 'Authorization': 'Bearer ' + token });
+                        if (r.status === 200 && r.body && typeof r.body === 'object') {
+                            claims = Object.assign({}, r.body, payload);
+                        } else {
+                            node.warn('MCP userinfo returned ' + r.status + ' — using JWT claims only');
+                        }
+                    } catch (e) {
+                        node.warn('MCP userinfo fetch failed: ' + e.message + ' — using JWT claims only');
+                    }
                     const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
                     const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
-                    tokenCache[cacheKey] = { claims: payload, exp: cacheExp };
-                    return payload;
+                    tokenCache[cacheKey] = { claims, exp: cacheExp };
+                    return claims;
                 } catch (e) {
                     node.warn('MCP token verify failed: ' + e.message);
                     return null;
