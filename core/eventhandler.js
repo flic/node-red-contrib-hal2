@@ -614,7 +614,9 @@ module.exports = function(RED) {
             const mcpScopesStr  = (config.mcpScopes || 'openid profile email').trim();
             const mcpScopesArr  = mcpScopesStr.split(/\s+/).filter(Boolean);
             const adminClaim    = (config.adminRequiredClaim || 'groups').trim();
-            const adminValue    = (config.adminRequiredValue || 'admin').trim();
+            // Default 'admin' only when never set (undefined). Empty string is respected
+            // as "allow any authenticated user" per the UI help text.
+            const adminValue    = (config.adminRequiredValue === undefined ? 'admin' : config.adminRequiredValue).trim();
 
             function isAdmin(claims) {
                 if (!adminValue) return true;
