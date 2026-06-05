@@ -1,0 +1,62 @@
+[
+    {
+        "id": "tab-hal2-json-api",
+        "type": "tab",
+        "label": "hal2 JSON API",
+        "disabled": false,
+        "info": "Example: expose the hal2 tool catalog over HTTP via the **hal2Api** node.\n\nPOST a JSON body `{ \"tool\": \"...\", \"args\": { ... } }` to `/hal2/api`.\nThe response is `{ \"ok\": true, \"result\": ... }` or `{ \"ok\": false, \"error\": {...} }`.\n\nSet the **Event handler** on the hal2Api node before deploying. See docs/API.md for the tool list."
+    },
+    {
+        "id": "comment-json-api",
+        "type": "comment",
+        "z": "tab-hal2-json-api",
+        "name": "How to use",
+        "info": "Query device state:\n\n    curl -s localhost:1880/hal2/api \\\n      -H 'content-type: application/json' \\\n      -d '{\"tool\":\"get_all_states\",\"args\":{\"fields\":\"summary\"}}'\n\nControl a light:\n\n    curl -s localhost:1880/hal2/api \\\n      -H 'content-type: application/json' \\\n      -d '{\"tool\":\"set_light\",\"args\":{\"thing_name\":\"kitchen\",\"on\":true}}'\n\nAdmin tools (get_flow/deploy_flow) require 'Allow admin tools' on the node.",
+        "x": 160,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "httpin-json-api",
+        "type": "http in",
+        "z": "tab-hal2-json-api",
+        "name": "POST /hal2/api",
+        "url": "/hal2/api",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 160,
+        "wires": [
+            [
+                "node-hal2-api"
+            ]
+        ]
+    },
+    {
+        "id": "node-hal2-api",
+        "type": "hal2Api",
+        "z": "tab-hal2-json-api",
+        "name": "",
+        "eventHandler": "",
+        "allowAdminTools": false,
+        "x": 410,
+        "y": 160,
+        "wires": [
+            [
+                "httpresp-json-api"
+            ]
+        ]
+    },
+    {
+        "id": "httpresp-json-api",
+        "type": "http response",
+        "z": "tab-hal2-json-api",
+        "name": "respond JSON",
+        "statusCode": "",
+        "headers": {},
+        "x": 650,
+        "y": 160,
+        "wires": []
+    }
+]
