@@ -17,7 +17,7 @@
             </div>
             <div class="form-row">
                 <label for="node-config-input-locationName" style="width:150px"><i class="fa fa-map-marker"></i> Location</label>
-                <input type="text" id="node-config-input-locationName" placeholder="e.g. Hemma, Landet" style="width:calc(100% - 185px)">
+                <input type="text" id="node-config-input-locationName" placeholder="e.g. Home, Cabin" style="width:calc(100% - 185px)">
             </div>
             <div class="form-row">
                 <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
@@ -41,7 +41,7 @@
             <div class="form-row">
                 <label style="width:150px"><i class="fa fa-history"></i> Enable history</label>
                 <input type="checkbox" id="node-config-input-historyEnabled" style="width:23px; margin:0">
-                <label for="node-config-input-historyEnabled" style="margin:0; width:auto;"> Aktivera historikloggning</label>
+                <label for="node-config-input-historyEnabled" style="margin:0; width:auto;"> Enable history logging</label>
             </div>
             <div id="hal2eh-history-details">
                 <div class="form-row">
@@ -53,11 +53,11 @@
                     <input type="number" id="node-config-input-historyRetentionDays" style="width:80px" min="1" value="30"> days
                 </div>
                 <div class="form-row">
-                    <label for="node-config-input-hal2CorrelationMs" style="width:150px"><i class="fa fa-link"></i> Hal2-korrelation</label>
+                    <label for="node-config-input-hal2CorrelationMs" style="width:150px"><i class="fa fa-link"></i> Hal2 correlation</label>
                     <input type="number" id="node-config-input-hal2CorrelationMs" style="width:80px" min="0" max="60000" value="5000"> ms
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>När hal2 skickar ett kommando markeras (thing, item) under detta tidsfönster. En efterföljande HA-bekräftelse inom fönstret loggas då som <code>source='hal2'</code> istället för <code>'external'</code>, så att <code>analyze_patterns</code> kan filtrera bort redan automatiserade händelser. Default 5000 ms. Sätt till 0 för att inaktivera.</small>
+                    <small>When hal2 sends a command, the (thing, item) pair is marked for this time window. A following HA confirmation within the window is then logged as <code>source='hal2'</code> instead of <code>'external'</code>, so that <code>analyze_patterns</code> can filter out already-automated events. Default 5000 ms. Set to 0 to disable.</small>
                 </div>
             </div>
         </div>
@@ -67,7 +67,7 @@
             <div class="form-row">
                 <label style="width:150px"><i class="fa fa-plug"></i> Enable MCP</label>
                 <input type="checkbox" id="node-config-input-mcpEnabled" style="width:23px; margin:0">
-                <label for="node-config-input-mcpEnabled" style="margin:0; width:auto;"> Aktivera MCP-server</label>
+                <label for="node-config-input-mcpEnabled" style="margin:0; width:auto;"> Enable MCP server</label>
             </div>
 
             <div id="hal2eh-mcp-details">
@@ -81,7 +81,7 @@
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-httpPathPrefix" style="width:150px"><i class="fa fa-link"></i> HTTP path prefix</label>
-                    <input type="text" id="node-config-input-httpPathPrefix" placeholder="/prefix (valfritt)" style="width:calc(100% - 185px)">
+                    <input type="text" id="node-config-input-httpPathPrefix" placeholder="/prefix (optional)" style="width:calc(100% - 185px)">
                 </div>
 
                 <hr style="margin:12px 0">
@@ -103,14 +103,14 @@
                     <input type="text" id="node-config-input-mcpScopes" placeholder="openid profile email" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Space-separerad lista. Lägg t.ex. till <code>groups</code> för att få med gruppmedlemskap i JWT — kräver att PocketID är konfigurerad att skicka claimet för det scopet.</small>
+                    <small>Space-separated list. Add e.g. <code>groups</code> to include group membership in the JWT — requires PocketID to be configured to send that claim for the scope.</small>
                 </div>
 
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
                     <label for="node-config-input-localDebugToken" style="width:150px"><i class="fa fa-bug"></i> Local debug token</label>
-                    <input type="password" id="node-config-input-localDebugToken" placeholder="(valfritt, skippar OAuth lokalt)" style="width:calc(100% - 185px)" autocomplete="off">
+                    <input type="password" id="node-config-input-localDebugToken" placeholder="(optional, skips OAuth locally)" style="width:calc(100% - 185px)" autocomplete="off">
                 </div>
 
                 <hr style="margin:12px 0">
@@ -124,7 +124,7 @@
                 <div class="form-row">
                     <label style="width:150px"><i class="fa fa-terminal"></i> Admin tools</label>
                     <input type="checkbox" id="node-config-input-adminToolsEnabled" style="width:23px; margin:0">
-                    <label for="node-config-input-adminToolsEnabled" style="margin:0; width:auto;"> Aktivera Node-RED-adminverktyg</label>
+                    <label for="node-config-input-adminToolsEnabled" style="margin:0; width:auto;"> Enable Node-RED admin tools</label>
                 </div>
                 <div id="hal2eh-admin-details">
                     <div class="form-row">
@@ -144,13 +144,13 @@
                         <input type="text" id="node-config-input-adminRequiredValue" placeholder="admin" style="width:calc(100% - 185px)">
                     </div>
                     <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                        <small>JWT-claimet (default <code>groups</code>) måste innehålla värdet (default <code>admin</code>) för att adminverktygen ska få anropas. Lämna värdet tomt för att tillåta alla autentiserade.</small>
+                        <small>The JWT claim (default <code>groups</code>) must contain the value (default <code>admin</code>) for the admin tools to be callable. Leave the value empty to allow all authenticated users.</small>
                     </div>
                     <div class="form-row" style="background:#fff8e1; border:1px solid #ffe082; border-radius:4px; padding:8px 12px; margin-top:4px;">
                         <i class="fa fa-info-circle" style="color:#f9a825;"></i>
                         <span style="font-size:12px; margin-left:6px;">
-                            Aktiverade adminverktyg: <strong>get_flows</strong>, <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
-                            Dessa anropar Node-RED admin API på localhost:&lt;port&gt;.
+                            Enabled admin tools: <strong>get_flows</strong>, <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
+                            These call the Node-RED admin API on localhost:&lt;port&gt;.
                         </span>
                     </div>
                 </div>

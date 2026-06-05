@@ -1,0 +1,16 @@
+# Internal dev notes — not part of the published package
+memory/
+
+# Local agent / editor config
+.claude/
+.vscode/
+
+# Runtime / dev artifacts
+hal2history.db
+*.tgz
+*.log
+logs
+
+# Environment files
+.env
+.env.test

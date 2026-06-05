@@ -12,13 +12,13 @@ const MCP_TOOLS = [
     {
         name        : 'get_all_states',
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
-                      'The response includes a location field (e.g. "Hemma" or "Landet") identifying which property this server controls. ' +
+                      'The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. ' +
                       'Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. ' +
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
                       'Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
                       'Only items with a ha_type are included in full mode. ' +
-                      'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Sjövatten Sensor" notes: "lake water temperature at the dock"). ' +
+                      'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Pool Sensor" notes: "pool water temperature"). ' +
                       'Each device also includes a categories field listing which control categories it falls into (climate, spa, light, fan, cover, scene), derived from its items — use this to identify what kind of device it is at a glance. ' +
                       'ha_type accepts both literal item types (e.g. "light", "temperature") and category aliases that expand to their underlying types — e.g. "climate" matches devices with target temperature / ac mode / fan mode / swing mode. Supported aliases: climate, spa, light, fan, cover, scene. ' +
                       'Use tag to limit results to devices/items tagged with a specific keyword. ' +
@@ -183,8 +183,8 @@ const MCP_TOOLS = [
         name        : 'get_presence',
         description : 'Returns presence information for all people/persons tracked in the system. ' +
                       'Shows who is home, who is away, and which room each person is in. ' +
-                      'Use this to answer questions like "is anyone home?", "where is Fredrik?", ' +
-                      '"who is home right now?", "when did Mica come home?", "how long has Fredrik been away?". ' +
+                      'Use this to answer questions like "is anyone home?", "where is Alice?", ' +
+                      '"who is home right now?", "when did Bob come home?", "how long has Alice been away?". ' +
                       'Each person includes home_since/away_since (ISO timestamp of last change) and ' +
                       'home_for_minutes/away_for_minutes (duration in current state). When home, also includes ' +
                       'room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up ' +
@@ -211,8 +211,8 @@ const MCP_TOOLS = [
         description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
                       'thing_name supports partial, case-insensitive match against the thing name OR against ' +
                       'item labels (the label field in get_all_states items). Labels are friendly names assigned ' +
-                      'per-device, e.g. a double switch named "Kök Dubbelbrytare" may have items labelled ' +
-                      '"Kök Taklampa" and "Kök Bänkbelysning" — searching "bänkbelysning" will target only that relay. ' +
+                      'per-device, e.g. a double switch named "Kitchen Double Switch" may have items labelled ' +
+                      '"Kitchen Ceiling Light" and "Kitchen Counter Light" — searching "counter" will target only that relay. ' +
                       'You can turn it on/off and/or set brightness/color_temp/color in one call.',
         inputSchema : {
             type       : 'object',
@@ -1452,8 +1452,8 @@ module.exports = function(RED) {
                                     const lines = ['**Node-RED flikar:**', ''];
                                     tabs.forEach(tab => {
                                         const count = allNodes.filter(n => n.z === tab.id).length;
-                                        lines.push('- **' + tab.label + '**' + (tab.disabled ? ' [inaktiv]' : ''));
-                                        lines.push('  ID: `' + tab.id + '`  |  Noder: ' + count);
+                                        lines.push('- **' + tab.label + '**' + (tab.disabled ? ' [disabled]' : ''));
+                                        lines.push('  ID: `' + tab.id + '`  |  Nodes: ' + count);
                                     });
                                     node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                                     return toolOk(lines.join('\n'));
@@ -1461,7 +1461,7 @@ module.exports = function(RED) {
                                 const r = await adminApi('GET', '/flow/' + args.id);
                                 if (r.status === 404) {
                                     node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                                    return toolOk('Flöde \'' + args.id + '\' hittades inte.');
+                                    return toolOk('Flow \'' + args.id + '\' not found.');
                                 }
                                 node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                                 return toolOk(JSON.stringify(r.body, null, 2));
@@ -1476,13 +1476,13 @@ module.exports = function(RED) {
                                     : await adminApi('POST', '/flow',             flowBody);
                                 node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                                 if (r.status === 200 || r.status === 204) {
-                                    return toolOk('Flödet \'' + args.label + '\' deployades. ID: ' + (r.body.id || tabId));
+                                    return toolOk('Flow \'' + args.label + '\' deployed. ID: ' + (r.body.id || tabId));
                                 }
-                                return toolOk('Deploy misslyckades (' + r.status + '): ' + JSON.stringify(r.body));
+                                return toolOk('Deploy failed (' + r.status + '): ' + JSON.stringify(r.body));
                             }
                         } catch (e) {
                             node.status({ fill: 'red', shape: 'ring', text: 'admin error' });
-                            return toolOk('Fel vid admin-anrop: ' + e.message);
+                            return toolOk('Admin call error: ' + e.message);
                         }
                     }
 
