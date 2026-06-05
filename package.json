@@ -13,6 +13,9 @@
   ],
   "author": "Fredrik Furtenbach",
   "license": "ISC",
+  "scripts": {
+    "docs:api": "node scripts/gen-api-docs.js"
+  },
   "engines": {
     "node": ">=14"
   },
@@ -33,7 +36,8 @@
       "hal2Log": "core/log.js",
       "hal2MCPIn": "core/mcpin.js",
       "hal2MCPOut": "core/mcpout.js",
-      "hal2MCPServer": "core/mcpserver.js"
+      "hal2MCPServer": "core/mcpserver.js",
+      "hal2Api": "core/api.js"
     }
   },
   "dependencies": {

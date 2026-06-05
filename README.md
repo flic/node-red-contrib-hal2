@@ -31,6 +31,20 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ![Example logging](https://user-images.githubusercontent.com/400673/168665807-aa3aba8f-8b06-4292-bcad-7374e508f59a.png)
 
+## JSON API (hal2Api)
+
+The **hal2Api** node turns the hal2 tool catalog into a simple JSON request/response gateway, so external components can query device state and control devices without speaking MCP. Wire it behind an `http in`, MQTT, or any node that produces a JSON message:
+
+```json
+// in:  msg.payload
+{ "tool": "get_state", "args": { "thing_name": "kitchen" } }
+
+// out: msg.payload
+{ "ok": true, "result": { "thing_id": "…", "items": [ … ] } }
+```
+
+The same tools and arguments are shared with the MCP server, so there is a single source of truth. The full list of tools, parameters and examples is auto-generated in **[docs/API.md](docs/API.md)** (`npm run docs:api`). Admin tools (`get_flow`, `deploy_flow`) are only exposed when *Allow admin tools* is enabled on the node. See `examples/json-api.json` for a ready-made http endpoint flow.
+
 ## History
 
 **1.15**<br>
