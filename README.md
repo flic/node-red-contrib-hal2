@@ -31,9 +31,30 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ![Example logging](https://user-images.githubusercontent.com/400673/168665807-aa3aba8f-8b06-4292-bcad-7374e508f59a.png)
 
-## JSON API (hal2Api)
+## AI & external control
 
-The **hal2Api** node turns the hal2 tool catalog into a simple JSON request/response gateway, so external components can query device state and control devices without speaking MCP. Wire it behind an `http in`, MQTT, or any node that produces a JSON message:
+Beyond local automation, hal2 can expose your devices to AI assistants and external systems. The **Event handler** can run a built-in [MCP](https://modelcontextprotocol.io) server, you can define your own AI tools as flows, and the **hal2Api** node offers a plain JSON gateway. All three share one tool catalog, so there is a single source of truth.
+
+### MCP server
+
+The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is OAuth-protected (via [PocketID](https://pocket-id.org)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental - only tested with Claude.AI and PocketID.
+
+It ships with a catalog of built-in tools:
+
+- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`
+- **Control** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`
+- **Analyse** — `analyze_patterns`
+- **Admin** (opt-in) — `get_flow`, `deploy_flow`
+
+Tools are exposed only when matching hardware is configured at that location — a server with no covers won't advertise `control_cover`. Things and Items can carry free-text **notes** and **tags**, and devices report derived **categories** (light, fan, cover, climate, spa, scene), all of which help the assistant pick the right device. Full parameters and examples are in **[docs/API.md](docs/API.md)**.
+
+### Custom MCP tools (hal2MCPIn / hal2MCPOut)
+
+You can define your own MCP tools as Node-RED flows: a **hal2MCPIn** node registers a tool and fires a message when the assistant calls it, and a **hal2MCPOut** node returns the result. Responses can be text or image/media content, so a tool can return e.g. a camera snapshot. For a fully standalone setup there is also a **hal2MCPServer** node. See `examples/jellyfin-mcp.json` for a worked example.
+
+### JSON API (hal2Api)
+
+The **hal2Api** node turns the same tool catalog into a simple JSON request/response gateway, so external components can query device state and control devices without speaking MCP. Wire it behind an `http in`, MQTT, or any node that produces a JSON message:
 
 ```json
 // in:  msg.payload
@@ -43,65 +64,20 @@ The **hal2Api** node turns the hal2 tool catalog into a simple JSON request/resp
 { "ok": true, "result": { "thing_id": "…", "items": [ … ] } }
 ```
 
-The same tools and arguments are shared with the MCP server, so there is a single source of truth. The full list of tools, parameters and examples is auto-generated in **[docs/API.md](docs/API.md)** (`npm run docs:api`). Admin tools (`get_flow`, `deploy_flow`) are only exposed when *Allow admin tools* is enabled on the node. See `examples/json-api.json` for a ready-made http endpoint flow.
+The full list of tools is auto-generated in **[docs/API.md](docs/API.md)** (`npm run docs:api`). Admin tools (`get_flow`, `deploy_flow`) are only exposed when *Allow admin tools* is enabled on the node. See `examples/json-api.json` for a ready-made HTTP endpoint flow.
 
-## History
+## History & pattern analysis
 
-**1.15**<br>
-Info button in Thing node shows all the places it's used.<br>
-New option in Action node to only send command if it differs from state.<br>
+Items can opt in to **history logging**: when enabled on the Event handler (and per Item), value changes are stored in a local **SQLite** database with a configurable retention period. History requires the optional `better-sqlite3` package — install it with `npm install better-sqlite3` in your Node-RED user directory. Without it, history simply stays off and nothing breaks.
 
-**1.14**<br>
-Event node status text (last trigger event, delay/rate limit status)<br>
-Event node option to reset *Delay* if trigger no longer true<br>
-New config options for *Event handler*<br>
+History powers two tools:
 
-**1.13**<br>
-Event node *Delay* and *Rate Limit*.<br>
-Dynamic msg.thing.id in Gate node.<br>
-New examples (Delay, Rate limit and Time Since Changed).<br>
+- **`get_history`** — fetch logged values for an Item over a flexible time window: a rolling `hours` count, an explicit `from`/`to` range, or a point-in-time `at` lookup ("what was it at 08:00?"), with `offset`/`limit` paging.
+- **`analyze_patterns`** — scans the history to surface recurring routines, e.g. *"Living Room Light turns on around 07:30, 85% consistent"*, so you can spot automations worth creating.
 
-**1.12**<br>
-Ingress and egress functions can use *item* and *attribute* objects.<br>
-It's now possible to base *Alive* on a *last seen* timestamp, great for zigbee2mqtt.<br>
+## Other recent additions
 
-**1.11**<br>
-New options for Gate rules: Time Since Update and Time Since Change.<br>
-It's now possible to use a function to create dynamic status text strings for Items.<br>
-Value and Item node output includes last_update and last_change epoch date.<br>
-New examples.
+- **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.
+- **Centralised ingress/egress functions** — define message-transform functions once on the Event handler and reuse them across thing types instead of copying them per type.
+- **Notes & tags** on Things and Items, plus automatically derived device **categories** — handy for organising devices and for disambiguation by the MCP and JSON API tools.
 
-**1.10**<br>
-Export and import Thingtypes using the Node-RED Library function.<br>
-Minimum node version bumped to >=14, minimum Node-RED version bumped to >= 2.2.0. 
-
-**1.9**<br>
-It's now possible to configure multiple outputs on the Thing node and use a specific output per command.
-
-**1.8**<br>
-Value node can update Item values
-
-**1.7**<br>
-Command loopback for virtual Things
-
-**1.6**<br>
-Thing attributes & filter function added.<br>
-Thing Cmnd topic parameter changed to a general topic parameter, some changes to Item topic filter and command topic.
-
-**1.5**<br>
-Item notes added
-
-**1.4**<br>
-Item filter applied to all node types
-
-**1.3**<br>
-Dynamically set thing.id at runtime
-
-**1.2**<br>
-Copy functions from other types
-
-**1.1**<br>
-Item filter on gate node
-
-**1.0**<br>
-Initial release
