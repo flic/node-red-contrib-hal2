@@ -40,6 +40,10 @@
         <label><i class="fa fa-tags"></i> Attributes</label>
         <ol id="attributes-list"></ol>
     </div>
+    <div class="form-row" id="thing-groups" style="width:100%">
+        <label><i class="fa fa-object-group"></i> Groups</label>
+        <div id="thing-groups-list" style="width:100%"></div>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Thing">
@@ -87,6 +91,7 @@
             topicPrefix:        { value: "" },
             notes:              {},
             tags:               { value: '' },
+            groups:             { value: [] }, //[{ item, group }] group membership
             outputs:            { value: 0 } //Store if outputs are enabled
         },
         inputs: 1,
@@ -207,9 +212,69 @@
                         $("#attributes-list").editableList('addItem',attribute);
                     }
                 }
+                renderThingGroups();
             });
 
+            // ── Group membership ──────────────────────────────────────────────
+            // Render one row per ThingType item, each with a multi-select of the
+            // compatible groups defined on the selected EventHandler. A group is
+            // compatible if its haType matches the item's haType, or if it is an
+            // 'other' (mixed) group, which accepts any item.
+            function renderThingGroups() {
+                var list = $("#thing-groups-list");
+                list.empty();
+
+                var eh = RED.nodes.node($("#node-input-eventHandler").val());
+                var thingType = RED.nodes.node($("#node-input-thingType").val());
+                var groups = (eh && Array.isArray(eh.groups)) ? eh.groups : [];
+
+                if (!thingType || !Array.isArray(thingType.items)) { return; }
+                if (groups.length === 0) {
+                    list.append($('<div/>', { style: "color:#888; padding:4px 0;" })
+                        .text('No groups defined. Add groups on the Event handler to assign items here.'));
+                    return;
+                }
+
+                var membership = Array.isArray(node.groups) ? node.groups : [];
+                var rendered = 0;
+
+                for (var i in thingType.items) {
+                    var item = thingType.items[i];
+                    if (item.id === '1') { continue; } // heartbeat
+                    var itemHaType = item.haType || '';
+                    var compatible = groups.filter(function(g) {
+                        return g.haType === 'other' || (g.haType && g.haType === itemHaType);
+                    });
+                    if (compatible.length === 0) { continue; }
+                    rendered += 1;
+
+                    var row = $('<div/>', { style: "margin-bottom:6px;" }).appendTo(list);
+                    $('<div/>', { style: "display:inline-block;width:140px;vertical-align:top;padding-right:10px;box-sizing:border-box;", class: "fa fa-sitemap" })
+                        .appendTo(row)
+                        .append(' ' + item.name + (itemHaType ? ' (' + itemHaType + ')' : ''));
+                    var sel = $('<select/>', {
+                        multiple: true,
+                        class: "thing-group-select",
+                        style: "width:calc(100% - 150px);min-height:" + Math.min(compatible.length * 20 + 6, 110) + "px;"
+                    }).attr('data-item', item.id).appendTo(row);
+
+                    compatible.forEach(function(g) {
+                        sel.append($("<option></option>").val(g.id).text(g.name + (g.haType === 'other' ? ' [mixed]' : '')));
+                    });
+                    membership.forEach(function(m) {
+                        if (m.item === item.id) { sel.find('option[value="' + m.group + '"]').prop('selected', true); }
+                    });
+                }
+
+                if (rendered === 0) {
+                    list.append($('<div/>', { style: "color:#888; padding:4px 0;" })
+                        .text('No items match the available groups’ HATypes.'));
+                }
+            }
+
             $("#node-input-thingType").trigger('change');
+            $("#node-input-eventHandler").change(renderThingGroups);
+            renderThingGroups();
 
             $('#info').click(function() {
                 let message = '<font size=+1>Included in</font><br><table style="border-collapse: separate;border-spacing: 10px;"><tr><th style="text-align: left;">Type</th><th style="text-align: left;">Name</th><th style="text-align: left;">Workspace</th></tr>';
@@ -248,15 +313,12 @@
                         }
                     }
 
-                    let groups = RED.nodes.filterNodes({type: "hal2Group"});
-                    for (let i in groups) {
-                        let group = RED.nodes.node(groups[i].id);
-                        for (let c in group.group) {
-                            if (group.group[c].thing == node.id) {
-                                let workspace = RED.nodes.workspace(group.z);
-                                message += '<tr><td><b>Group</b></td><td>'+group.name+'</td><td>'+workspace.label+'</td></tr>';
-                                break;
-                            }
+                    let eh = RED.nodes.node(node.eventHandler);
+                    let ehGroups = (eh && Array.isArray(eh.groups)) ? eh.groups : [];
+                    let myGroupIds = new Set((Array.isArray(node.groups) ? node.groups : []).map(m => m.group));
+                    for (let g of ehGroups) {
+                        if (myGroupIds.has(g.id)) {
+                            message += '<tr><td><b>Group</b></td><td>'+g.name+'</td><td>Event handler</td></tr>';
                         }
                     }
 
@@ -280,6 +342,16 @@
             var node = this;
 
             node.tags = ($("#node-input-tags").val() || '').split(',').map(t => t.trim()).filter(Boolean);
+
+            // Group membership — flatten the per-item multi-selects to [{item, group}]
+            node.groups = [];
+            $(".thing-group-select").each(function() {
+                var itemId = $(this).attr('data-item');
+                var selected = $(this).val() || [];
+                selected.forEach(function(groupId) {
+                    node.groups.push({ item: itemId, group: groupId });
+                });
+            });
 
             node.topicFilters = [];
             $('#thing-filter-list').editableList('items').each(function() {

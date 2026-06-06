@@ -70,17 +70,77 @@ function halGetThings(RED,filter) {
     return filteredThingsList;
 }
 
-function halGetGroups(RED) {
-    //get all groups and sort them alphabetically
-    var groupsList = RED.nodes.filterNodes({type: "hal2Group"});
-    debugger
+function halGetGroups(RED, eventHandlerId) {
+    // Groups live in the EventHandler registry (config node). For back-compat we also
+    // surface any legacy hal2Group nodes still in the flow (the runtime folds these in
+    // too, by node id), so existing Action/Event references keep resolving until
+    // tools/migrate-groups.js is run. Registry wins on id collision.
+    // Returns [{ id, name, haType, notes, ratelimit }] sorted by name.
+    var eh = eventHandlerId ? RED.nodes.node(eventHandlerId) : null;
+    var groupsList = (eh && Array.isArray(eh.groups)) ? eh.groups.slice() : [];
+
+    var seen = {};
+    for (var i in groupsList) { seen[groupsList[i].id] = true; }
+
+    var legacy = RED.nodes.filterNodes({type: "hal2Group"});
+    for (var l in legacy) {
+        var g = legacy[l];
+        if (seen[g.id]) { continue; }
+        if (eventHandlerId && g.eventHandler !== eventHandlerId) { continue; }
+        groupsList.push({ id: g.id, name: g.name, haType: 'other', notes: '', ratelimit: Number(g.ratelimit) || 0 });
+        seen[g.id] = true;
+    }
+
     groupsList.sort(function(a, b) {
-        if ((typeof a.name === 'undefined') || (typeof b.name === 'undefined')) { return; }
+        if ((typeof a.name === 'undefined') || (typeof b.name === 'undefined')) { return 0; }
         var textA = a.name.toUpperCase();
         var textB = b.name.toUpperCase();
         return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
     });
     return groupsList;
+}
+
+// Canonical HAType list, shared by ThingType items and group definitions.
+// `other` doubles as the "mixed/untyped" group mode (accepts any item).
+function halHaTypes() {
+    return [
+        { v: 'button',             t: 'Button' },
+        { v: 'switch',             t: 'Switch' },
+        { v: 'light',              t: 'Light' },
+        { v: 'dimmer',             t: 'Dimmer' },
+        { v: 'cover',              t: 'Cover / Blind / Shutter' },
+        { v: 'lock',               t: 'Lock' },
+        { v: 'fan',                t: 'Fan' },
+        { v: 'climate',            t: 'Climate / HVAC' },
+        { v: 'media_player',       t: 'Media player' },
+        { v: 'temperature',        t: 'Temperature sensor' },
+        { v: 'humidity',           t: 'Humidity sensor' },
+        { v: 'motion',             t: 'Motion sensor' },
+        { v: 'contact',            t: 'Contact sensor' },
+        { v: 'smoke',              t: 'Smoke sensor' },
+        { v: 'co2',                t: 'CO₂ sensor' },
+        { v: 'illuminance',        t: 'Illuminance sensor' },
+        { v: 'power',              t: 'Power / Energy sensor' },
+        { v: 'battery',            t: 'Battery sensor' },
+        { v: 'water leak',         t: 'Water leak sensor' },
+        { v: 'depth',              t: 'Depth sensor (mm)' },
+        { v: 'pressure',           t: 'Pressure sensor (hPa)' },
+        { v: 'ac mode',            t: 'AC mode (off/cool/heat/…)' },
+        { v: 'fan mode',           t: 'AC fan mode' },
+        { v: 'swing mode',         t: 'AC swing mode' },
+        { v: 'color',              t: 'Color (HSB)' },
+        { v: 'color temperature',  t: 'Color temperature' },
+        { v: 'presence',           t: 'Presence (home/away)' },
+        { v: 'room',               t: 'Room / Location' },
+        { v: 'scene',              t: 'Scene' },
+        { v: 'target temperature', t: 'Target temperature (setpoint)' },
+        { v: 'heater',             t: 'Heater' },
+        { v: 'circulation pump',   t: 'Circulation pump' },
+        { v: 'airjets',            t: 'Airjets' },
+        { v: 'binary_sensor',      t: 'Binary sensor (generic)' },
+        { v: 'sensor',             t: 'Sensor (generic)' },
+        { v: 'other',              t: 'Other / Mixed (any item type)' }
+    ];
 }
 
 function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {
