@@ -419,10 +419,45 @@
 
                     var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
                         .appendTo(rowType);
+
+                    // Families of the group's current members — the HAType list is
+                    // filtered so you can't switch a group to a type its members can't
+                    // handle. 'other' (mixed) is always allowed; an empty list (no
+                    // members) imposes no restriction.
+                    var memberFamilies = (function() {
+                        var fams = new Set();
+                        var gid = idProperty.val();
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== gid) { continue; }
+                                var ht = '';
+                                if (tt && Array.isArray(tt.items)) {
+                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                    if (it) { ht = it.haType || ''; }
+                                }
+                                fams.add(halHaTypeFamily(ht));
+                            }
+                        }
+                        return fams;
+                    })();
+
+                    var currentHaType = group.haType || 'other';
+                    var soleFamily = (memberFamilies.size === 1) ? [...memberFamilies][0] : null;
                     halHaTypes().forEach(function(h) {
-                        haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
+                        var allowed;
+                        if (memberFamilies.size === 0) { allowed = true; }
+                        else if (h.v === 'other') { allowed = true; }
+                        else { allowed = (soleFamily !== null) && (halHaTypeFamily(h.v) === soleFamily); }
+                        if (allowed || h.v === currentHaType) {
+                            haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
+                        }
                     });
-                    haTypeProperty.val(group.haType || 'other');
+                    haTypeProperty.val(currentHaType);
 
                     var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
                         .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);

@@ -235,8 +235,9 @@
                     container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
 
                     var row = $('<div/>').appendTo(container);
-                    var itemSel = $('<select/>', { class: "thing-group-item", style: "width:calc(50% - 6px); margin-right:8px;" }).appendTo(row);
-                    var groupSel = $('<select/>', { class: "thing-group-group", style: "width:calc(50% - 6px);" }).appendTo(row);
+                    var itemSel = $('<select/>', { class: "thing-group-item", style: "width:calc(50% - 14px); margin-right:4px;" }).appendTo(row);
+                    $('<i/>', { class: "fa fa-long-arrow-right", style: "width:16px; text-align:center; color:#888; vertical-align:middle;" }).appendTo(row);
+                    var groupSel = $('<select/>', { class: "thing-group-group", style: "width:calc(50% - 14px); margin-left:4px;" }).appendTo(row);
 
                     items.forEach(function(it) {
                         itemSel.append($("<option></option>").val(it.id)
