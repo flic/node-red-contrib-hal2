@@ -420,10 +420,15 @@
                     var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
                         .appendTo(rowType);
 
-                    // Families of the group's current members — the HAType list is
-                    // filtered so you can't switch a group to a type its members can't
-                    // handle. 'other' (mixed) is always allowed; an empty list (no
-                    // members) imposes no restriction.
+                    // Families present among the group's current members. The HAType
+                    // list is filtered so you can only pick a type that at least one
+                    // member belongs to (prevents switching e.g. a light group to
+                    // 'cover'). A mixed group surfaces the union of its members'
+                    // families — so a light+switch+dimmer group offers Switch, Light
+                    // and Dimmer. 'other' is always allowed and the current value is
+                    // always kept, so you can never get trapped. An empty group imposes
+                    // no restriction. Runtime ignores group haType (it only gates which
+                    // items are offered to new members), so this never orphans members.
                     var memberFamilies = (function() {
                         var fams = new Set();
                         var gid = idProperty.val();
@@ -447,12 +452,11 @@
                     })();
 
                     var currentHaType = group.haType || 'other';
-                    var soleFamily = (memberFamilies.size === 1) ? [...memberFamilies][0] : null;
                     halHaTypes().forEach(function(h) {
                         var allowed;
-                        if (memberFamilies.size === 0) { allowed = true; }
-                        else if (h.v === 'other') { allowed = true; }
-                        else { allowed = (soleFamily !== null) && (halHaTypeFamily(h.v) === soleFamily); }
+                        if (memberFamilies.size === 0) { allowed = true; }          // empty group: no restriction
+                        else if (h.v === 'other') { allowed = true; }               // 'other' accepts anything
+                        else { allowed = memberFamilies.has(halHaTypeFamily(h.v)); } // some member shares this family
                         if (allowed || h.v === currentHaType) {
                             haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
                         }
