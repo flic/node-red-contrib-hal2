@@ -379,10 +379,43 @@
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;vertical-align:top;", class: "fa fa-file" })
                         .appendTo(rowNotes).append(' Notes');
 
-                    var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 125px)", class: "node-config-eh-group-name-property", type: "text", placeholder: "Group name" })
+                    var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 160px)", class: "node-config-eh-group-name-property", type: "text", placeholder: "Group name" })
                         .appendTo(rowName).prop('required', true);
                     var idProperty = $('<input/>', { class: "node-config-eh-group-id-property", type: "hidden" })
                         .appendTo(rowName).val(group.id || halCreateId());
+
+                    var infoButton = $('<button type="button"/>', { style: "margin-left:5px;" }).appendTo(rowName);
+                    $('<i/>', { class: "fa fa-info-circle" }).appendTo(infoButton);
+                    infoButton.on('click', function(e) {
+                        e.preventDefault();
+                        var groupId = idProperty.val();
+                        var groupName = nameProperty.val() || groupId;
+                        var rows = '';
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== groupId) { continue; }
+                                var itemName = thing.groups[g].item;
+                                if (tt && Array.isArray(tt.items)) {
+                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                    if (it) { itemName = it.name; }
+                                }
+                                var ws = RED.nodes.workspace(thing.z);
+                                rows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + (ws ? ws.label : '') + '</td></tr>';
+                            }
+                        }
+                        var message = '<font size=+1>Members of ' + groupName + '</font><br>';
+                        if (rows) {
+                            message += '<table style="border-collapse:separate;border-spacing:10px;"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Workspace</th></tr>' + rows + '</table>';
+                        } else {
+                            message += '<br>No things are members of this group.';
+                        }
+                        RED.notify(message, { timeout: 10000 });
+                    });
 
                     var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
                         .appendTo(rowType);
