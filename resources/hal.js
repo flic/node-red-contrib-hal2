@@ -105,8 +105,8 @@ function halGetGroups(RED, eventHandlerId) {
 function halHaTypes() {
     return [
         { v: 'button',             t: 'Button' },
-        { v: 'switch',             t: 'Switch' },
-        { v: 'light',              t: 'Light' },
+        { v: 'switch',             t: 'Switch [On/Off]' },
+        { v: 'light',              t: 'Light [On/Off]' },
         { v: 'dimmer',             t: 'Dimmer' },
         { v: 'cover',              t: 'Cover / Blind / Shutter' },
         { v: 'lock',               t: 'Lock' },
@@ -141,6 +141,17 @@ function halHaTypes() {
         { v: 'sensor',             t: 'Sensor (generic)' },
         { v: 'other',              t: 'Other / Mixed (any item type)' }
     ];
+}
+
+// Group compatibility family for a HAType. Items can share a group only if their
+// families match (or the group is 'other'). Family defaults to the HAType itself
+// — i.e. exact match — except where two HATypes are genuinely the same function
+// AND command contract. The only such case today: switch ≡ light (boolean On/Off).
+// dimmer / cover / color temperature are all 0–100 but different functions, so they
+// stay distinct (singleton families).
+function halHaTypeFamily(haType) {
+    if (haType === 'switch' || haType === 'light') { return 'onoff'; }
+    return haType || '';
 }
 
 function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {

@@ -71,6 +71,13 @@ function deriveHaType(members) {
         const only = [...types][0];
         if (only) return only;       // homogeneous and known
     }
+    // Family-aware: switch ≡ light (On/Off). If all members share a family and none
+    // is unknown, keep a representative HAType instead of falling back to 'other'.
+    const family = (ht) => (ht === 'switch' || ht === 'light') ? 'onoff' : (ht || '');
+    const known = [...types].filter(Boolean);
+    if (known.length === types.size && new Set(known.map(family)).size === 1) {
+        return known[0];
+    }
     return 'other';                  // heterogeneous or unknown -> mixed
 }
 
