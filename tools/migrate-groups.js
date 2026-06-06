@@ -24,8 +24,9 @@
 
 'use strict';
 
-const fs   = require('fs');
-const path = require('path');
+const fs     = require('fs');
+const path   = require('path');
+const crypto = require('crypto');
 
 function fail(msg) {
     console.error('Error: ' + msg);
@@ -73,12 +74,55 @@ function deriveHaType(members) {
     return 'other';                  // heterogeneous or unknown -> mixed
 }
 
+function newId() {
+    return crypto.randomBytes(8).toString('hex');
+}
+
+// Mutate a node in place into a hal2Action that broadcasts to the group on input.
+// Keeps id/z/x/y/name/eventHandler so incoming wires (which target this id) survive.
+function toAction(node, groupId) {
+    const keep = { id: node.id, z: node.z, x: node.x, y: node.y, name: node.name, eventHandler: node.eventHandler };
+    for (const k of Object.keys(node)) delete node[k];
+    Object.assign(node, keep, {
+        type:       'hal2Action',
+        commandset: [{ category: 'hal2Group', thing: groupId, item: groupId, value: 'payload', type: 'msg', onchange: false }],
+        ratelimit:  0,
+        passthru:   false,
+        outputs:    0,
+        wires:      []
+    });
+}
+
+// Build a hal2Event that fires on any member change and forwards to `wires`.
+function makeEvent(id, z, x, y, name, eventHandler, groupId, wires) {
+    return {
+        id: id, type: 'hal2Event', z: z, eventHandler: eventHandler,
+        name: name, topic: '',
+        thing: groupId, typeSel: 'hal2Group', item: groupId,
+        operator: 'always', change: '0', compareValue: '', compareType: 'num',
+        outputValue: 'payload', outputType: 'state',
+        ratelimit: false, ratetype: 'all', rate: '1', rateUnits: 'hour',
+        delay: false, delayExtend: false, delayReset: false, delayValue: 5,
+        x: x, y: y, wires: (wires && wires.length) ? wires : [[]]
+    };
+}
+
+// Mutate a node in place into the hal2Event above, keeping its outgoing wires.
+function toEvent(node, groupId, wires) {
+    const keep = { id: node.id, z: node.z, x: node.x, y: node.y, name: node.name, eventHandler: node.eventHandler };
+    for (const k of Object.keys(node)) delete node[k];
+    Object.assign(node, makeEvent(keep.id, keep.z, keep.x, keep.y, keep.name, keep.eventHandler, groupId, wires));
+}
+
 const groupNodes = nodes.filter(n => n && n.type === 'hal2Group');
 if (groupNodes.length === 0) {
     console.log('No hal2Group nodes found — nothing to migrate.');
 }
 
 let migrated = 0, membershipsAdded = 0, warnings = 0;
+let convertedAction = 0, convertedEvent = 0;
+const dropIds   = new Set();   // pure registry groups to remove
+const extraNodes = [];         // new Event nodes for input+output groups
 
 for (const group of groupNodes) {
     const groupId  = group.id;
@@ -123,10 +167,39 @@ for (const group of groupNodes) {
             membershipsAdded += 1;
         }
     }
+
+    // 3) Decide what happens to the group node itself.
+    //    - Pure registry group (no wires): drop it; Action/Event nodes reference it by id.
+    //    - Input enabled: becomes an Action that broadcasts to the group (keeps id → incoming wires survive).
+    //    - Output enabled: becomes an Event that fires on any member change (keeps id + outgoing wires).
+    //    - Both: Action keeps the id (incoming wires); a new Event carries the outgoing wires.
+    const wiredInput  = group.input  === true || Number(group.inputs)  > 0;
+    const wiredOutput = group.output === true || Number(group.outputs) > 0;
+    const outWires    = Array.isArray(group.wires) ? group.wires : [];
+
+    if (!wiredInput && !wiredOutput) {
+        dropIds.add(groupId);
+    } else if (wiredInput && !wiredOutput) {
+        toAction(group, groupId);
+        convertedAction += 1;
+        console.log('    → wired input: replaced with Action node (same id)');
+    } else if (wiredOutput && !wiredInput) {
+        toEvent(group, groupId, outWires);
+        convertedEvent += 1;
+        console.log('    → wired output: replaced with Event node (same id, wires kept)');
+    } else {
+        extraNodes.push(makeEvent(newId(), group.z, group.x, group.y + 40,
+            (group.name || 'Group') + ' (event)', group.eventHandler, groupId, outWires));
+        toAction(group, groupId);
+        convertedAction += 1;
+        convertedEvent += 1;
+        console.log('    → wired input+output: Action keeps id, new Event carries the output wires');
+    }
 }
 
-// 3) Remove the hal2Group nodes (references to them are by id, now the group id).
-const remaining = nodes.filter(n => !(n && n.type === 'hal2Group'));
+// 4) Assemble: drop pure registry groups, keep converted (mutated) nodes, append new Events.
+let remaining = nodes.filter(n => !(n && dropIds.has(n.id)));
+remaining = remaining.concat(extraNodes);
 
 let output;
 if (Array.isArray(parsed)) {
@@ -139,7 +212,8 @@ try { fs.writeFileSync(outputPath, JSON.stringify(output, null, 4)); }
 catch (e) { fail('Cannot write ' + outputPath + ': ' + e.message); }
 
 console.log('');
-console.log('Migrated ' + migrated + ' group(s), ' + membershipsAdded + ' membership(s) added, ' +
-    groupNodes.length + ' hal2Group node(s) removed.');
+console.log('Migrated ' + migrated + ' group(s), ' + membershipsAdded + ' membership(s) added.');
+console.log('  ' + dropIds.size + ' pure registry group(s) removed, ' +
+    convertedAction + ' converted to Action, ' + convertedEvent + ' converted to Event.');
 if (warnings > 0) console.log('Completed with ' + warnings + ' warning(s) — review the output above.');
 console.log('Wrote: ' + outputPath);
