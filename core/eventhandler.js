@@ -3,6 +3,7 @@ const https           = require('https');
 const crypto          = require('crypto');
 const jose            = require('jose');
 const analyzePatterns = require('./analyzePatterns');
+const common          = require('../lib/common');
 
 console.log('[hal2EventHandler] module loaded, version check: ' + new Date().toISOString());
 
@@ -77,6 +78,7 @@ module.exports = function(RED) {
         this.maxlisteners   = config.maxlisteners;
         this.heartbeat      = config.heartbeat;
         this.items          = config.items;
+        this.groups         = config.groups || [];
         this.ingressLibrary = config.ingressLibrary || [];
         this.egressLibrary  = config.egressLibrary  || [];
 
@@ -281,6 +283,137 @@ module.exports = function(RED) {
             node.debug("Log event");
             this.emit("log_", payload);
         };
+
+        // ── Group engine ────────────────────────────────────────────────────────
+        // Groups are no longer separate nodes. Their identity (name, haType, notes,
+        // ratelimit) lives here on the EventHandler; membership lives per item on each
+        // hal2Thing (thing.groups = [{item, group}]). This engine resolves membership
+        // and wires, per group: a command listener that broadcasts to members, and
+        // update listeners that re-emit member changes under the group id (carrying the
+        // real member thing/item so event nodes get member context).
+        //
+        // Back-compat: legacy hal2Group nodes are folded in automatically (in memory)
+        // by reading their config — old flows keep working with no file changes and no
+        // manual step. tools/migrate-groups.js makes this permanent (and removes the
+        // dead nodes). The group's node id is reused as the group id throughout, so
+        // Action/Event references keep pointing at the same id either way.
+
+        node.groupWirings = [];
+
+        function commandCapableItem(item) {
+            const t = item && item.type;
+            return (t === 'both' || t === 'command' || t === 'loopback_both' || t === 'loopback_command');
+        }
+
+        // groupId -> { ratelimit, legacy } merged from the registry and any legacy
+        // hal2Group nodes belonging to this handler. The registry wins on collision
+        // (i.e. once a group has been migrated, its hal2Group node is ignored).
+        function buildGroupDefs() {
+            const defs = new Map();
+            for (const g of node.groups) {
+                if (g && g.id) defs.set(g.id, { ratelimit: Number(g.ratelimit) || 0, legacy: false });
+            }
+            RED.nodes.eachNode(function (cfg) {
+                if (cfg.type !== 'hal2Group' || cfg.eventHandler !== node.id) return;
+                if (defs.has(cfg.id)) return;
+                defs.set(cfg.id, { ratelimit: Number(cfg.ratelimit) || 0, legacy: true });
+            });
+            return defs;
+        }
+
+        function buildGroupMembers() {
+            // groupId -> [{ thing, item }]
+            const members = new Map();
+            const add = function (groupId, thing, item) {
+                if (!members.has(groupId)) members.set(groupId, []);
+                members.get(groupId).push({ thing: thing, item: item });
+            };
+            // New model: membership declared per item on each thing.
+            RED.nodes.eachNode(function (cfg) {
+                if (cfg.type !== 'hal2Thing') return;
+                const thing = RED.nodes.getNode(cfg.id);
+                if (!thing || !thing.eventHandler || thing.eventHandler.id !== node.id) return;
+                if (!Array.isArray(thing.groups)) return;
+                for (const m of thing.groups) {
+                    if (m && m.group) add(m.group, thing.id, m.item);
+                }
+            });
+            // Legacy model: hal2Group nodes (folded in memory, unless already migrated).
+            RED.nodes.eachNode(function (cfg) {
+                if (cfg.type !== 'hal2Group' || cfg.eventHandler !== node.id) return;
+                if (node.groups.some(g => g.id === cfg.id)) return;
+                const list = Array.isArray(cfg.group) ? cfg.group : [];
+                for (const m of list) {
+                    if (m && m.thing) add(cfg.id, m.thing, m.item);
+                }
+            });
+            return members;
+        }
+
+        function unwireGroups() {
+            for (const w of node.groupWirings) {
+                node.unsubscribe(w.event, w.id, w.listener);
+            }
+            node.groupWirings = [];
+        }
+
+        function wireGroups() {
+            unwireGroups();   // idempotent — safe to re-run on every flows:started
+            const members = buildGroupMembers();
+            const defs    = buildGroupDefs();
+            let legacyCount = 0;
+            for (const [groupId, def] of defs) {
+                const groupMembers = members.get(groupId) || [];
+                const ratelimit    = def.ratelimit;
+                if (def.legacy) legacyCount += 1;
+
+                // Command: broadcast to all command-capable members, rate limited.
+                // Reuses queueSend with a per-group context (it only reads
+                // ratelimit / eventHandler / status), so each group keeps its own pace.
+                const commandListener = function (itemid, payload) {
+                    const queue = [];
+                    for (const m of groupMembers) {
+                        const thing = RED.nodes.getNode(m.thing);
+                        if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) continue;
+                        const item = thing.thingType.items.find(it => it.id === m.item);
+                        if (!item || !commandCapableItem(item)) continue;
+                        queue.push({ thing: m.thing, item: m.item, payload: payload });
+                    }
+                    if (queue.length === 0) return;
+                    common.queueSend({ ratelimit: ratelimit, eventHandler: node, status: function () {} }, queue);
+                };
+                node.subscribe('command', groupId, commandListener);
+                node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener });
+
+                // Update: re-emit member changes under the group id, keeping the real
+                // member thing/item so event nodes can show which member changed.
+                const updateListener = function (thingtypeid, thingid, itemid, payload) {
+                    const isMember = groupMembers.some(m => m.thing === thingid && m.item === itemid);
+                    if (!isMember) return;
+                    node.emit('update_' + groupId, thingtypeid, thingid, itemid, payload);
+                };
+                const uniqueThings = [...new Set(groupMembers.map(m => m.thing))];
+                for (const t of uniqueThings) {
+                    node.subscribe('update', t, updateListener);
+                    node.groupWirings.push({ event: 'update', id: t, listener: updateListener });
+                }
+            }
+            node.debug('Group engine wired ' + defs.size + ' group(s)');
+            if (legacyCount > 0) {
+                node.warn('Group engine: auto-handling ' + legacyCount + ' legacy hal2Group node(s) in memory. ' +
+                    'Run tools/migrate-groups.js to make this permanent and remove the deprecated nodes.');
+            }
+        }
+
+        // Wire after every (re)start, once all things have registered so membership
+        // can be resolved. on() (not once) keeps groups correct across redeploys where
+        // this config node instance survives but member things changed.
+        RED.events.on('flows:started', wireGroups);
+
+        node.on('close', function () {
+            RED.events.removeListener('flows:started', wireGroups);
+            unwireGroups();
+        });
 
         // ── MCP ───────────────────────────────────────────────────────────────
 

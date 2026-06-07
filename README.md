@@ -31,6 +31,14 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ![Example logging](https://user-images.githubusercontent.com/400673/168665807-aa3aba8f-8b06-4292-bcad-7374e508f59a.png)
 
+## Groups
+
+Control several Things at once with **Groups**. A group's identity — name, HAType, and a rate limit — lives in a registry on the **Event handler** (*Groups* tab), while membership is set per Item on each Thing (the *Groups* section of the Thing editor: pick an Item, pick a group). A group can then be used as a target in an **Action** node (broadcast a command to every member, paced by the rate limit) or as a source in an **Event** node (fire when any member changes, carrying which Thing/Item actually changed). Each group in the registry has an **info button** that lists its current members.
+
+A group has a **HAType** that sets the command contract for its members. Compatibility is directional: `Switch` and `Light` are interchangeable (both are boolean On/Off), and a `Dimmer` item may also join an On/Off group (turning a dimmer off is well-defined) — but a switch or light cannot join a `Dimmer` group, since an On/Off device can't honour a 0–100 level. The Thing editor only offers compatible groups for each Item, and the Event handler only offers HATypes its existing members can all honour. For genuinely mixed groups there is an **Other** type that accepts any Item.
+
+Groups replace the old standalone `hal2Group` node. Existing flows keep working — the Event handler folds legacy group nodes in automatically — but you should run `node tools/migrate-groups.js <flows.json>` to make the move permanent and then remove the deprecated nodes. The migration preserves group ids, so existing Action/Event references keep resolving untouched.
+
 ## AI & external control
 
 Beyond local automation, hal2 can expose your devices to AI assistants and external systems. The **Event handler** can run a built-in [MCP](https://modelcontextprotocol.io) server, you can define your own AI tools as flows, and the **hal2Api** node offers a plain JSON gateway. All three share one tool catalog, so there is a single source of truth.
@@ -77,6 +85,7 @@ History powers two tools:
 
 ## Other recent additions
 
+- **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, with automatic migration.
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.
 - **Centralised ingress/egress functions** — define message-transform functions once on the Event handler and reuse them across thing types instead of copying them per type.
 - **Notes & tags** on Things and Items, plus automatically derived device **categories** — handy for organising devices and for disambiguation by the MCP and JSON API tools.

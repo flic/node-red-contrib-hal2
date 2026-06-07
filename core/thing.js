@@ -81,6 +81,7 @@ module.exports = function(RED) {
         this.notes = config.notes;
         this.topicPrefix = config.topicPrefix;
         this.attributes = config.attributes;
+        this.groups = config.groups || [];   // [{ item, group }] — group membership, resolved by the EventHandler group engine
 
         if (config.topicFilters && config.topicFilters.length > 0) {
             this.topicFilters    = config.topicFilters;

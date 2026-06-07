@@ -26,6 +26,10 @@
 </script>
 
 <script type="text/x-red" data-help-name="hal2Group">
+    <p><strong>⚠ Deprecated.</strong> Groups now live on the <i>Event handler</i> (Groups tab) and membership
+    is set per item on each <i>Thing</i>. Existing group nodes keep working during the transition — the
+    Event handler folds them in automatically — but you should run <code>tools/migrate-groups.js</code> on
+    your flows to make the move permanent, then delete these nodes.</p>
     <p>The Group node allows you to group multiple <i>Items</i> together, for use in <i>Event</i> or <i>Action</i> nodes or directly if input and/or output is enabled.</p>
     <li><strong>Name</strong>: Node name.</li> 
     <li><strong>Input</strong>: Send <code>msg.payload</code> as a command to all <i>Items</i> in the group.</li>
@@ -66,9 +70,9 @@
         outputs:0,
         icon: "group.png",
         label: function() {
-            return this.name||"group";
+            return this.name||"group (deprecated)";
         },
-        paletteLabel: "group",
+        paletteLabel: "group (deprecated)",
         oneditprepare: function () {
             //get all thing nodes and sort them alphabetically
             var thingsList = halGetThings(RED);

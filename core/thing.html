@@ -40,6 +40,11 @@
         <label><i class="fa fa-tags"></i> Attributes</label>
         <ol id="attributes-list"></ol>
     </div>
+    <div class="form-row" id="thing-groups" style="width:100%">
+        <label><i class="fa fa-object-group"></i> Groups</label>
+        <div id="thing-groups-header" style="width:100%; padding-right:28px; box-sizing:border-box; color:#888; font-size:0.85em; margin-bottom:4px; white-space:nowrap;"><span style="display:inline-block; width:calc(50% - 14px); margin-right:4px;">Item</span><span style="display:inline-block; width:16px;"></span><span style="display:inline-block; width:calc(50% - 14px); margin-left:4px;">Group</span></div>
+        <ol id="thing-groups-container"></ol>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Thing">
@@ -87,6 +92,7 @@
             topicPrefix:        { value: "" },
             notes:              {},
             tags:               { value: '' },
+            groups:             { value: [] }, //[{ item, group }] group membership
             outputs:            { value: 0 } //Store if outputs are enabled
         },
         inputs: 1,
@@ -209,6 +215,69 @@
                 }
             });
 
+            // ── Group membership ──────────────────────────────────────────────
+            // Vertical editableList: each row is one membership = an item paired with
+            // a compatible group. "Add group" appends a row. The group dropdown is
+            // filtered to groups whose family matches the chosen item (or 'other').
+            function thingGroupItems() {
+                var tt = RED.nodes.node($("#node-input-thingType").val());
+                return (tt && Array.isArray(tt.items)) ? tt.items.filter(function(it) { return it.id !== '1'; }) : [];
+            }
+            function thingGroupGroups() {
+                var eh = RED.nodes.node($("#node-input-eventHandler").val());
+                return (eh && Array.isArray(eh.groups)) ? eh.groups : [];
+            }
+
+            $("#thing-groups-container").editableList({
+                addItem: function(container, i, opt) {
+                    var membership = opt || {};
+                    var items = thingGroupItems();
+                    var groups = thingGroupGroups();
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    var row = $('<div/>').appendTo(container);
+                    var itemSel = $('<select/>', { class: "thing-group-item", style: "width:calc(50% - 14px); margin-right:4px;" }).appendTo(row);
+                    $('<i/>', { class: "fa fa-long-arrow-right", style: "width:16px; text-align:center; color:#888; vertical-align:middle;" }).appendTo(row);
+                    var groupSel = $('<select/>', { class: "thing-group-group", style: "width:calc(50% - 14px); margin-left:4px;" }).appendTo(row);
+
+                    items.forEach(function(it) {
+                        itemSel.append($("<option></option>").val(it.id)
+                            .text(it.name + (it.haType ? ' (' + it.haType + ')' : '')));
+                    });
+
+                    function repopulateGroups() {
+                        var it = items.find(function(x) { return x.id === itemSel.val(); });
+                        var itemHaType = it ? (it.haType || '') : '';
+                        var prev = groupSel.val();
+                        groupSel.children().remove();
+                        var compatible = groups.filter(function(g) {
+                            return halGroupAccepts(g.haType, itemHaType);
+                        });
+                        if (compatible.length === 0) {
+                            groupSel.append($("<option></option>").val('').text('— no compatible group —'));
+                            return;
+                        }
+                        compatible.forEach(function(g) {
+                            groupSel.append($("<option></option>").val(g.id)
+                                .text(g.name + (g.haType === 'other' ? ' [mixed]' : '')));
+                        });
+                        if (prev) { groupSel.val(prev); }
+                    }
+                    itemSel.change(repopulateGroups);
+
+                    if (membership.item) { itemSel.val(membership.item); }
+                    repopulateGroups();
+                    if (membership.group) { groupSel.val(membership.group); }
+                },
+                removable: true,
+                sortable: false,
+                addButton: "Add group"
+            });
+
+            (Array.isArray(node.groups) ? node.groups : []).forEach(function(m) {
+                $("#thing-groups-container").editableList('addItem', m);
+            });
+
             $("#node-input-thingType").trigger('change');
 
             $('#info').click(function() {
@@ -248,15 +317,12 @@
                         }
                     }
 
-                    let groups = RED.nodes.filterNodes({type: "hal2Group"});
-                    for (let i in groups) {
-                        let group = RED.nodes.node(groups[i].id);
-                        for (let c in group.group) {
-                            if (group.group[c].thing == node.id) {
-                                let workspace = RED.nodes.workspace(group.z);
-                                message += '<tr><td><b>Group</b></td><td>'+group.name+'</td><td>'+workspace.label+'</td></tr>';
-                                break;
-                            }
+                    let eh = RED.nodes.node(node.eventHandler);
+                    let ehGroups = (eh && Array.isArray(eh.groups)) ? eh.groups : [];
+                    let myGroupIds = new Set((Array.isArray(node.groups) ? node.groups : []).map(m => m.group));
+                    for (let g of ehGroups) {
+                        if (myGroupIds.has(g.id)) {
+                            message += '<tr><td><b>Group</b></td><td>'+g.name+'</td><td>Event handler</td></tr>';
                         }
                     }
 
@@ -280,6 +346,17 @@
             var node = this;
 
             node.tags = ($("#node-input-tags").val() || '').split(',').map(t => t.trim()).filter(Boolean);
+
+            // Group membership — one {item, group} per editableList row
+            node.groups = [];
+            $("#thing-groups-container").editableList('items').each(function() {
+                var r = $(this);
+                var item  = r.find('.thing-group-item').val();
+                var group = r.find('.thing-group-group').val();
+                if (item && group) {
+                    node.groups.push({ item: item, group: group });
+                }
+            });
 
             node.topicFilters = [];
             $('#thing-filter-list').editableList('items').each(function() {

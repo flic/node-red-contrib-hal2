@@ -36,6 +36,19 @@
             </div>
         </div>
 
+        <!-- Groups tab -->
+        <div id="hal2eh-tab-groups" style="display:none">
+            <div class="form-row">
+                <p>Groups let you control and observe several Things at once. Membership is set per item on each
+                Thing; a group's identity lives here. Pick a <b>HAType</b> to keep a group homogeneous — only
+                items of that type can join. Choose <b>Other / Mixed</b> for a free-form group that accepts any
+                item; then it is your responsibility that the members can handle the broadcast command.</p>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-groups-list-items"></ol>
+            </div>
+        </div>
+
         <!-- History tab -->
         <div id="hal2eh-tab-history" style="display:none">
             <div class="form-row">
@@ -211,6 +224,7 @@
             checkHeartbeat:    { value: false },
             heartbeat:         { value: 3600 },
             items:             { value: [], required: false },
+            groups:            { value: [], required: false },
             // History
             historyEnabled:        { value: false },
             historyDbPath:         { value: '' },
@@ -253,6 +267,7 @@
                 }
             });
             tabs.addTab({ id: 'hal2eh-tab-general',   label: 'General' });
+            tabs.addTab({ id: 'hal2eh-tab-groups',    label: 'Groups' });
             tabs.addTab({ id: 'hal2eh-tab-history',   label: 'History' });
             tabs.addTab({ id: 'hal2eh-tab-mcp',       label: 'MCP' });
             tabs.addTab({ id: 'hal2eh-tab-libraries', label: 'Shared Functions' });
@@ -325,6 +340,145 @@
                     $("#node-config-eventhandler-list-items").editableList('addItem', node.items[d]);
                 }
             }
+
+            // ── Groups editableList ───────────────────────────────────────────
+            $("#node-config-eh-groups-list-items").editableList({
+                addItem: function(container, i, opt) {
+                    var group = opt || {};
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    var rowName    = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
+                    var rowType    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    var rowNotes   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+
+                    var expandButton = $('<span/>', { style: "margin-left:5px; margin-right:10px" })
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        } else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                        rowDetails.change();
+                    });
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") { rowDetails.show(); }
+                        else { rowDetails.hide(); }
+                    });
+
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;", class: "fa fa-object-group" })
+                        .appendTo(rowName).append(' Group');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-bookmark" })
+                        .appendTo(rowType).append(' HAType');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-clock-o" })
+                        .appendTo(rowRate).append(' Rate limit');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;vertical-align:top;", class: "fa fa-file" })
+                        .appendTo(rowNotes).append(' Notes');
+
+                    var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 160px)", class: "node-config-eh-group-name-property", type: "text", placeholder: "Group name" })
+                        .appendTo(rowName).prop('required', true);
+                    var idProperty = $('<input/>', { class: "node-config-eh-group-id-property", type: "hidden" })
+                        .appendTo(rowName).val(group.id || halCreateId());
+
+                    var infoButton = $('<button type="button"/>', { style: "margin-left:5px;" }).appendTo(rowName);
+                    $('<i/>', { class: "fa fa-info-circle" }).appendTo(infoButton);
+                    infoButton.on('click', function(e) {
+                        e.preventDefault();
+                        var groupId = idProperty.val();
+                        var groupName = nameProperty.val() || groupId;
+                        var rows = '';
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== groupId) { continue; }
+                                var itemName = thing.groups[g].item;
+                                if (tt && Array.isArray(tt.items)) {
+                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                    if (it) { itemName = it.name; }
+                                }
+                                var ws = RED.nodes.workspace(thing.z);
+                                rows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + (ws ? ws.label : '') + '</td></tr>';
+                            }
+                        }
+                        var message = '<font size=+1>Members of ' + groupName + '</font><br>';
+                        if (rows) {
+                            message += '<table style="border-collapse:separate;border-spacing:10px;"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Workspace</th></tr>' + rows + '</table>';
+                        } else {
+                            message += '<br>No things are members of this group.';
+                        }
+                        RED.notify(message, { timeout: 10000 });
+                    });
+
+                    var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
+                        .appendTo(rowType);
+
+                    // Item HATypes of the group's current members. A candidate group
+                    // type is offered only if EVERY member can honour it (halGroupAccepts),
+                    // which is directional: a switch+light+dimmer group offers Switch/Light
+                    // (the dimmers can do on/off) but NOT Dimmer (the switches can't be
+                    // dimmed). 'other' is always allowed and the current value is always
+                    // kept, so you can never get trapped; an empty group imposes no
+                    // restriction. Runtime ignores group haType (it only gates which items
+                    // are offered to new members), so this never orphans members.
+                    var memberHaTypes = (function() {
+                        var list = [];
+                        var gid = idProperty.val();
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== gid) { continue; }
+                                var ht = '';
+                                if (tt && Array.isArray(tt.items)) {
+                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                    if (it) { ht = it.haType || ''; }
+                                }
+                                list.push(ht);
+                            }
+                        }
+                        return list;
+                    })();
+
+                    var currentHaType = group.haType || 'other';
+                    halHaTypes().forEach(function(h) {
+                        var allowed;
+                        if (memberHaTypes.length === 0) { allowed = true; }   // empty group: no restriction
+                        else if (h.v === 'other') { allowed = true; }         // 'other' accepts anything
+                        else { allowed = memberHaTypes.every(function(ht) { return halGroupAccepts(h.v, ht); }); }
+                        if (allowed || h.v === currentHaType) {
+                            haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
+                        }
+                    });
+                    haTypeProperty.val(currentHaType);
+
+                    var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
+                        .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);
+                    $('<span/>', { style: "margin-left:6px;color:#888;" }).text('ms between member commands').appendTo(rowRate);
+
+                    var notesProperty = $('<textarea/>', { style: "width:calc(100% - 125px);background-color:#ffe;", class: "node-config-eh-group-notes-property" })
+                        .appendTo(rowNotes).val(group.notes || '');
+
+                    if (group.name) { nameProperty.val(group.name); }
+                },
+                removable: true,
+                sortable:  true,
+                addButton: "Group"
+            });
+
+            (node.groups || []).forEach(function(g) {
+                $("#node-config-eh-groups-list-items").editableList('addItem', g);
+            });
 
             // ── History toggle ────────────────────────────────────────────────
             function toggleHistory() {
@@ -438,6 +592,22 @@
                         name: item.find(".node-config-eventhandler-item-name-property").val(),
                         id:   item.find(".node-config-eventhandler-item-id-property").val(),
                         unit: item.find(".node-config-eventhandler-item-unit-property").val()
+                    });
+                });
+
+            node.groups = [];
+            $("#node-config-eh-groups-list-items")
+                .editableList('items')
+                .each(function () {
+                    var item = $(this);
+                    var name = (item.find(".node-config-eh-group-name-property").val() || '').trim();
+                    if (!name) { return; }
+                    node.groups.push({
+                        id:        item.find(".node-config-eh-group-id-property").val(),
+                        name:      name,
+                        haType:    item.find(".node-config-eh-group-hatype-property").val(),
+                        ratelimit: Number(item.find(".node-config-eh-group-ratelimit-property").val()) || 0,
+                        notes:     item.find(".node-config-eh-group-notes-property").val() || ''
                     });
                 });
 

@@ -161,7 +161,9 @@ module.exports = function(RED) {
 
         if (node.eventHandler) {
             node.listener = function(thingtypeid, thingid, itemid, event) {
-                if (itemid != node.item) { return; }
+                // For group sources the engine re-emits with the real member item id,
+                // so the item filter is bypassed — any member change triggers the event.
+                if (node.typeSel != 'hal2Group' && itemid != node.item) { return; }
                 if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
                 if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){
