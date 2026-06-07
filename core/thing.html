@@ -247,11 +247,11 @@
 
                     function repopulateGroups() {
                         var it = items.find(function(x) { return x.id === itemSel.val(); });
-                        var fam = halHaTypeFamily(it ? (it.haType || '') : '');
+                        var itemHaType = it ? (it.haType || '') : '';
                         var prev = groupSel.val();
                         groupSel.children().remove();
                         var compatible = groups.filter(function(g) {
-                            return g.haType === 'other' || (g.haType && halHaTypeFamily(g.haType) === fam);
+                            return halGroupAccepts(g.haType, itemHaType);
                         });
                         if (compatible.length === 0) {
                             groupSel.append($("<option></option>").val('').text('— no compatible group —'));

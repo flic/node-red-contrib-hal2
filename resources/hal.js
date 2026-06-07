@@ -154,6 +154,25 @@ function halHaTypeFamily(haType) {
     return haType || '';
 }
 
+// Can an item of `itemHaType` be a member of a group whose type is `groupHaType`?
+// Compatibility is DIRECTIONAL — the member must be able to honour the group's
+// command contract:
+//   - an 'other' (mixed) group accepts anything;
+//   - an untyped item ('') is a wildcard (membership is the user's responsibility);
+//   - otherwise the families must match (switch ≡ light = On/Off), EXCEPT that a
+//     dimmable item (dimmer family) may also join an On/Off group — turning a dimmer
+//     off is well-defined. The reverse does NOT hold: a switch/light cannot join a
+//     Dimmer group, because an On/Off device can't honour a 0–100 level.
+function halGroupAccepts(groupHaType, itemHaType) {
+    if (groupHaType === 'other') { return true; }
+    if (!itemHaType) { return true; }
+    var gFam = halHaTypeFamily(groupHaType);
+    var iFam = halHaTypeFamily(itemHaType);
+    if (iFam === gFam) { return true; }
+    if (gFam === 'onoff' && iFam === 'dimmer') { return true; }
+    return false;
+}
+
 function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {
     //get all Thingtypes and sort them alphabetically
     var thingTypeId = [];

@@ -420,17 +420,16 @@
                     var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
                         .appendTo(rowType);
 
-                    // Families present among the group's current members. The HAType
-                    // list is filtered so you can only pick a type that at least one
-                    // member belongs to (prevents switching e.g. a light group to
-                    // 'cover'). A mixed group surfaces the union of its members'
-                    // families — so a light+switch+dimmer group offers Switch, Light
-                    // and Dimmer. 'other' is always allowed and the current value is
-                    // always kept, so you can never get trapped. An empty group imposes
-                    // no restriction. Runtime ignores group haType (it only gates which
-                    // items are offered to new members), so this never orphans members.
-                    var memberFamilies = (function() {
-                        var fams = new Set();
+                    // Item HATypes of the group's current members. A candidate group
+                    // type is offered only if EVERY member can honour it (halGroupAccepts),
+                    // which is directional: a switch+light+dimmer group offers Switch/Light
+                    // (the dimmers can do on/off) but NOT Dimmer (the switches can't be
+                    // dimmed). 'other' is always allowed and the current value is always
+                    // kept, so you can never get trapped; an empty group imposes no
+                    // restriction. Runtime ignores group haType (it only gates which items
+                    // are offered to new members), so this never orphans members.
+                    var memberHaTypes = (function() {
+                        var list = [];
                         var gid = idProperty.val();
                         var things = RED.nodes.filterNodes({ type: "hal2Thing" });
                         for (var t in things) {
@@ -445,18 +444,18 @@
                                     var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
                                     if (it) { ht = it.haType || ''; }
                                 }
-                                fams.add(halHaTypeFamily(ht));
+                                list.push(ht);
                             }
                         }
-                        return fams;
+                        return list;
                     })();
 
                     var currentHaType = group.haType || 'other';
                     halHaTypes().forEach(function(h) {
                         var allowed;
-                        if (memberFamilies.size === 0) { allowed = true; }          // empty group: no restriction
-                        else if (h.v === 'other') { allowed = true; }               // 'other' accepts anything
-                        else { allowed = memberFamilies.has(halHaTypeFamily(h.v)); } // some member shares this family
+                        if (memberHaTypes.length === 0) { allowed = true; }   // empty group: no restriction
+                        else if (h.v === 'other') { allowed = true; }         // 'other' accepts anything
+                        else { allowed = memberHaTypes.every(function(ht) { return halGroupAccepts(h.v, ht); }); }
                         if (allowed || h.v === currentHaType) {
                             haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
                         }
