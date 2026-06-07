@@ -259,7 +259,7 @@
                         }
                         compatible.forEach(function(g) {
                             groupSel.append($("<option></option>").val(g.id)
-                                .text(g.name + (g.haType === 'other' ? ' [mixed]' : '')));
+                                .text(g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')'));
                         });
                         if (prev) { groupSel.val(prev); }
                     }
