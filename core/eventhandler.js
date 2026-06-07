@@ -77,7 +77,6 @@ module.exports = function(RED) {
         this.contextStore   = config.contextStore;
         this.maxlisteners   = config.maxlisteners;
         this.heartbeat      = config.heartbeat;
-        this.items          = config.items;
         this.groups         = config.groups || [];
         this.ingressLibrary = config.ingressLibrary || [];
         this.egressLibrary  = config.egressLibrary  || [];

@@ -31,9 +31,6 @@
                 <label for="node-config-input-heartbeat" style="width:150px"><i class="fa fa-heartbeat"></i> Heartbeat interval</label>
                 <input type="number" id="node-config-input-heartbeat" style="width:80px" min="1" value="60"> seconds
             </div>
-            <div class="form-row">
-                <ol id="node-config-eventhandler-list-items"></ol>
-            </div>
         </div>
 
         <!-- Groups tab -->
@@ -223,7 +220,6 @@
             maxlisteners:      { value: "50" },
             checkHeartbeat:    { value: false },
             heartbeat:         { value: 3600 },
-            items:             { value: [], required: false },
             groups:            { value: [], required: false },
             // History
             historyEnabled:        { value: false },
@@ -280,65 +276,6 @@
             }
             if (node.contextStore) {
                 $("#node-config-input-contextStore").val(node.contextStore).trigger("change");
-            }
-
-            // ── Items editableList ────────────────────────────────────────────
-            $("#node-config-eventhandler-list-items").editableList({
-                addItem: function(container, i, opt) {
-                    var item = opt;
-                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
-
-                    var rowName    = $('<div/>').appendTo(container);
-                    var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
-                    var rowUnit    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
-
-                    var expandButton = $('<span/>', { style: "margin-left:5px; margin-right:10px" })
-                        .html('<i class="fa fa-angle-right"></i>')
-                        .appendTo(rowName);
-                    expandButton.click(function(e) {
-                        e.preventDefault();
-                        if (this.firstElementChild.className === "fa fa-angle-right") {
-                            this.firstElementChild.className = "fa fa-angle-down";
-                        } else {
-                            this.firstElementChild.className = "fa fa-angle-right";
-                        }
-                        rowDetails.change();
-                    });
-                    rowDetails.change(function () {
-                        if (expandButton.children()[0].className === "fa fa-angle-down") {
-                            rowDetails.show();
-                        } else {
-                            rowDetails.hide();
-                        }
-                    });
-
-                    $('<div/>', { style: "display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;", class: "fa fa-tag" })
-                        .appendTo(rowName).append(' Item');
-                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-left:25px;padding-right:10px;box-sizing:border-box;", class: "fa fa-file" })
-                        .appendTo(rowUnit).append(' Unit');
-
-                    var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 125px)", class: "node-config-eventhandler-item-name-property", type: "text" })
-                        .appendTo(rowName).prop('required', true);
-                    var idProperty = $('<input/>', { class: "node-config-eventhandler-item-id-property", type: "hidden" })
-                        .appendTo(rowName).val(halCreateId());
-                    var unitProperty = $('<input/>', { style: "width:calc(100% - 125px)", class: "node-config-eventhandler-item-unit-property", type: "text" })
-                        .appendTo(rowUnit);
-
-                    if (item && Object.keys(item).length !== 0) {
-                        nameProperty.val(item.name);
-                        idProperty.val(item.id);
-                        unitProperty.val(item.unit);
-                    }
-                },
-                removable: true,
-                sortable:  true,
-                addButton: "Item"
-            });
-
-            if (node.items) {
-                for (var d in node.items) {
-                    $("#node-config-eventhandler-list-items").editableList('addItem', node.items[d]);
-                }
             }
 
             // ── Groups editableList ───────────────────────────────────────────
@@ -582,18 +519,6 @@
             var node = this;
             node.mcpEnabled        = $('#node-config-input-mcpEnabled').is(':checked');
             node.adminToolsEnabled = $('#node-config-input-adminToolsEnabled').is(':checked');
-
-            node.items = [];
-            $("#node-config-eventhandler-list-items")
-                .editableList('items')
-                .each(function () {
-                    var item = $(this);
-                    node.items.push({
-                        name: item.find(".node-config-eventhandler-item-name-property").val(),
-                        id:   item.find(".node-config-eventhandler-item-id-property").val(),
-                        unit: item.find(".node-config-eventhandler-item-unit-property").val()
-                    });
-                });
 
             node.groups = [];
             $("#node-config-eh-groups-list-items")
