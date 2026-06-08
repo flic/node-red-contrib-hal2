@@ -1427,9 +1427,14 @@ module.exports = function(RED) {
                 if (method === 'initialize') {
                     node.status({ fill: 'green', shape: 'dot', text: 'connected' });
                     res.set('Cache-Control', 'no-store');
+                    // Spike: signal Streamable HTTP so the client may open a GET SSE stream.
+                    const sessionId = crypto.randomBytes(16).toString('hex');
+                    res.set('Mcp-Session-Id', sessionId);
+                    node.log('MCP initialize, issued session=' + sessionId +
+                             ', client protocolVersion=' + (params.protocolVersion || 'none'));
                     return respond({
-                        protocolVersion : '2024-11-05',
-                        capabilities    : { tools: {} },
+                        protocolVersion : params.protocolVersion || '2024-11-05',
+                        capabilities    : { tools: { listChanged: true } },
                         serverInfo      : { name: mcpServerName, version: '1.0.0' },
                         instructions    : (config.locationName ? 'This MCP server controls devices at location: ' + config.locationName + '. ' : '') +
                                           'Always call the appropriate tool to fetch live data — never rely on ' +
@@ -1472,6 +1477,36 @@ module.exports = function(RED) {
                 }
 
                 return rpcErr(-32601, 'Unknown method: ' + (method || 'null'));
+            });
+
+            // ── MCP: GET /mcp (spike) ──────────────────────────────────────────
+            // Additive SSE channel. Measures only whether the client opens and
+            // holds a GET SSE stream. Sends no notifications yet. Does not touch
+            // the POST path above.
+
+            node.log('MCP registering route: GET ' + mcpPrefix + '/mcp (SSE spike)');
+            RED.httpNode.get(mcpPrefix + '/mcp', async (req, res) => {
+                const claims = await requireBearer(req, res);
+                if (!claims) return;
+
+                const clientSession = req.get('Mcp-Session-Id') || 'none';
+                const lastEventId   = req.get('Last-Event-ID')  || 'none';
+                node.log('MCP GET SSE stream OPENED, client session=' + clientSession +
+                         ', Last-Event-ID=' + lastEventId);
+
+                res.set('Content-Type',  'text/event-stream');
+                res.set('Cache-Control', 'no-store');
+                res.set('Connection',    'keep-alive');
+                res.flushHeaders();
+
+                const keepalive = setInterval(() => {
+                    try { res.write(': ping\n\n'); } catch (e) { /* ignore */ }
+                }, 25000);
+
+                req.on('close', () => {
+                    clearInterval(keepalive);
+                    node.log('MCP GET SSE stream CLOSED, client session=' + clientSession);
+                });
             });
 
             node.status({ fill: 'green', shape: 'dot', text: 'ready' });
