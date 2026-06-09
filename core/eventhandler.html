@@ -327,7 +327,9 @@
                         e.preventDefault();
                         var groupId = idProperty.val();
                         var groupName = nameProperty.val() || groupId;
-                        var rows = '';
+
+                        // Members — Things whose items reference this group.
+                        var memberRows = '';
                         var things = RED.nodes.filterNodes({ type: "hal2Thing" });
                         for (var t in things) {
                             var thing = RED.nodes.node(things[t].id);
@@ -341,17 +343,53 @@
                                     var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
                                     if (it) { itemName = it.name; }
                                 }
-                                var ws = RED.nodes.workspace(thing.z);
-                                rows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + (ws ? ws.label : '') + '</td></tr>';
+                                var mws = RED.nodes.workspace(thing.z);
+                                memberRows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + (mws ? mws.label : '') + '</td></tr>';
                             }
                         }
-                        var message = '<font size=+1>Members of ' + groupName + '</font><br>';
-                        if (rows) {
-                            message += '<table style="border-collapse:separate;border-spacing:10px;"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Workspace</th></tr>' + rows + '</table>';
+
+                        // Used in — Action/Event nodes that reference this group by id.
+                        var usageRows = '';
+                        try {
+                            var actions = RED.nodes.filterNodes({ type: "hal2Action" });
+                            for (var ai in actions) {
+                                var action = RED.nodes.node(actions[ai].id);
+                                for (var c in action.commandset) {
+                                    if (action.commandset[c].category === 'hal2Group' && action.commandset[c].thing === groupId) {
+                                        var aws = RED.nodes.workspace(action.z);
+                                        usageRows += '<tr><td><b>Action</b></td><td>' + action.name + '</td><td>' + (aws ? aws.label : '') + '</td></tr>';
+                                        break;
+                                    }
+                                }
+                            }
+                            var events = RED.nodes.filterNodes({ type: "hal2Event" });
+                            for (var ei in events) {
+                                var event = RED.nodes.node(events[ei].id);
+                                if (event.typeSel === 'hal2Group' && event.thing === groupId) {
+                                    var ews = RED.nodes.workspace(event.z);
+                                    usageRows += '<tr><td><b>Event</b></td><td>' + event.name + '</td><td>' + (ews ? ews.label : '') + '</td></tr>';
+                                }
+                            }
+                        } catch (err) { console.log('Error: ' + err.message); }
+
+                        var tableStyle = 'border-collapse:separate;border-spacing:10px;';
+                        var message = '<font size=+1>Group ' + groupName + '</font>';
+
+                        message += '<br><b>Members</b>';
+                        if (memberRows) {
+                            message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Workspace</th></tr>' + memberRows + '</table>';
                         } else {
-                            message += '<br>No things are members of this group.';
+                            message += '<br>No things are members of this group.<br>';
                         }
-                        RED.notify(message, { timeout: 10000 });
+
+                        message += '<br><b>Used in</b>';
+                        if (usageRows) {
+                            message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">Type</th><th style="text-align:left;">Name</th><th style="text-align:left;">Workspace</th></tr>' + usageRows + '</table>';
+                        } else {
+                            message += '<br>Not referenced by any Action or Event.';
+                        }
+
+                        RED.notify(message, { timeout: 15000 });
                     });
 
                     var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
