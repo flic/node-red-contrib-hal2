@@ -104,6 +104,11 @@ module.exports = function(RED) {
         node.heartbeat      = nodeContext.get("heartbeat",node.thingType.contextStore) || {};
         node.last_change    = nodeContext.get("last_change",node.thingType.contextStore) || {};
         node.hbTimestamp    = nodeContext.get("hbTimestamp",node.thingType.contextStore) || 0;
+        // Machine-managed, read-only metadata (key/value facts an integration writes in via the
+        // reserved <prefix>/_meta channel). Persisted exactly like state so it survives restarts.
+        // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
+        node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
+        node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
 
         function checkTimestamp() {
@@ -161,6 +166,11 @@ module.exports = function(RED) {
             if (node.topicFilters.length > 0) {
                 if (!applyFilters(msg, node.topicFilters, node.topicFilterMode)) { return; }
             }
+
+            // Reserved metadata channel: <prefix>/_meta (bulk replace) or <prefix>/_meta/<key>.
+            // Handled before items so it never runs as a normal state update.
+            var metaMatch = String(msg.topic || '').match(/(?:^|\/)_meta(?:\/([^/]+))?$/);
+            if (metaMatch) { node.updateMetadata(metaMatch[1], msg.payload); return; }
 
             if (!node.thingType.items) {
                 node.debug("No items configured. Dropping message.");
@@ -303,6 +313,51 @@ module.exports = function(RED) {
             node.eventHandler.publishLog(eventmsg);
             node.showState();            
         }        
+
+        // Update the machine-managed metadata bag. Technology-neutral: any integration writes
+        // <prefix>/_meta/<key> to set/remove a key, or <prefix>/_meta with an object to replace all.
+        //  - key given, non-empty payload      -> set metadata[key]
+        //  - key given, empty/null/'' payload  -> remove metadata[key]   (clears stale values)
+        //  - no key, object payload            -> replace the whole set  (prunes stale keys)
+        //  - no key, empty payload             -> clear all metadata
+        node.updateMetadata = function (key, payload) {
+            var changed = false;
+            var now = Date.now();
+            var isEmpty = (payload === undefined || payload === null || payload === '');
+            if (typeof key === 'undefined') {
+                if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+                    node.metadata = Object.assign({}, payload);
+                    node.metadataLastChange = {};
+                    for (var k in node.metadata) { node.metadataLastChange[k] = now; }
+                    changed = true;
+                } else if (isEmpty) {
+                    node.metadata = {};
+                    node.metadataLastChange = {};
+                    changed = true;
+                } else {
+                    node.warn("hal2 metadata: bulk '_meta' expects an object payload");
+                    return;
+                }
+            } else if (isEmpty) {
+                if (Object.prototype.hasOwnProperty.call(node.metadata, key)) {
+                    delete node.metadata[key];
+                    delete node.metadataLastChange[key];
+                    changed = true;
+                }
+            } else {
+                if (node.metadata[key] !== payload) {
+                    node.metadata[key] = payload;
+                    node.metadataLastChange[key] = now;
+                    changed = true;
+                }
+            }
+            if (!changed) { return; }
+            nodeContext.set("metadata", node.metadata, node.thingType.contextStore);
+            nodeContext.set("metadataLastChange", node.metadataLastChange, node.thingType.contextStore);
+            node.debug("Metadata updated (" + (typeof key === 'undefined' ? '*replace*' : key) + ")");
+        };
+
+        node.getMetadata = function () { return node.metadata || {}; };
 
         node.showState = function () {
             var statusMsg = [];
@@ -461,4 +516,15 @@ module.exports = function(RED) {
         checkTimestamp();
     }
     RED.nodes.registerType("hal2Thing",hal2Thing);
+
+    // Expose a Thing's live, machine-managed metadata to the editor (the edit dialog only sees
+    // config, not runtime context). Used by the read-only Metadata panel in the Thing GUI.
+    RED.httpAdmin.get('/hal2/thing/:id/metadata', RED.auth.needsPermission('flows.read'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.getMetadata === 'function') {
+            res.json({ metadata: n.getMetadata(), lastChange: n.metadataLastChange || {} });
+        } else {
+            res.json({ metadata: {}, lastChange: {} });
+        }
+    });
 }

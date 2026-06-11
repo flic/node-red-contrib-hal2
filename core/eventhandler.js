@@ -573,6 +573,8 @@ module.exports = function(RED) {
                     };
                     if (thing.notes) deviceEntry.notes = thing.notes;
                     if (Array.isArray(thing.tags) && thing.tags.length) deviceEntry.tags = thing.tags;
+                    const meta = (typeof thing.getMetadata === 'function') ? thing.getMetadata() : (thing.metadata || {});
+                    if (meta && Object.keys(meta).length) deviceEntry.metadata = meta;
                     const categories = deriveCategories(items);
                     if (categories.length) deviceEntry.categories = categories;
                     devices.push(deviceEntry);
@@ -698,6 +700,7 @@ module.exports = function(RED) {
                                 };
                                 if (d.notes)      o.notes      = d.notes;
                                 if (d.tags)       o.tags       = d.tags;
+                                if (d.metadata)   o.metadata   = d.metadata;
                                 if (d.categories) o.categories = d.categories;
                                 return o;
                             });

@@ -45,6 +45,10 @@
         <div id="thing-groups-header" style="width:100%; padding-right:28px; box-sizing:border-box; color:#888; font-size:0.85em; margin-bottom:4px; white-space:nowrap;"><span style="display:inline-block; width:calc(50% - 14px); margin-right:4px;">Item</span><span style="display:inline-block; width:16px;"></span><span style="display:inline-block; width:calc(50% - 14px); margin-left:4px;">Group</span></div>
         <ol id="thing-groups-container"></ol>
     </div>
+    <div class="form-row" id="thing-metadata" style="width:100%" hidden>
+        <label style="vertical-align:top;"><i class="fa fa-info-circle"></i> Metadata</label>
+        <div id="thing-metadata-table" style="display:inline-block; width:calc(100% - 110px); border:1px solid #ddd; border-radius:3px; background:#f7f7f7;"></div>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Thing">
@@ -105,6 +109,27 @@
         oneditprepare: function () {
             var node = this;
             $("#node-input-tags").val(Array.isArray(node.tags) ? node.tags.join(', ') : (node.tags || ''));
+
+            // Read-only metadata panel: machine-managed facts (e.g. model, ipv6) written by an
+            // integration. Lives in runtime context, so we fetch it from the admin endpoint.
+            (function () {
+                if (!node.id || (typeof node.isDirty === 'function' && node.id.indexOf('_ADD_') === 0)) { return; }
+                $.getJSON('hal2/thing/' + node.id + '/metadata', function (res) {
+                    var meta = (res && res.metadata) || {};
+                    var keys = Object.keys(meta).sort();
+                    if (!keys.length) { return; }
+                    var $t = $('#thing-metadata-table').empty();
+                    keys.forEach(function (k) {
+                        var v = meta[k];
+                        if (v && typeof v === 'object') { try { v = JSON.stringify(v); } catch (e) { v = String(v); } }
+                        var $row = $('<div/>', { style: 'display:flex; padding:3px 8px; border-bottom:1px solid #eee;' });
+                        $('<div/>', { text: k, style: 'flex:0 0 35%; color:#888; font-family:monospace;' }).appendTo($row);
+                        $('<div/>', { text: (v === undefined || v === null) ? '' : String(v), style: 'flex:1 1 65%; font-family:monospace; word-break:break-all;' }).appendTo($row);
+                        $row.appendTo($t);
+                    });
+                    $('#thing-metadata').prop('hidden', false);
+                });
+            })();
             var typeMQTT = halTypeMQTT();
             var StrStartType   = { value: "StrStart",   label: "starts with", hasValue: true };
             var StrEndType     = { value: "StrEnd",     label: "ends with",   hasValue: true };

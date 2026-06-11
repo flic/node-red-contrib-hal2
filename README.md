@@ -89,4 +89,19 @@ History powers two tools:
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.
 - **Centralised ingress/egress functions** — define message-transform functions once on the Event handler and reuse them across thing types instead of copying them per type.
 - **Notes & tags** on Things and Items, plus automatically derived device **categories** — handy for organising devices and for disambiguation by the MCP and JSON API tools.
+- **Metadata** — a per-Thing, machine-managed key/value bag for facts an integration discovers about a device (see below).
+
+## Metadata
+
+Every Thing carries a **metadata** bag: a set of read-only key/value *facts* about the device — for example a model name, serial number or IP address. Unlike **notes** and **tags** (which you write by hand), metadata is **machine-managed**: an integration fills it in, and hal2 stores whatever arrives without interpreting it. This keeps hal2 technology-neutral — it knows nothing about Matter, Thread, Zigbee or IP; it just holds the facts a source provides.
+
+Metadata is updated over a reserved topic on the Thing's own prefix, so any upstream node can set it:
+
+- `‹prefix›/_meta/‹key›` with a value → set/update that key.
+- `‹prefix›/_meta/‹key›` with an **empty/null** payload → remove that key (clears stale values).
+- `‹prefix›/_meta` with an **object** payload → replace the whole set (prunes keys that disappeared).
+
+Values are persisted in the Thing's context exactly like state, so they survive a restart. The current metadata is shown **read-only** in the Thing's edit dialog, and is exposed to the MCP / JSON API as a `metadata` field on each device in `get_all_states` and `get_state`.
+
+For example, the companion [`node-red-contrib-matterjs-bridge`](https://www.npmjs.com/package/node-red-contrib-matterjs-bridge) publishes each Matter device's model and IPv6 address to `matter/‹id›/_meta` — and they appear automatically as Thing metadata, with no hal2-side configuration.
 
