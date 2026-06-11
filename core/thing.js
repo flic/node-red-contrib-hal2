@@ -314,6 +314,78 @@ module.exports = function(RED) {
             node.showState();            
         }        
 
+        // --- metadata helpers (machine-managed, read-only) --------------------------------
+        function metaEmpty(v) { return v === undefined || v === null || v === ''; }
+        function metaPersist() {
+            nodeContext.set("metadata", node.metadata, node.thingType.contextStore);
+            nodeContext.set("metadataLastChange", node.metadataLastChange, node.thingType.contextStore);
+        }
+        // Apply one key: an empty value removes it, otherwise sets it. Returns true if changed.
+        function metaApplyKey(key, val, now) {
+            if (metaEmpty(val)) {
+                if (Object.prototype.hasOwnProperty.call(node.metadata, key)) {
+                    delete node.metadata[key];
+                    delete node.metadataLastChange[key];
+                    return true;
+                }
+                return false;
+            }
+            if (node.metadata[key] !== val) {
+                node.metadata[key] = val;
+                node.metadataLastChange[key] = now;
+                return true;
+            }
+            return false;
+        }
+
+        // Update the machine-managed metadata bag. Technology-neutral; hal2 never interprets keys.
+        //   <prefix>/_meta/<key>  value       -> set that key
+        //   <prefix>/_meta/<key>  empty/null  -> remove that key
+        //   <prefix>/_meta        object      -> merge: set each key (a null/empty value removes it)
+        //   <prefix>/_meta        JSON string -> parsed, then merged as above
+        //   <prefix>/_meta        empty/null  -> clear all metadata
+        node.updateMetadata = function (key, payload) {
+            var now = Date.now();
+
+            if (typeof key !== 'undefined') {
+                if (metaApplyKey(key, payload, now)) metaPersist();
+                return;
+            }
+
+            // Bare _meta: accept an object, or a JSON string we parse ourselves.
+            var obj = payload;
+            if (typeof obj === 'string') {
+                var s = obj.trim();
+                if (s === '') { obj = null; }
+                else {
+                    try { obj = JSON.parse(s); }
+                    catch (e) { node.warn("hal2 metadata: '_meta' string payload is not valid JSON"); return; }
+                }
+            }
+
+            if (obj === undefined || obj === null) {
+                if (!Object.keys(node.metadata).length) { return; }   // already empty
+                node.metadata = {};
+                node.metadataLastChange = {};
+                metaPersist();
+                return;
+            }
+
+            if (typeof obj !== 'object' || Array.isArray(obj)) {
+                node.warn("hal2 metadata: bare '_meta' expects a JSON object");
+                return;
+            }
+
+            var changed = false;
+            for (var k in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, k)) { continue; }
+                if (metaApplyKey(k, obj[k], now)) { changed = true; }
+            }
+            if (changed) { metaPersist(); }
+        };
+
+        node.getMetadata = function () { return node.metadata || {}; };
+
         node.showState = function () {
             var statusMsg = [];
 
