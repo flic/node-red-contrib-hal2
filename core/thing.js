@@ -79,6 +79,7 @@ module.exports = function(RED) {
         this.eventHandler = RED.nodes.getNode(config.eventHandler);
         this.name = config.name;
         this.notes = config.notes;
+        this.tags = config.tags || [];
         this.topicPrefix = config.topicPrefix;
         this.attributes = config.attributes;
         this.groups = config.groups || [];   // [{ item, group }] — group membership, resolved by the EventHandler group engine
