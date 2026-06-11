@@ -109,6 +109,11 @@ module.exports = function(RED) {
         // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
         node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
         node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
+        // Machine-managed, read-only metadata (key/value facts an integration writes in via the
+        // reserved <prefix>/_meta channel). Persisted exactly like state so it survives restarts.
+        // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
+        node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
+        node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
 
         function checkTimestamp() {
@@ -313,51 +318,6 @@ module.exports = function(RED) {
             node.eventHandler.publishLog(eventmsg);
             node.showState();            
         }        
-
-        // Update the machine-managed metadata bag. Technology-neutral: any integration writes
-        // <prefix>/_meta/<key> to set/remove a key, or <prefix>/_meta with an object to replace all.
-        //  - key given, non-empty payload      -> set metadata[key]
-        //  - key given, empty/null/'' payload  -> remove metadata[key]   (clears stale values)
-        //  - no key, object payload            -> replace the whole set  (prunes stale keys)
-        //  - no key, empty payload             -> clear all metadata
-        node.updateMetadata = function (key, payload) {
-            var changed = false;
-            var now = Date.now();
-            var isEmpty = (payload === undefined || payload === null || payload === '');
-            if (typeof key === 'undefined') {
-                if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-                    node.metadata = Object.assign({}, payload);
-                    node.metadataLastChange = {};
-                    for (var k in node.metadata) { node.metadataLastChange[k] = now; }
-                    changed = true;
-                } else if (isEmpty) {
-                    node.metadata = {};
-                    node.metadataLastChange = {};
-                    changed = true;
-                } else {
-                    node.warn("hal2 metadata: bulk '_meta' expects an object payload");
-                    return;
-                }
-            } else if (isEmpty) {
-                if (Object.prototype.hasOwnProperty.call(node.metadata, key)) {
-                    delete node.metadata[key];
-                    delete node.metadataLastChange[key];
-                    changed = true;
-                }
-            } else {
-                if (node.metadata[key] !== payload) {
-                    node.metadata[key] = payload;
-                    node.metadataLastChange[key] = now;
-                    changed = true;
-                }
-            }
-            if (!changed) { return; }
-            nodeContext.set("metadata", node.metadata, node.thingType.contextStore);
-            nodeContext.set("metadataLastChange", node.metadataLastChange, node.thingType.contextStore);
-            node.debug("Metadata updated (" + (typeof key === 'undefined' ? '*replace*' : key) + ")");
-        };
-
-        node.getMetadata = function () { return node.metadata || {}; };
 
         node.showState = function () {
             var statusMsg = [];

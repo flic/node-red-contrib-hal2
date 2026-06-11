@@ -99,7 +99,8 @@ Metadata is updated over a reserved topic on the Thing's own prefix, so any upst
 
 - `‹prefix›/_meta/‹key›` with a value → set/update that key.
 - `‹prefix›/_meta/‹key›` with an **empty/null** payload → remove that key (clears stale values).
-- `‹prefix›/_meta` with an **object** payload → replace the whole set (prunes keys that disappeared).
+- `‹prefix›/_meta` with an **object** (or a JSON **string**, which hal2 parses) → **merge**: each key is set, and a key whose value is empty/null is removed. One message can update several keys at once.
+- `‹prefix›/_meta` with an **empty/null** payload → clear all metadata.
 
 Values are persisted in the Thing's context exactly like state, so they survive a restart. The current metadata is shown **read-only** in the Thing's edit dialog, and is exposed to the MCP / JSON API as a `metadata` field on each device in `get_all_states` and `get_state`.
 
