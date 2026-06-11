@@ -109,11 +109,6 @@ module.exports = function(RED) {
         // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
         node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
         node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
-        // Machine-managed, read-only metadata (key/value facts an integration writes in via the
-        // reserved <prefix>/_meta channel). Persisted exactly like state so it survives restarts.
-        // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
-        node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
-        node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
 
         function checkTimestamp() {
