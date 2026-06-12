@@ -701,7 +701,6 @@ module.exports = function(RED) {
                                 };
                                 if (d.notes)      o.notes      = d.notes;
                                 if (d.tags)       o.tags       = d.tags;
-                                o.metadata = d.metadata || {};
                                 if (d.categories) o.categories = d.categories;
                                 return o;
                             });
@@ -736,7 +735,6 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({
                                 thing_id   : device.thing_id,
                                 thing_name : device.thing_name,
-                                metadata   : device.metadata || {},
                                 ...item
                             }, null, 2));
                         }

@@ -102,7 +102,7 @@ Metadata is updated over a reserved topic on the Thing's own prefix, so any upst
 - `‹prefix›/_meta` with an **object** (or a JSON **string**, which hal2 parses) → **merge**: each key is set, and a key whose value is empty/null is removed. One message can update several keys at once.
 - `‹prefix›/_meta` with an **empty/null** payload → clear all metadata.
 
-Values are persisted in the Thing's context exactly like state, so they survive a restart. The current metadata is shown **read-only** in the Thing's edit dialog, and is exposed to the MCP / JSON API as a `metadata` field on each device in `get_all_states` and `get_state` — always present, as an empty object `{}` when the device has none.
+Values are persisted in the Thing's context exactly like state, so they survive a restart. The current metadata is shown **read-only** in the Thing's edit dialog, and is exposed to the MCP / JSON API as a `metadata` field in the detailed views — `get_all_states` **full** mode and `get_state` (device) — always present there, as an empty object `{}` when the device has none. It's omitted from the lean `get_all_states` summary and from item-level `get_state`.
 
 For example, the companion [`node-red-contrib-matterjs-bridge`](https://www.npmjs.com/package/node-red-contrib-matterjs-bridge) publishes each Matter device's model and IPv6 address to `matter/‹id›/_meta` — and they appear automatically as Thing metadata, with no hal2-side configuration.
 
