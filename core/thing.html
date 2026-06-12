@@ -46,7 +46,10 @@
         <ol id="thing-groups-container"></ol>
     </div>
     <div class="form-row" id="thing-metadata" style="width:100%" hidden>
-        <label style="display:block; width:auto;"><i class="fa fa-info-circle"></i> Metadata</label>
+        <label style="display:block; width:auto;">
+            <i class="fa fa-info-circle"></i> Metadata
+            <button type="button" id="thing-metadata-clear" class="red-ui-button red-ui-button-small" style="float:right;" title="Delete all metadata for this Thing"><i class="fa fa-trash-o"></i> Clear all</button>
+        </label>
         <div id="thing-metadata-table" style="width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:3px; background:#f7f7f7;"></div>
     </div>
 </script>
@@ -110,25 +113,48 @@
             var node = this;
             $("#node-input-tags").val(Array.isArray(node.tags) ? node.tags.join(', ') : (node.tags || ''));
 
-            // Read-only metadata panel: machine-managed facts (e.g. model, ipv6) written by an
-            // integration. Lives in runtime context, so we fetch it from the admin endpoint.
+            // Metadata panel: machine-managed facts (e.g. model, ipv6) written by an integration.
+            // Read-only values (runtime context, fetched from the admin endpoint), but the user can
+            // delete a single key or clear all. Note: an active source may re-publish deleted keys.
             (function () {
                 if (!node.id || (typeof node.isDirty === 'function' && node.id.indexOf('_ADD_') === 0)) { return; }
-                $.getJSON('hal2/thing/' + node.id + '/metadata', function (res) {
-                    var meta = (res && res.metadata) || {};
-                    var keys = Object.keys(meta).sort();
-                    if (!keys.length) { return; }
-                    var $t = $('#thing-metadata-table').empty();
-                    keys.forEach(function (k) {
-                        var v = meta[k];
-                        if (v && typeof v === 'object') { try { v = JSON.stringify(v); } catch (e) { v = String(v); } }
-                        var $row = $('<div/>', { style: 'display:flex; padding:3px 8px; border-bottom:1px solid #eee;' });
-                        $('<div/>', { text: k, style: 'flex:0 0 35%; color:#888; font-family:monospace;' }).appendTo($row);
-                        $('<div/>', { text: (v === undefined || v === null) ? '' : String(v), style: 'flex:1 1 65%; font-family:monospace; word-break:break-all;' }).appendTo($row);
-                        $row.appendTo($t);
+                var base = 'hal2/thing/' + node.id + '/metadata';
+
+                function loadMetadata() {
+                    $.getJSON(base, function (res) {
+                        var meta = (res && res.metadata) || {};
+                        var keys = Object.keys(meta).sort();
+                        var $t = $('#thing-metadata-table').empty();
+                        if (!keys.length) { $('#thing-metadata').prop('hidden', true); return; }
+                        keys.forEach(function (k) {
+                            var v = meta[k];
+                            if (v && typeof v === 'object') { try { v = JSON.stringify(v); } catch (e) { v = String(v); } }
+                            var $row = $('<div/>', { style: 'display:flex; align-items:center; padding:3px 8px; border-bottom:1px solid #eee;' });
+                            $('<div/>', { text: k, style: 'flex:0 0 32%; color:#888; font-family:monospace;' }).appendTo($row);
+                            $('<div/>', { text: (v === undefined || v === null) ? '' : String(v), style: 'flex:1 1 auto; font-family:monospace; word-break:break-all;' }).appendTo($row);
+                            $('<button/>', { type: 'button', class: 'red-ui-button red-ui-button-small', title: 'Delete this key', style: 'flex:0 0 auto; margin-left:6px;' })
+                                .html('<i class="fa fa-times"></i>')
+                                .on('click', function () { delKey(k); }).appendTo($row);
+                            $row.appendTo($t);
+                        });
+                        $('#thing-metadata').prop('hidden', false);
                     });
-                    $('#thing-metadata').prop('hidden', false);
+                }
+
+                function delKey(k) {
+                    $.ajax({ url: base + '/' + encodeURIComponent(k), method: 'DELETE' })
+                        .done(loadMetadata)
+                        .fail(function () { RED.notify('Failed to delete metadata key "' + k + '"', 'error'); });
+                }
+
+                $('#thing-metadata-clear').on('click', function () {
+                    if (!confirm('Delete all metadata for this Thing?')) { return; }
+                    $.ajax({ url: base, method: 'DELETE' })
+                        .done(loadMetadata)
+                        .fail(function () { RED.notify('Failed to clear metadata', 'error'); });
                 });
+
+                loadMetadata();
             })();
             var typeMQTT = halTypeMQTT();
             var StrStartType   = { value: "StrStart",   label: "starts with", hasValue: true };

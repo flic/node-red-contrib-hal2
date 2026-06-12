@@ -554,4 +554,26 @@ module.exports = function(RED) {
             res.json({ metadata: {}, lastChange: {} });
         }
     });
+
+    // Delete one metadata key (reuses the same runtime path as a `_meta/<key>` empty payload).
+    RED.httpAdmin.delete('/hal2/thing/:id/metadata/:key', RED.auth.needsPermission('flows.write'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.updateMetadata === 'function') {
+            n.updateMetadata(req.params.key, null);
+            res.json({ metadata: n.getMetadata() });
+        } else {
+            res.status(404).json({ error: 'thing not found' });
+        }
+    });
+
+    // Clear all metadata (reuses the bulk `_meta` empty-payload path).
+    RED.httpAdmin.delete('/hal2/thing/:id/metadata', RED.auth.needsPermission('flows.write'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.updateMetadata === 'function') {
+            n.updateMetadata(undefined, null);
+            res.json({ metadata: n.getMetadata() });
+        } else {
+            res.status(404).json({ error: 'thing not found' });
+        }
+    });
 }
