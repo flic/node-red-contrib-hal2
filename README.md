@@ -98,9 +98,11 @@ Every Thing carries a **metadata** bag: a set of read-only key/value *facts* abo
 Metadata is updated over a reserved topic on the Thing's own prefix, so any upstream node can set it:
 
 - `‹prefix›/_meta/‹key›` with a value → set/update that key.
-- `‹prefix›/_meta/‹key›` with an **empty/null** payload → remove that key (clears stale values).
+- `‹prefix›/_meta/‹key›` with an **empty/null** payload → remove that key (and any nested branch under it).
 - `‹prefix›/_meta` with an **object** (or a JSON **string**, which hal2 parses) → **merge**: each key is set, and a key whose value is empty/null is removed. One message can update several keys at once.
 - `‹prefix›/_meta` with an **empty/null** payload → clear all metadata.
+
+**Nested objects are flattened** into dot-keys — `{ network: { wifi: { rssi: -60 } } }` is stored as `network.wifi.rssi = -60` (arrays and primitives are kept whole as leaf values). Because every leaf is its own key, partial updates merge precisely (resending `network.wifi.ssid` leaves `network.wifi.rssi` untouched), a nested `null` removes just that leaf, and an empty value on a parent removes its whole branch.
 
 Values are persisted in the Thing's context exactly like state, so they survive a restart. The current metadata is shown in the Thing's edit dialog (values are read-only, but you can delete a single key or **Clear all** — note an active source may re-publish a deleted key), and is exposed to the MCP / JSON API as a `metadata` field in the detailed views — `get_all_states` **full** mode and `get_state` (device) — always present there, as an empty object `{}` when the device has none. It's omitted from the lean `get_all_states` summary and from item-level `get_state`.
 

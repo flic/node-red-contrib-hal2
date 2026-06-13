@@ -320,15 +320,32 @@ module.exports = function(RED) {
             nodeContext.set("metadata", node.metadata, node.thingType.contextStore);
             nodeContext.set("metadataLastChange", node.metadataLastChange, node.thingType.contextStore);
         }
-        // Apply one key: an empty value removes it, otherwise sets it. Returns true if changed.
+        // Flatten a nested object into dot-keyed leaves: { "a.b.c": value }. Recurses *plain*
+        // objects only; arrays and primitives are kept whole as leaf values.
+        function metaFlatten(obj, prefix, out) {
+            for (var k in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, k)) { continue; }
+                var key = prefix ? (prefix + '.' + k) : String(k);
+                var v = obj[k];
+                if (v && typeof v === 'object' && !Array.isArray(v)) { metaFlatten(v, key, out); }
+                else { out[key] = v; }
+            }
+            return out;
+        }
+        // Apply one leaf key. An empty value removes that key *and any descendants* (its branch);
+        // otherwise it sets the key. Returns true if anything changed.
         function metaApplyKey(key, val, now) {
             if (metaEmpty(val)) {
-                if (Object.prototype.hasOwnProperty.call(node.metadata, key)) {
-                    delete node.metadata[key];
-                    delete node.metadataLastChange[key];
-                    return true;
+                var changed = false;
+                var pfx = key + '.';
+                for (var mk in node.metadata) {
+                    if (mk === key || mk.indexOf(pfx) === 0) {
+                        delete node.metadata[mk];
+                        delete node.metadataLastChange[mk];
+                        changed = true;
+                    }
                 }
-                return false;
+                return changed;
             }
             if (node.metadata[key] !== val) {
                 node.metadata[key] = val;
@@ -337,18 +354,31 @@ module.exports = function(RED) {
             }
             return false;
         }
+        // Apply a payload under an optional key prefix: nested objects are flattened to dot-keys,
+        // everything else is a single leaf. Returns true if anything changed.
+        function metaApplyPayload(prefix, payload, now) {
+            if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+                var flat = metaFlatten(payload, prefix || '', {});
+                var changed = false;
+                for (var fk in flat) { if (metaApplyKey(fk, flat[fk], now)) { changed = true; } }
+                return changed;
+            }
+            // primitive / array / empty → single leaf (prefix is the key when set)
+            return prefix ? metaApplyKey(prefix, payload, now) : false;
+        }
 
         // Update the machine-managed metadata bag. Technology-neutral; hal2 never interprets keys.
-        //   <prefix>/_meta/<key>  value       -> set that key
-        //   <prefix>/_meta/<key>  empty/null  -> remove that key
-        //   <prefix>/_meta        object      -> merge: set each key (a null/empty value removes it)
-        //   <prefix>/_meta        JSON string -> parsed, then merged as above
-        //   <prefix>/_meta        empty/null  -> clear all metadata
+        // Nested objects are flattened to dot-keys (level1.level2.level3 = value).
+        //   <prefix>/_meta/<key>  value/object -> set that key (objects flatten under <key>)
+        //   <prefix>/_meta/<key>  empty/null   -> remove that key and its branch
+        //   <prefix>/_meta        object        -> merge (flattened); a null/empty leaf removes it
+        //   <prefix>/_meta        JSON string   -> parsed, then merged as above
+        //   <prefix>/_meta        empty/null    -> clear all metadata
         node.updateMetadata = function (key, payload) {
             var now = Date.now();
 
             if (typeof key !== 'undefined') {
-                if (metaApplyKey(key, payload, now)) metaPersist();
+                if (metaApplyPayload(key, payload, now)) metaPersist();
                 return;
             }
 
@@ -376,12 +406,7 @@ module.exports = function(RED) {
                 return;
             }
 
-            var changed = false;
-            for (var k in obj) {
-                if (!Object.prototype.hasOwnProperty.call(obj, k)) { continue; }
-                if (metaApplyKey(k, obj[k], now)) { changed = true; }
-            }
-            if (changed) { metaPersist(); }
+            if (metaApplyPayload('', obj, now)) { metaPersist(); }
         };
 
         node.getMetadata = function () { return node.metadata || {}; };
