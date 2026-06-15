@@ -523,6 +523,38 @@
                             .appendTo(rowName)
                             .val(opt.id || hal2ehCreateId());
 
+                        // Info — which ThingTypes reference this shared function.
+                        var infoButton = $('<button type="button"/>', { style: "margin-left:5px;" }).appendTo(rowName);
+                        $('<i/>', { class: "fa fa-info-circle" }).appendTo(infoButton);
+                        infoButton.on('click', function(e) {
+                            e.preventDefault();
+                            var fnId = idProperty.val();
+                            var fnName = nameProperty.val() || fnId;
+                            var usageRows = '';
+                            RED.nodes.eachConfig(function(cfg) {
+                                if (cfg.type !== 'hal2ThingType') { return; }
+                                var refs = [];
+                                (cfg.items || []).forEach(function(it) {
+                                    if (it.ingress === fnId) { refs.push(it.name + ' (ingress)'); }
+                                    if (it.egress === fnId)  { refs.push(it.name + ' (egress)'); }
+                                });
+                                if (cfg.filterFunction === fnId) { refs.push('Thing filter (ingress)'); }
+                                if (cfg.hbLWT === fnId)          { refs.push('Heartbeat (ingress)'); }
+                                if (refs.length) {
+                                    usageRows += '<tr><td>' + (cfg.name || cfg.id) + '</td><td>' + refs.join(', ') + '</td></tr>';
+                                }
+                            });
+                            var tableStyle = 'border-collapse:separate;border-spacing:10px;';
+                            var message = '<font size=+1>' + fn_type.charAt(0).toUpperCase() + fn_type.slice(1) + ' function ' + fnName + '</font>';
+                            message += '<br><b>Used in ThingTypes</b>';
+                            if (usageRows) {
+                                message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">ThingType</th><th style="text-align:left;">Where</th></tr>' + usageRows + '</table>';
+                            } else {
+                                message += '<br>Not referenced by any ThingType.';
+                            }
+                            RED.notify(message, { timeout: 15000 });
+                        });
+
                         if (opt.name) nameProperty.val(opt.name);
                         else nameProperty.val(fn_type.charAt(0).toUpperCase()+fn_type.slice(1)+" function");
 
