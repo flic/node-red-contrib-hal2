@@ -87,7 +87,7 @@ Returns the complete state for a specific device. Use this to fetch full details
 
 ### `get_history`
 
-Returns logged historical values for a specific device item. Use this whenever the user asks about history, statistics, trends, activity over time, how often something happened, when it last changed, or similar time-based questions. Items that support history are marked with history:true in get_all_states. Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. Time window — use one of these forms: (1) hours: number of hours back from now (default: 24); (2) from + to: explicit ISO datetime strings or epoch ms, e.g. from="2026-05-01T00:00:00" to="2026-05-02T00:00:00"; (3) from only: from that point until now; (4) at: returns the single most recent record at or before that moment — useful for "what was the value at time X?". Use offset and limit to page through large result sets (default limit: 500). The response includes total so you know how many calls are needed.
+Returns logged historical values for a specific device item. Use this whenever the user asks about history, statistics, trends, activity over time, how often something happened, when it last changed, or similar time-based questions. Items that support history are marked with history:true in get_all_states. Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. Time window — use one of these forms: (1) hours: number of hours back from now (default: 24); (2) from + to: explicit ISO datetime strings or epoch ms, e.g. from="2026-05-01T00:00:00" to="2026-05-02T00:00:00"; (3) from only: from that point until now; (4) at: returns the single most recent record at or before that moment — useful for "what was the value at time X?". Use offset and limit to page through large result sets (default limit: 500). The response includes total so you know how many calls are needed. DOWNSAMPLING: for long ranges of a NUMERIC item (e.g. a week of temperature for a graph), set bucket to "minute", "hour" or "day" (or bucket_seconds for a custom interval). The server then aggregates per time bucket and returns a compact "buckets" array — each entry { start, count, avg, min, max } (avg/min/max rounded to numeric_precision; bucket start is local time, e.g. a "day" is local midnight) — instead of all raw samples. Prefer this over fetching raw data and averaging yourself. Buckets with no data are omitted. Aggregation is numeric-only; for non-numeric items (on/off, mode) use bucket="raw" (the default).
 
 **Parameters**
 
@@ -101,8 +101,11 @@ Returns logged historical values for a specific device item. Use this whenever t
 | `from` | `string` | no | Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string |
 | `to` | `string` | no | End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted. |
 | `at` | `string` | no | Point-in-time lookup — ISO datetime string or epoch ms. Returns the single most recent record at or before this moment. |
-| `offset` | `integer` | no | Number of records to skip (default: 0). Not applicable when using at. |
-| `limit` | `integer` | no | Max records to return (default: 500). Not applicable when using at. |
+| `bucket` | `raw` \| `minute` \| `hour` \| `day` | no | Downsampling resolution. "raw" (default) returns individual records; "minute"/"hour"/"day" return server-aggregated avg/min/max/count per local-time bucket (numeric items only). |
+| `bucket_seconds` | `integer` | no | Custom bucket size in seconds (epoch-aligned). Overrides bucket. Numeric items only. |
+| `numeric_precision` | `integer` | no | Decimal places for avg/min/max when bucketing (default 2). |
+| `offset` | `integer` | no | Number of records to skip (default: 0). Not applicable when using at or bucketing. |
+| `limit` | `integer` | no | Max records to return (default: 500). Not applicable when using at or bucketing. |
 
 **Example**
 

@@ -61,7 +61,12 @@ const MCP_TOOLS = [
                       '(3) from only: from that point until now; ' +
                       '(4) at: returns the single most recent record at or before that moment — useful for "what was the value at time X?". ' +
                       'Use offset and limit to page through large result sets (default limit: 500). ' +
-                      'The response includes total so you know how many calls are needed.',
+                      'The response includes total so you know how many calls are needed. ' +
+                      'DOWNSAMPLING: for long ranges of a NUMERIC item (e.g. a week of temperature for a graph), set bucket to "minute", "hour" or "day" ' +
+                      '(or bucket_seconds for a custom interval). The server then aggregates per time bucket and returns a compact "buckets" array — ' +
+                      'each entry { start, count, avg, min, max } (avg/min/max rounded to numeric_precision; bucket start is local time, e.g. a "day" is local midnight) — ' +
+                      'instead of all raw samples. Prefer this over fetching raw data and averaging yourself. Buckets with no data are omitted. ' +
+                      'Aggregation is numeric-only; for non-numeric items (on/off, mode) use bucket="raw" (the default).',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -73,8 +78,11 @@ const MCP_TOOLS = [
                 from       : { type: 'string',  description: 'Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string' },
                 to         : { type: 'string',  description: 'End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted.' },
                 at         : { type: 'string',  description: 'Point-in-time lookup — ISO datetime string or epoch ms. Returns the single most recent record at or before this moment.' },
-                offset     : { type: 'integer', description: 'Number of records to skip (default: 0). Not applicable when using at.' },
-                limit      : { type: 'integer', description: 'Max records to return (default: 500). Not applicable when using at.' }
+                bucket     : { type: 'string',  enum: ['raw', 'minute', 'hour', 'day'], description: 'Downsampling resolution. "raw" (default) returns individual records; "minute"/"hour"/"day" return server-aggregated avg/min/max/count per local-time bucket (numeric items only).' },
+                bucket_seconds   : { type: 'integer', description: 'Custom bucket size in seconds (epoch-aligned). Overrides bucket. Numeric items only.', minimum: 1 },
+                numeric_precision: { type: 'integer', description: 'Decimal places for avg/min/max when bucketing (default 2).', minimum: 0, maximum: 6 },
+                offset     : { type: 'integer', description: 'Number of records to skip (default: 0). Not applicable when using at or bucketing.' },
+                limit      : { type: 'integer', description: 'Max records to return (default: 500). Not applicable when using at or bucketing.' }
             }
         }
     },

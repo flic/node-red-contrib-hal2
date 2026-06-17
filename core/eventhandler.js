@@ -1256,6 +1256,14 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'Invalid date/time value in from, to, or at' }));
                         }
 
+                        // Optional server-side downsampling: aggregate numeric values into time buckets.
+                        const numericPrecision = Math.max(0, Math.min(6, Number(args.numeric_precision) || 2));
+                        const bucketSeconds = (Number(args.bucket_seconds) > 0) ? Math.floor(Number(args.bucket_seconds)) : null;
+                        const bucketMode = bucketSeconds ? 'seconds' : String(args.bucket || 'raw').toLowerCase();
+                        if (['raw', 'minute', 'hour', 'day', 'seconds'].indexOf(bucketMode) === -1) {
+                            return toolOk(JSON.stringify({ error: 'Invalid bucket. Use "raw", "minute", "hour", "day", or bucket_seconds.' }));
+                        }
+
                         try {
                             const docs = await new Promise((resolve, reject) => {
                                 node.queryHistory(targetThing.id, itemId, atMs ? 0 : fromMs, atMs ?? toMs, (err, d) => err ? reject(err) : resolve(d));
@@ -1270,6 +1278,70 @@ module.exports = function(RED) {
                                     item_id   : itemId,
                                     at        : new Date(atMs).toISOString(),
                                     record    : record ? { timestamp: msToIso(record.ts), state: record.state } : null
+                                }));
+                            }
+
+                            // Bucketed aggregation (numeric items) — done server-side so the caller
+                            // gets compact per-interval stats instead of all raw samples.
+                            if (bucketMode !== 'raw') {
+                                // Bucket start, aligned to local time (TZ-aware via Date) for minute/hour/day;
+                                // epoch-aligned for an explicit bucket_seconds.
+                                const bucketStartMs = (ts) => {
+                                    if (bucketSeconds) { const w = bucketSeconds * 1000; return Math.floor(ts / w) * w; }
+                                    const d = new Date(ts);
+                                    if (bucketMode === 'minute')      d.setSeconds(0, 0);
+                                    else if (bucketMode === 'hour')   d.setMinutes(0, 0, 0);
+                                    else if (bucketMode === 'day')     d.setHours(0, 0, 0, 0);
+                                    return d.getTime();
+                                };
+                                // Local ISO with offset, so a "day" bucket reads as local midnight (e.g. ...T00:00:00+02:00).
+                                const localIso = (ms) => {
+                                    const d = new Date(ms), p = (n) => String(n).padStart(2, '0');
+                                    const off = -d.getTimezoneOffset(), sg = off >= 0 ? '+' : '-', a = Math.abs(off);
+                                    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' +
+                                           p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) +
+                                           sg + p(Math.floor(a / 60)) + ':' + p(a % 60);
+                                };
+
+                                const buckets = new Map();
+                                let numericTotal = 0;
+                                for (const d of docs) {
+                                    if (typeof d.state !== 'number' || !isFinite(d.state)) continue;
+                                    numericTotal++;
+                                    const key = bucketStartMs(d.ts);
+                                    let b = buckets.get(key);
+                                    if (!b) { b = { count: 0, sum: 0, min: Infinity, max: -Infinity }; buckets.set(key, b); }
+                                    b.count++; b.sum += d.state;
+                                    if (d.state < b.min) b.min = d.state;
+                                    if (d.state > b.max) b.max = d.state;
+                                }
+
+                                if (numericTotal === 0) {
+                                    return toolOk(JSON.stringify({ error: 'Aggregation supports numeric items only — use bucket="raw" for non-numeric items.' }));
+                                }
+                                if (buckets.size > 5000) {
+                                    return toolOk(JSON.stringify({ error: 'Too many buckets (' + buckets.size + '). Use a coarser bucket (hour/day) or a shorter range.' }));
+                                }
+
+                                const f = Math.pow(10, numericPrecision);
+                                const round = (v) => Math.round(v * f) / f;
+                                const out = [...buckets.entries()].sort((x, y) => x[0] - y[0]).map(([startMs, b]) => ({
+                                    start: localIso(startMs),
+                                    count: b.count,
+                                    avg  : round(b.sum / b.count),
+                                    min  : round(b.min),
+                                    max  : round(b.max)
+                                }));
+                                return toolOk(JSON.stringify({
+                                    thing_id     : targetThing.id,
+                                    thing_name   : targetThing.name,
+                                    item_id      : itemId,
+                                    from         : new Date(fromMs).toISOString(),
+                                    to           : new Date(toMs).toISOString(),
+                                    bucket       : bucketSeconds ? (bucketSeconds + 's') : bucketMode,
+                                    numeric      : true,
+                                    total_buckets: out.length,
+                                    buckets      : out
                                 }));
                             }
 
