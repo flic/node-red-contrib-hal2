@@ -626,6 +626,7 @@ module.exports = function(RED) {
                         history  : !!it.history
                     };
                     if (it.type === 'status') o.read_only = true;
+                    if (Array.isArray(it.tags) && it.tags.length) o.tags = it.tags;   // disambiguate same-ha_type items
                     return o;
                 });
             }
@@ -1287,18 +1288,30 @@ module.exports = function(RED) {
                         const ttItems = targetThing.thingType.items || [];
                         let itemId = args.item_id;
 
-                        // Resolve by ha_type when the device is known but the exact item isn't
-                        // (e.g. thing_name="Sjövatten" + ha_type="temperature").
-                        if (!itemId && !args.item_name && args.ha_type) {
-                            const wanted  = expandHaTypeFilter(args.ha_type);
-                            const matches = ttItems.filter(it => it.haType && wanted.has(it.haType.toLowerCase()));
+                        // Resolve by ha_type and/or tag when the device is known but the exact item
+                        // isn't (e.g. thing_name="Sjövatten" + ha_type="temperature", or a sauna
+                        // sensor with two temperatures → ha_type="temperature" + tag="ute").
+                        if (!itemId && !args.item_name && (args.ha_type || args.tag)) {
+                            let matches = ttItems;
+                            if (args.ha_type) {
+                                const wanted = expandHaTypeFilter(args.ha_type);
+                                matches = matches.filter(it => it.haType && wanted.has(it.haType.toLowerCase()));
+                            }
+                            if (args.tag) {
+                                const t = String(args.tag).toLowerCase();
+                                matches = matches.filter(it => Array.isArray(it.tags) && it.tags.some(x => String(x).toLowerCase() === t));
+                            }
+                            const crit = [
+                                args.ha_type ? ('ha_type "' + args.ha_type + '"') : null,
+                                args.tag     ? ('tag "' + args.tag + '"')         : null
+                            ].filter(Boolean).join(' + ');
                             if (matches.length === 0) {
-                                return itemFail('No item with ha_type "' + args.ha_type + '" in thing "' + targetThing.name + '".');
+                                return itemFail('No item matching ' + crit + ' in thing "' + targetThing.name + '".');
                             }
                             const histMatches = matches.filter(it => it.history);
                             const pick = histMatches.length ? histMatches : matches;
                             if (pick.length > 1) {
-                                return itemFail('Multiple items match ha_type "' + args.ha_type + '" — specify item_id or item_name from available_items.');
+                                return itemFail('Multiple items match ' + crit + ' — narrow it with a tag, or specify item_id from available_items.');
                             }
                             itemId = pick[0].id;
                         }

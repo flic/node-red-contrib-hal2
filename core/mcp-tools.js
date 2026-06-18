@@ -58,6 +58,7 @@ const MCP_TOOLS = [
                       'Items that support history are marked with history:true in get_all_states. ' +
                       'NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Sjövatten Sensor" contains an item named "Temperatur"), so a thing name will not match an item name. ' +
                       'If you know the device but not the exact item, pass ha_type (e.g. ha_type="temperature") and the server resolves the item for you. ' +
+                      'If a device has several items of the same ha_type (e.g. an indoor and an outdoor temperature), combine ha_type with tag (e.g. tag="ute") to pick the right one — items and their tags are listed in available_items when the match is ambiguous. ' +
                       'If item resolution fails, the error response includes available_items (item_id, item_name, ha_type, history) for that thing — pick from it, no full get_all_states dump needed. ' +
                       'Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. ' +
                       'Time window — use one of these forms: ' +
@@ -80,6 +81,7 @@ const MCP_TOOLS = [
                 item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
                 item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperatur"), not the device name.' },
                 ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
+                tag        : { type: 'string',  description: 'Disambiguate items of the same ha_type within the thing by tag (e.g. ha_type="temperature" + tag="ute"). Can also be used alone. Item tags appear in available_items.' },
                 hours      : { type: 'number',  description: 'Hours back from now (default: 24). Ignored if from/to/at are provided.', minimum: 1 },
                 from       : { type: 'string',  description: 'Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string' },
                 to         : { type: 'string',  description: 'End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted.' },
