@@ -39,7 +39,8 @@ const MCP_TOOLS = [
                       'Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. ' +
                       'Response includes notes and tags on both Thing and Item level when configured. ' +
                       'Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. ' +
-                      'Optionally provide item_id to return only a single item value.',
+                      'Optionally provide item_id to return only a single item value — the item is a measurement/control within the device, not the device name. ' +
+                      'If item_id is wrong, the error response lists available_items for that thing so you can pick the right one.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -93,7 +94,9 @@ const MCP_TOOLS = [
     },
     {
         name        : 'control_device',
-        description : 'Send a command to a specific device item. Use thing_id and item_id from get_all_states.',
+        description : 'Send a command to a specific device item. Use thing_id and item_id from get_all_states. ' +
+                      'The item is the control WITHIN the device (e.g. an "On" item), not the device name. ' +
+                      'If the item_id is wrong or read-only, the error response lists available_items (item_id, item_name, ha_type, read_only) for that thing — pick a controllable one from it.',
         inputSchema : {
             type       : 'object',
             required   : ['thing_id', 'item_id', 'value'],

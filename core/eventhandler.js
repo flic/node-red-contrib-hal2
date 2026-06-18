@@ -614,6 +614,22 @@ module.exports = function(RED) {
                 console.log('[hal2EventHandler] MCP_TOOLS exposed @ ' + (config.locationName || 'unnamed') + ': ' + exposed.join(', '));
             });
 
+            // Shared: compact item list for self-describing "available_items" in error responses,
+            // so a failed thing/item lookup tells the caller what to pick (no full get_all_states dump).
+            function thingItemsSummary(thing) {
+                const items = (thing && thing.thingType && thing.thingType.items) || [];
+                return items.map(it => {
+                    const o = {
+                        item_id  : it.id,
+                        item_name: it.name,
+                        ha_type  : it.haType || (it.id === '1' ? 'binary_sensor' : ''),
+                        history  : !!it.history
+                    };
+                    if (it.type === 'status') o.read_only = true;
+                    return o;
+                });
+            }
+
             function controlDevice(thingId, itemId, value) {
                 console.log('[hal2EventHandler] controlDevice: thingId=' + thingId + ', itemId=' + itemId + ', value=' + JSON.stringify(value));
                 const thing = RED.nodes.getNode(thingId);
@@ -624,6 +640,15 @@ module.exports = function(RED) {
                 if (!thing.eventHandler || thing.eventHandler.id !== node.id) {
                     console.log('[hal2EventHandler] controlDevice: eventHandler mismatch, thing.eh=' + (thing.eventHandler && thing.eventHandler.id) + ', node.id=' + node.id);
                     return { error: 'Thing not connected to this event handler' };
+                }
+                const item = (thing.thingType.items || []).find(i => i.id === itemId);
+                if (!item) {
+                    return { error: 'No item with id "' + itemId + '" in thing "' + thing.name + '" — pick a controllable item from available_items (item is the control within the device, not the device name).',
+                             thing_id: thingId, thing_name: thing.name, available_items: thingItemsSummary(thing) };
+                }
+                if (item.type === 'status') {
+                    return { error: 'Item "' + item.name + '" is read-only (status) and cannot be controlled.',
+                             thing_id: thingId, thing_name: thing.name, available_items: thingItemsSummary(thing) };
                 }
                 node.publishCommand(thingId, itemId, value);
                 return { success: true, thing_name: thing.name, item_id: itemId, value };
@@ -744,7 +769,17 @@ module.exports = function(RED) {
                         }
                         if (args.item_id) {
                             const item = device.items.find(i => i.item_id === args.item_id);
-                            if (!item) return toolOk(JSON.stringify({ error: 'Item not found' }));
+                            if (!item) return toolOk(JSON.stringify({
+                                error          : 'No item with id "' + args.item_id + '" in thing "' + device.thing_name + '" — pick from available_items (item is the measurement/control within the device, not the device name).',
+                                thing_id       : device.thing_id,
+                                thing_name     : device.thing_name,
+                                available_items: device.items.map(i => ({
+                                    item_id  : i.item_id,
+                                    item_name: i.item_name,
+                                    ha_type  : i.ha_type,
+                                    ...(i.history ? { history: true } : {})
+                                }))
+                            }));
                             return toolOk(JSON.stringify({
                                 thing_id   : device.thing_id,
                                 thing_name : device.thing_name,
@@ -1240,14 +1275,8 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'Provide thing_id or thing_name' }));
                         }
 
-                        // Every item-resolution failure returns the thing's items, so the caller
-                        // can pick the right one without a full get_all_states dump.
-                        const thingItemsSummary = (thing) => (thing.thingType.items || []).map(it => ({
-                            item_id  : it.id,
-                            item_name: it.name,
-                            ha_type  : it.haType || (it.id === '1' ? 'binary_sensor' : ''),
-                            history  : !!it.history
-                        }));
+                        // itemFail returns the thing's items (shared thingItemsSummary helper), so a
+                        // failed item lookup is self-describing — no full get_all_states dump needed.
                         const itemFail = (msg) => toolOk(JSON.stringify({
                             error          : msg,
                             thing_id       : targetThing.id,
