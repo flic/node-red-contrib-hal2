@@ -11,6 +11,7 @@ const MCP_TOOLS = [
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
                       'The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. ' +
                       'Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. ' +
+                      'Use fields="items" for a compact per-device item index (thing_id, thing_name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. ' +
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
                       'Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
@@ -23,7 +24,7 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
-                fields  : { type: 'string', enum: ['summary', 'full'], description: 'Level of detail — "summary" (default): thing_id, thing_name, type_name, alive; "full": includes all items' },
+                fields  : { type: 'string', enum: ['summary', 'items', 'full'], description: 'Level of detail — "summary" (default): thing_id, thing_name, type_name, alive; "items": compact item index (item_id, item_name, ha_type, history) for cheap id lookup; "full": includes all items with values + metadata' },
                 ha_type : { type: 'string', description: 'Filter to devices that have at least one item with this ha_type (e.g. "light", "scene", "cover")' },
                 tag     : { type: 'string', description: 'Filter to devices/items tagged with this value (case-insensitive, exact match)' },
                 offset  : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
@@ -50,10 +51,13 @@ const MCP_TOOLS = [
     },
     {
         name        : 'get_history',
-        description : 'Returns logged historical values for a specific device item. ' +
+        description : 'Returns logged historical values for a specific device item — temperature and other sensor readings over time, time series for a graph/chart, trends, statistics, activity. ' +
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
+                      'NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Sjövatten Sensor" contains an item named "Temperatur"), so a thing name will not match an item name. ' +
+                      'If you know the device but not the exact item, pass ha_type (e.g. ha_type="temperature") and the server resolves the item for you. ' +
+                      'If item resolution fails, the error response includes available_items (item_id, item_name, ha_type, history) for that thing — pick from it, no full get_all_states dump needed. ' +
                       'Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. ' +
                       'Time window — use one of these forms: ' +
                       '(1) hours: number of hours back from now (default: 24); ' +
@@ -72,8 +76,9 @@ const MCP_TOOLS = [
             properties : {
                 thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to thing_id)' },
-                item_id    : { type: 'string',  description: 'Item ID (from get_all_states)' },
-                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id)' },
+                item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
+                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperatur"), not the device name.' },
+                ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
                 hours      : { type: 'number',  description: 'Hours back from now (default: 24). Ignored if from/to/at are provided.', minimum: 1 },
                 from       : { type: 'string',  description: 'Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string' },
                 to         : { type: 'string',  description: 'End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted.' },

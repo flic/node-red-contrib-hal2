@@ -704,6 +704,19 @@ module.exports = function(RED) {
                                 if (d.categories) o.categories = d.categories;
                                 return o;
                             });
+                        } else if (fields === 'items') {
+                            // Compact item index for cheap id lookup — no values, metadata, notes or tags.
+                            paged = paged.map(d => ({
+                                thing_id  : d.thing_id,
+                                thing_name: d.thing_name,
+                                type_name : d.type_name,
+                                items     : (d.items || []).map(i => ({
+                                    item_id  : i.item_id,
+                                    item_name: i.item_name,
+                                    ha_type  : i.ha_type,
+                                    ...(i.history ? { history: true } : {})
+                                }))
+                            }));
                         }
 
                         const result = { total, offset, devices: paged };
@@ -1227,18 +1240,56 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'Provide thing_id or thing_name' }));
                         }
 
+                        // Every item-resolution failure returns the thing's items, so the caller
+                        // can pick the right one without a full get_all_states dump.
+                        const thingItemsSummary = (thing) => (thing.thingType.items || []).map(it => ({
+                            item_id  : it.id,
+                            item_name: it.name,
+                            ha_type  : it.haType || (it.id === '1' ? 'binary_sensor' : ''),
+                            history  : !!it.history
+                        }));
+                        const itemFail = (msg) => toolOk(JSON.stringify({
+                            error          : msg,
+                            thing_id       : targetThing.id,
+                            thing_name     : targetThing.name,
+                            available_items: thingItemsSummary(targetThing)
+                        }));
+
+                        const ttItems = targetThing.thingType.items || [];
                         let itemId = args.item_id;
+
+                        // Resolve by ha_type when the device is known but the exact item isn't
+                        // (e.g. thing_name="Sjövatten" + ha_type="temperature").
+                        if (!itemId && !args.item_name && args.ha_type) {
+                            const wanted  = expandHaTypeFilter(args.ha_type);
+                            const matches = ttItems.filter(it => it.haType && wanted.has(it.haType.toLowerCase()));
+                            if (matches.length === 0) {
+                                return itemFail('No item with ha_type "' + args.ha_type + '" in thing "' + targetThing.name + '".');
+                            }
+                            const histMatches = matches.filter(it => it.history);
+                            const pick = histMatches.length ? histMatches : matches;
+                            if (pick.length > 1) {
+                                return itemFail('Multiple items match ha_type "' + args.ha_type + '" — specify item_id or item_name from available_items.');
+                            }
+                            itemId = pick[0].id;
+                        }
+
                         if (!itemId && args.item_name) {
                             const needle = args.item_name.toLowerCase();
-                            const found = targetThing.thingType.items.find(i => i.name.toLowerCase().includes(needle));
-                            if (!found) return toolOk(JSON.stringify({ error: 'No item matching: ' + args.item_name }));
-                            if (!found.history) return toolOk(JSON.stringify({ error: 'History not enabled for item: ' + found.name }));
+                            const found  = ttItems.find(i => i.name.toLowerCase().includes(needle));
+                            if (!found) {
+                                return itemFail('No item matching "' + args.item_name + '" in thing "' + targetThing.name + '". Note: thing and item are separate namespaces — the device is "' + targetThing.name + '"; pick an item from available_items (or pass ha_type).');
+                            }
+                            if (!found.history) return itemFail('History not enabled for item "' + found.name + '".');
                             itemId = found.id;
-                        } else if (itemId) {
-                            const found = targetThing.thingType.items.find(i => i.id === itemId);
-                            if (found && !found.history) return toolOk(JSON.stringify({ error: 'History not enabled for item: ' + found.name }));
+                        }
+
+                        if (itemId) {
+                            const found = ttItems.find(i => i.id === itemId);
+                            if (!found)         return itemFail('No item with id "' + itemId + '" in thing "' + targetThing.name + '".');
+                            if (!found.history) return itemFail('History not enabled for item "' + found.name + '".');
                         } else {
-                            return toolOk(JSON.stringify({ error: 'Provide item_id or item_name' }));
+                            return itemFail('Provide item_id, item_name, or ha_type. See available_items for this thing.');
                         }
 
                         function parseTimeArg(v) {
