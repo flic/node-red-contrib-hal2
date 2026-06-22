@@ -59,7 +59,7 @@
                 return;
             } 
                        
-            var groupsList = halGetGroups(RED);
+            var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val());
             var thingTypeList = halGetThingTypes(RED,thingsList,false,true);
 
             $("#command-con").editableList({
@@ -144,15 +144,27 @@
                         .append(' Only send command if it differs from state')
 
                     thingsField.change(function() {
+                        itemsField.children().remove();
+
+                        // Groups are not nodes — the item field carries the group id.
+                        if (categoryField.val() === 'hal2Group') {
+                            rowNotes.hide();
+                            rowItemNotes.hide();
+                            rowOnChange.hide();
+                            var gid = thingsField.val();
+                            if (gid) { itemsField.append($("<option></option>").val(gid).text(gid)); }
+                            return;
+                        }
+
                         var thing;
                         try {
                             thing = RED.nodes.node(thingsField.val());
                         } catch (error) {
                             console.log('Error: '+error.message);
                         }
-                        itemsField.children().remove();
+                        if (!thing) { return; }
                         switch(thing.type) {
-                            case 'hal2Thing': 
+                            case 'hal2Thing':
                                 // Show notes
                                 if (thing.notes) {
                                     rowNotes.show();
@@ -223,8 +235,10 @@
 
                     itemsField.change(function() {
                         rowItemNotes.hide();
+                        if (categoryField.val() === 'hal2Group') { return; }
                         var thing = RED.nodes.node(thingsField.val());
-                        if (thing.type == 'hal2Thing') {                        
+                        if (!thing) { return; }
+                        if (thing.type == 'hal2Thing') {
                             var thingType = RED.nodes.node(thing.thingType);
                         } else {
                             var thingType = thing;
@@ -347,14 +361,14 @@
                     var command = this.commandset[i];
                     try {
                         let thing = RED.nodes.node(command.thing);
-                        if (typeof thing !== 'undefined') {
+                        if (typeof thing !== 'undefined' || command.category === 'hal2Group') {
                             $("#command-con").editableList('addItem',command);
                         } else {
                             console.error('Thing ID '+command.thing+' is missing.');
                         }
                     } catch (error) {
                         console.log('Error: '+error.message);
-                    } 
+                    }
                 }
             } else {
                 $("#command-con").editableList('addItem',null);              

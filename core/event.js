@@ -141,6 +141,19 @@ module.exports = function(RED) {
             if (node.topic != '') {
                 msg.topic = node.topic;
             }
+            const thing = RED.nodes.getNode(thingid);
+            if (thing && thing.thingType && thing.thingType.items) {
+                const itm = thing.thingType.items.find(i => i.id === itemid);
+                if (itm && itm.haType) {
+                    msg.item = {
+                        name       : itm.name,
+                        id         : itm.id,
+                        ha_type    : itm.haType,
+                        last_update: thing.heartbeat && thing.heartbeat[itemid],
+                        last_change: thing.last_change && thing.last_change[itemid]
+                    };
+                }
+            }
             node.send(msg);
             node.debug('Event: Id '+thingid);
             showState();
@@ -148,7 +161,9 @@ module.exports = function(RED) {
 
         if (node.eventHandler) {
             node.listener = function(thingtypeid, thingid, itemid, event) {
-                if (itemid != node.item) { return; }
+                // For group sources the engine re-emits with the real member item id,
+                // so the item filter is bypassed — any member change triggers the event.
+                if (node.typeSel != 'hal2Group' && itemid != node.item) { return; }
                 if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
                 if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){

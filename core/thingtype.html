@@ -50,9 +50,12 @@
                     </div>                    
                 </div>
                 <div class="form-row" id="heartbeat-filter" hidden>
-                    <label for="node-config-input-hbFilterVal" style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Topic filter</label>
-                    <input type="text" id="node-config-input-hbFilterVal" style="width: calc(100% - 185px)">
-                    <input type="hidden" id="node-config-input-hbFilterType">
+                    <label style="width: 125px; padding-left: 10px;"><i class="fa fa-filter"></i> Filters</label>
+                    <select id="node-config-input-hbFilterMode" style="width:70px; vertical-align:top; margin-top:3px;">
+                        <option value="and">AND</option>
+                        <option value="or">OR</option>
+                    </select>
+                    <ol id="hb-filter-list" style="margin-top:8px;"></ol>
                 </div>
                 <div class="form-row" id="heartbeat-lwt" hidden>
                     <div class="form-row">
@@ -78,6 +81,9 @@
             </div>
             <div class="form-row">
                 <ol id="node-config-thingtype-list-items"></ol>
+            </div>
+            <div class="form-row">
+                <button type="button" id="thingtype-copy-item-btn" class="red-ui-button" style="padding:4px 12px;"><i class="fa fa-clone"></i> Copy item from...</button>
             </div>
         </div>
         <!-- Ingress tab -->
@@ -145,7 +151,7 @@
 <script type="text/javascript">
     var editors = {};
 
-    function getAttributes() {
+    function localGetAttributes() {
         let attributes = [];
         $("#node-config-thingtype-list-attributes")
             .editableList('items')
@@ -162,23 +168,40 @@
         return attributes;
     }
 
-    function getItems() {
+    function parseTags(s) {
+        return (s || '').split(',').map(t => t.trim()).filter(Boolean);
+    }
+
+    function localGetItems() {
         let items = [];
         $("#node-config-thingtype-list-items")
             .editableList('items')
             .each(function() {
                 let item = $(this);
+                var itemTopicFilters = [];
+                item.find(".node-config-thingtype-filter-list").editableList('items').each(function() {
+                    var row = $(this);
+                    itemTopicFilters.push({
+                        field:     row.find('.tt-filter-field').typedInput('value'),
+                        matchType: row.find('.tt-filter-match').typedInput('type'),
+                        value:     row.find('.tt-filter-match').typedInput('value')
+                    });
+                });
                 let r = {
-                    name:item.find(".node-config-thingtype-name-property").val(),
-                    id:item.find(".node-config-thingtype-id-property").val(),
-                    topicFilterType:item.find(".node-config-thingtype-topicfilter-property").typedInput('type'),
-                    topicFilterValue:item.find(".node-config-thingtype-topicfilter-property").typedInput('value'),
-                    topicSuffix:item.find(".node-config-thingtype-topicsuffix-property").val(),
-                    type:item.find(".node-config-thingtype-itemtype-property").val(),
-                    ingress:item.find(".node-config-thingtype-ingress-property").val(),
-                    egress:item.find(".node-config-thingtype-egress-property").val(),
-                    notes:item.find(".node-config-thingtype-notes-property").val(),
-                    output:item.find(".node-config-thingtype-output-property").val()
+                    name:            item.find(".node-config-thingtype-name-property").val(),
+                    id:              item.find(".node-config-thingtype-id-property").val(),
+                    topicFilters:    itemTopicFilters,
+                    topicFilterMode: item.find(".node-config-thingtype-filtermode-property").val() || 'and',
+                    topicSuffix:     item.find(".node-config-thingtype-topicsuffix-property").val(),
+                    type:            item.find(".node-config-thingtype-itemtype-property").val(),
+                    haType:          item.find(".node-config-thingtype-hatype-property").val(),
+                    ingress:         item.find(".node-config-thingtype-ingress-property").val(),
+                    egress:          item.find(".node-config-thingtype-egress-property").val(),
+                    notes:           item.find(".node-config-thingtype-notes-property").val(),
+                    tags:            parseTags(item.find(".node-config-thingtype-tags-property").val()),
+                    output:          item.find(".node-config-thingtype-output-property").val(),
+                    history:            item.find(".node-config-thingtype-history-property").prop('checked'),
+                    historyAllUpdates:  item.find(".node-config-thingtype-historyall-property").prop('checked')
                 }
                 items.push(r);
             })
@@ -204,6 +227,184 @@
                 f.push(r);
             })
         return f;
+    }
+
+    // Discover central functions (ingress/egress library) on all EventHandler configs
+    function getCentralFunctions(fn_type) {
+        const result = [];
+        const prop = fn_type + 'Library';
+        RED.nodes.eachConfig(function(cfg) {
+            if (cfg.type !== 'hal2EventHandler') return;
+            // Always read from the live node object (may have unsaved mutations)
+            const live = RED.nodes.node(cfg.id) || cfg;
+            const lib = live[prop] || cfg[prop] || [];
+            lib.forEach(function(f) {
+                result.push({ name: f.name, id: f.id, fn: f.fn, _ehId: cfg.id, _ehName: cfg.name || cfg.label || 'EventHandler' });
+            });
+        });
+        return result;
+    }
+
+    // Find a central function by id
+    function findCentralFunction(fn_type, id) {
+        return getCentralFunctions(fn_type).find(f => f.id === id) || null;
+    }
+
+    // List all EventHandler configs (for promote target picker)
+    function getAllEventHandlers() {
+        const ehs = [];
+        RED.nodes.eachConfig(function(cfg) {
+            if (cfg.type === 'hal2EventHandler') {
+                ehs.push({ id: cfg.id, name: cfg.name || cfg.label || cfg.id });
+            }
+        });
+        return ehs;
+    }
+
+    // Refresh all items' ingress/egress dropdowns (preserve selected value)
+    function refreshAllItemDropdowns() {
+        let itemCount = 0, ingressDropdowns = 0, egressDropdowns = 0;
+        const centralIngressCount = getCentralFunctions('ingress').length;
+        const centralEgressCount  = getCentralFunctions('egress').length;
+        $('#node-config-thingtype-list-items > li').each(function() {
+            itemCount++;
+            const row = $(this);
+            const ingressSel = row.find('.node-config-thingtype-ingress-property');
+            if (ingressSel.length) {
+                ingressDropdowns++;
+                const prev = ingressSel.val();
+                populateFnSelect(ingressSel, 'ingress');
+                ingressSel.val(prev).trigger('change');
+            }
+            const egressSel = row.find('.node-config-thingtype-egress-property');
+            if (egressSel.length) {
+                egressDropdowns++;
+                const prev = egressSel.val();
+                populateFnSelect(egressSel, 'egress');
+                egressSel.val(prev).trigger('change');
+            }
+        });
+        return { itemCount: itemCount, ingressDropdowns: ingressDropdowns, egressDropdowns: egressDropdowns, centralIngressCount: centralIngressCount, centralEgressCount: centralEgressCount };
+    }
+
+    // Modal picker — shows items from all ThingTypes, calls callback with selected item
+    function pickItemFromThingTypes(opts, callback) {
+        opts = opts || {};
+        const candidates = [];
+        RED.nodes.eachConfig(function(cfg) {
+            if (cfg.type !== 'hal2ThingType') return;
+            if (cfg.id === opts.excludeTtId) return;
+            const items = cfg.items || [];
+            items.forEach(function(item) {
+                if (opts.filterHaType && item.haType !== opts.filterHaType) return;
+                if (item.id === '1') return; // skip heartbeat
+                candidates.push({ ttName: cfg.name || cfg.label || cfg.id, ttId: cfg.id, item: item });
+            });
+        });
+        if (candidates.length === 0) {
+            RED.notify('No matching items found in other ThingTypes.', 'warning');
+            return;
+        }
+
+        const overlay = $('<div/>',{style:'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:10000;'}).appendTo('body');
+        const modal = $('<div/>',{style:'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:4px;width:640px;max-height:70vh;display:flex;flex-direction:column;'}).appendTo(overlay);
+
+        $('<h4/>',{style:'margin-top:0;'}).text(opts.title || 'Pick an item').appendTo(modal);
+        if (opts.subtitle) $('<p/>',{style:'color:#888;font-size:0.9em;margin:0 0 10px;'}).text(opts.subtitle).appendTo(modal);
+
+        const searchInput = $('<input/>',{type:'text',placeholder:'Search by ThingType, item name, haType, or ID...',style:'width:100%;margin-bottom:10px;padding:6px;'}).appendTo(modal);
+        const listContainer = $('<div/>',{style:'overflow-y:auto;flex:1;border:1px solid #ddd;padding:0;min-height:300px;max-height:400px;'}).appendTo(modal);
+
+        function renderList(filterText) {
+            listContainer.empty();
+            const filter = (filterText || '').toLowerCase();
+            const grouped = {};
+            candidates.forEach(c => {
+                const text = c.ttName + ' / ' + c.item.name + ' (' + (c.item.haType || 'no type') + ') id=' + c.item.id;
+                if (filter && !text.toLowerCase().includes(filter)) return;
+                if (!grouped[c.ttName]) grouped[c.ttName] = [];
+                grouped[c.ttName].push(c);
+            });
+            Object.keys(grouped).sort().forEach(ttName => {
+                $('<div/>',{style:'padding:6px 10px;background:#f5f5f5;font-weight:bold;border-bottom:1px solid #ddd;'}).text(ttName).appendTo(listContainer);
+                grouped[ttName].forEach(c => {
+                    const entry = $('<div/>',{style:'padding:6px 14px;cursor:pointer;border-bottom:1px solid #f0f0f0;'})
+                        .html('<strong>'+$('<div/>').text(c.item.name).html()+'</strong> <span style="color:#888;">'+(c.item.haType || 'no type')+'</span> <span style="color:#aaa;font-size:0.85em;float:right;">'+c.item.id+'</span>')
+                        .appendTo(listContainer);
+                    entry.hover(function(){$(this).css('background','#e8f4ff');}, function(){$(this).css('background','white');});
+                    entry.click(function() {
+                        overlay.remove();
+                        callback(c.item, c);
+                    });
+                });
+            });
+            if (listContainer.children().length === 0) {
+                $('<div/>',{style:'padding:20px;text-align:center;color:#888;'}).text('No matches').appendTo(listContainer);
+            }
+        }
+        renderList();
+        searchInput.on('input', function() { renderList($(this).val()); });
+        searchInput.focus();
+
+        const btnRow = $('<div/>',{style:'margin-top:10px;text-align:right;'}).appendTo(modal);
+        $('<button/>',{type:'button',class:'red-ui-button',style:'padding:4px 12px;'}).text('Cancel').appendTo(btnRow).click(function() { overlay.remove(); });
+        overlay.click(function(e) { if (e.target === overlay[0]) overlay.remove(); });
+    }
+
+    // Enable Override button only when the currently selected option is in the Shared optgroup
+    function updateOverrideBtnState(selectEl, btn) {
+        const opt = selectEl.find('option:selected');
+        const isShared = opt.length && opt.parent('optgroup').attr('label') === 'Shared';
+        btn.prop('disabled', !isShared).css('opacity', isShared ? 1 : 0.4);
+    }
+
+    // Copy a central function to the local list with same id (per-ThingType override)
+    function overrideCentralFunctionLocally(fn_type, fnId, selectToRefresh) {
+        if (!fnId) { RED.notify('No function selected.', 'warning'); return; }
+        // Already local?
+        let localExists = false;
+        $("#node-config-"+fn_type+"-list-items").editableList('items').each(function() {
+            if ($(this).find(".node-config-"+fn_type+"-id-property").val() === fnId) localExists = true;
+        });
+        if (localExists) { RED.notify('Function is already local — no override needed.', 'info'); return; }
+
+        const central = findCentralFunction(fn_type, fnId);
+        if (!central) { RED.notify('Central function not found.', 'warning'); return; }
+
+        // Add as a new local entry with the same ID
+        $("#node-config-"+fn_type+"-list-items").editableList('addItem', {
+            name: central.name + ' (local override)',
+            id:   central.id,
+            fn:   central.fn
+        });
+
+        // Refresh ALL items' dropdowns so the new local entry shows up everywhere
+        refreshAllItemDropdowns();
+        RED.notify('Override created locally. Edit the local copy to customise.', 'success');
+    }
+
+    // Populate a select with local + central options grouped via optgroup
+    function populateFnSelect(selectEl, fn_type) {
+        const seenIds = new Set();
+        selectEl.empty();
+        const localGroup = $('<optgroup label="Local"></optgroup>').appendTo(selectEl);
+        $("#node-config-"+fn_type+"-list-items").editableList('items').each(function() {
+            const item = $(this);
+            const name = item.find(".node-config-"+fn_type+"-name-property").val();
+            const id   = item.find(".node-config-"+fn_type+"-id-property").val();
+            if (id && !seenIds.has(id)) {
+                localGroup.append($("<option></option>").val(id).text(name));
+                seenIds.add(id);
+            }
+        });
+        const central = getCentralFunctions(fn_type).filter(f => f.id && !seenIds.has(f.id));
+        if (central.length) {
+            const centralGroup = $('<optgroup label="Shared"></optgroup>').appendTo(selectEl);
+            central.forEach(function(f) {
+                centralGroup.append($("<option></option>").val(f.id).text(f.name));
+                seenIds.add(f.id);
+            });
+        }
     }
 
     function addAttributes(attributes) {
@@ -239,71 +440,32 @@
     }    
 
     function updateMainTab(id) {
-        var items = [];
-        $("#node-config-"+id+"-list-items")
-            .editableList('items')
-            .each(function() {
-                let item = $(this);
-                let params = {
-                    name:item.find(".node-config-"+id+"-name-property").val(),
-                    id:item.find(".node-config-"+id+"-id-property").val()
-                }
-                items.push(params);
-            })
-            
-        $("#node-config-thingtype-list-items")
-            .editableList('items')
-            .each(function() {
-                var property = this.find(".node-config-thingtype-"+id+"-property");
-                let saveValue = property.val();
-                property.children().remove();
-                for (let i in items) {
-                    property.append($("<option></option>").val(items[i].id).text(items[i].name));
-                }
-                property.val(saveValue);                                 
-            });                     
+        $('#node-config-thingtype-list-items > li').each(function() {
+            const property = $(this).find(".node-config-thingtype-"+id+"-property");
+            if (!property.length) return;
+            const saveValue = property.val();
+            populateFnSelect(property, id);
+            property.val(saveValue);
+        });
     }
 
     function updateHbFunctions(savedFn) {
-        // Add ingress items to heartbeat
-        selectedFn = $("#node-config-input-hbLWT").val()
-        $("#node-config-input-hbLWT").children().remove();
-        $("#node-config-ingress-list-items")
-            .editableList('items')
-            .each(function() {
-                var item = $(this);
-                let name = item.find(".node-config-ingress-name-property").val();
-                let id = item.find(".node-config-ingress-id-property").val();
-                $("#node-config-input-hbLWT").append($("<option></option>").val(id).text(name));
-            })
-        if (savedFn) {
-            $("#node-config-input-hbLWT").val(savedFn);
-        } else {
-            $("#node-config-input-hbLWT").val(selectedFn);
-        }
+        const sel = $("#node-config-input-hbLWT");
+        const selectedFn = sel.val();
+        populateFnSelect(sel, 'ingress');
+        sel.val(savedFn || selectedFn);
         $("#node-config-input-hbType").trigger('change');
     }
 
     function updateFilterFunctions(savedFn) {
-        // Add ingress items to filter functions
-        selectedFn = $("#node-config-input-filterFunction").val()
-        $("#node-config-input-filterFunction").children().remove();
-        $("#node-config-input-filterFunction").append($("<option></option>").val('0').text("<<No filter>>"));
-        $("#node-config-ingress-list-items")
-            .editableList('items')
-            .each(function() {
-                var item = $(this);
-                let name = item.find(".node-config-ingress-name-property").val();
-                let id = item.find(".node-config-ingress-id-property").val();
-                $("#node-config-input-filterFunction").append($("<option></option>").val(id).text(name));
-            })
-        if (savedFn) {
-            $("#node-config-input-filterFunction").val(savedFn);
-        } else {
-            $("#node-config-input-filterFunction").val(selectedFn);
-        }
-        $("#node-config-input-filterFunction").trigger('change');
-    }    
+        const sel = $("#node-config-input-filterFunction");
+        const selectedFn = sel.val();
+        populateFnSelect(sel, 'ingress');
+        sel.prepend($("<option></option>").val('0').text("<<No filter>>"));
+        sel.val(savedFn || selectedFn || '0');
+        sel.trigger('change');
+    }
+
 
     RED.nodes.registerType('hal2ThingType', {
         category: 'config',
@@ -336,6 +498,8 @@
             hbType:         { value:'lwt' },
             hbTTL:          { value:3600 },
             hbLWT:          {},
+            hbFilters:      { value: [] },
+            hbFilterMode:   { value: 'and' },
             hbFilterVal:    {},
             hbFilterType:   {},
             hbPropVal:      {},
@@ -536,11 +700,31 @@
                     $("#heartbeat-timestamp").show();
                 }
             });
-            $('#node-config-input-hbFilterVal').typedInput({
-                default: 'str',
-                typeField: $("#node-config-input-hbFilterType"),
-                types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
-            });              
+            $('#hb-filter-list').editableList({
+                addItem: function(container, i, filter) {
+                    var row = $('<div/>').appendTo(container);
+                    var fieldInput = $('<input/>', {type:'text', class:'hb-filter-field', style:'width:160px; margin-right:5px;'}).appendTo(row);
+                    fieldInput.typedInput({ types: ['msg'] });
+                    fieldInput.typedInput('value', filter.field || 'topic');
+                    var matchInput = $('<input/>', {type:'text', class:'hb-filter-match', style:'width:calc(100% - 175px)'}).appendTo(row);
+                    matchInput.typedInput({ default:'mqtt', types:['str','re',MQTTType,StrStartType,StrEndType,StrContainsType] });
+                    if (filter.matchType) {
+                        matchInput.typedInput('type', filter.matchType);
+                        matchInput.typedInput('value', filter.value || '');
+                    }
+                },
+                removable: true,
+                sortable: false,
+                addButton: 'Add filter'
+            });
+            // Migrate old single filter or load existing
+            var hbFilters = node.hbFilters;
+            if ((!hbFilters || hbFilters.length === 0) && node.hbFilterVal) {
+                hbFilters = [{ field: 'topic', matchType: node.hbFilterType || 'mqtt', value: node.hbFilterVal }];
+            }
+            if (hbFilters && hbFilters.length > 0) {
+                hbFilters.forEach(function(f) { $('#hb-filter-list').editableList('addItem', f); });
+            }
             $('#node-config-input-hbPropVal').typedInput({
                 default: 'msg',
                 typeField: $("#node-config-input-hbPropType"),
@@ -562,12 +746,16 @@
                         .appendTo(container)
                         .hide()
                     var rowNotes = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowTags = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowHaType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowItemType = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);  
                     var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowFilterList  = $('<div/>',{style:"margin-top:4px; margin-left:115px;"}).appendTo(rowDetails);
                     var rowIngress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowEgress = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowTopicSuffix = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
                     var rowOutput = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowHistory = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
 
                     // Show a clickable expand icon
                     var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
@@ -603,9 +791,15 @@
                     var labelNotes = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
                         .appendTo(rowNotes)
                         .append(' Notes')
+                    var labelTags = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-tags"})
+                        .appendTo(rowTags)
+                        .append(' Tags')
+                    var labelHaType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-home"})
+                        .appendTo(rowHaType)
+                        .append(' HA type')
                     var labelTopicFilter = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
                         .appendTo(rowTopicFilter)
-                        .append(' Topic filter')
+                        .append(' Filter')
                     var labelItemType = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
                         .appendTo(rowItemType)
                         .append(' Type')
@@ -620,22 +814,108 @@
                         .append(' Topic')
                     var labelOutput = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-random"})
                         .appendTo(rowOutput)
-                        .append(' Output')                        
+                        .append(' Output')
+                    var labelHistory = $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px;  padding-right:10px; box-sizing:border-box;",class:"fa fa-history"})
+                        .appendTo(rowHistory)
+                        .append(' History')
                   
                     //Name property
-                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-name-property",type:"text"})
+                    var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 215px)",class:"node-config-thingtype-name-property",type:"text"})
                         .appendTo(rowName)
                         .prop('required',true);
                     var idProperty = $('<input/>',{class:"node-config-thingtype-id-property",type:"hidden"})
                         .appendTo(rowName)
                         .val(halCreateId())
-                    //MQTT topic filter
-                    var topicFilterProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicfilter-property",type:"text"})
-                        .appendTo(rowTopicFilter)
-                        .typedInput({
-                            default:MQTTType,
-                            types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType]
+
+                    // Copy ID from another item button
+                    var copyIdButton = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy ID from an item of the same haType in another ThingType'})
+                        .html('<i class="fa fa-link"></i> Copy ID')
+                        .appendTo(rowName);
+                    copyIdButton.click(function(e) {
+                        e.preventDefault();
+                        const currentHaType = haTypeProperty.val();
+                        pickItemFromThingTypes({
+                            title: 'Copy ID from another item' + (currentHaType ? ' (haType: ' + currentHaType + ')' : ''),
+                            subtitle: 'Only the item ID will be replaced — name, ingress/egress and other fields are kept.',
+                            excludeTtId: node.id,
+                            filterHaType: currentHaType || null
+                        }, function(srcItem) {
+                            // Validate against collision in this TT
+                            let collision = false;
+                            $("#node-config-thingtype-list-items").editableList('items').each(function() {
+                                const otherId = $(this).find(".node-config-thingtype-id-property").val();
+                                if (otherId === srcItem.id && otherId !== idProperty.val()) collision = true;
+                            });
+                            if (collision && !confirm('Another item in this ThingType already has id ' + srcItem.id + '. Apply anyway?')) return;
+                            idProperty.val(srcItem.id);
+                            RED.notify('ID changed to ' + srcItem.id, 'success');
                         });
+                    });
+                    // HA type
+                    var haTypeProperty = $('<select/>',{class:"node-config-thingtype-hatype-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowHaType)
+                        .append($("<option></option>").val('').text('— None —'))
+                        .append($("<option></option>").val('button').text('Button'))
+                        .append($("<option></option>").val('switch').text('Switch [On/Off]'))
+                        .append($("<option></option>").val('light').text('Light [On/Off]'))
+                        .append($("<option></option>").val('dimmer').text('Dimmer'))
+                        .append($("<option></option>").val('cover').text('Cover / Blind / Shutter'))
+                        .append($("<option></option>").val('lock').text('Lock'))
+                        .append($("<option></option>").val('fan').text('Fan'))
+                        .append($("<option></option>").val('climate').text('Climate / HVAC'))
+                        .append($("<option></option>").val('media_player').text('Media player'))
+                        .append($("<option></option>").val('temperature').text('Temperature sensor'))
+                        .append($("<option></option>").val('humidity').text('Humidity sensor'))
+                        .append($("<option></option>").val('motion').text('Motion sensor'))
+                        .append($("<option></option>").val('contact').text('Contact sensor'))
+                        .append($("<option></option>").val('smoke').text('Smoke sensor'))
+                        .append($("<option></option>").val('co2').text('CO₂ sensor'))
+                        .append($("<option></option>").val('illuminance').text('Illuminance sensor'))
+                        .append($("<option></option>").val('power').text('Power / Energy sensor'))
+                        .append($("<option></option>").val('battery').text('Battery sensor'))
+                        .append($("<option></option>").val('water leak').text('Water leak sensor'))
+                        .append($("<option></option>").val('depth').text('Depth sensor (mm)'))
+                        .append($("<option></option>").val('pressure').text('Pressure sensor (hPa)'))
+                        .append($("<option></option>").val('ac mode').text('AC mode (off/cool/heat/…)'))
+                        .append($("<option></option>").val('fan mode').text('AC fan mode'))
+                        .append($("<option></option>").val('swing mode').text('AC swing mode'))
+                        .append($("<option></option>").val('color').text('Color (HSB)'))
+                        .append($("<option></option>").val('color temperature').text('Color temperature'))
+                        .append($("<option></option>").val('presence').text('Presence (home/away)'))
+                        .append($("<option></option>").val('room').text('Room / Location'))
+                        .append($("<option></option>").val('scene').text('Scene'))
+                        .append($("<option></option>").val('target temperature').text('Target temperature (setpoint)'))
+                        .append($("<option></option>").val('heater').text('Heater'))
+                        .append($("<option></option>").val('circulation pump').text('Circulation pump'))
+                        .append($("<option></option>").val('airjets').text('Airjets'))
+                        .append($("<option></option>").val('binary_sensor').text('Binary sensor (generic)'))
+                        .append($("<option></option>").val('sensor').text('Sensor (generic)'))
+                        .append($("<option></option>").val('other').text('Other'))
+                    // Filter mode + nested filter list
+                    var filterModeProperty = $('<select/>',{class:"node-config-thingtype-filtermode-property",style:"width:70px;"})
+                        .appendTo(rowTopicFilter)
+                        .append($('<option/>').val('and').text('AND'))
+                        .append($('<option/>').val('or').text('OR'));
+
+                    var filterListEl = $('<ol/>',{class:"node-config-thingtype-filter-list"}).appendTo(rowFilterList);
+                    filterListEl.editableList({
+                        addItem: function(c, idx, filter) {
+                            var row = $('<div/>').appendTo(c);
+                            var fieldInput = $('<input/>',{type:'text',class:'tt-filter-field',style:'width:130px; margin-right:5px;'}).appendTo(row);
+                            fieldInput.typedInput({ types: ['msg'] });
+                            fieldInput.typedInput('value', filter.field || 'topic');
+
+                            var matchInput = $('<input/>',{type:'text',class:'tt-filter-match',style:'width:calc(100% - 145px)'}).appendTo(row);
+                            matchInput.typedInput({ default:MQTTType, types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType] });
+                            if (filter.matchType) {
+                                matchInput.typedInput('type', filter.matchType);
+                                matchInput.typedInput('value', filter.value || '');
+                            }
+                        },
+                        removable: true,
+                        sortable: false,
+                        addButton: 'Add filter'
+                    });
                     var outputProperty = $('<input/>',{style: "width: 60px",class:"node-config-thingtype-output-property",type:"text"})
                         .appendTo(rowOutput)
                         .val(1)
@@ -660,68 +940,83 @@
                     var topicSuffixProperty = $('<input/>',{style: "width: calc(100% - 125px)",class:"node-config-thingtype-topicsuffix-property",type:"text"})
                     .appendTo(rowTopicSuffix)
                     //Ingress
-                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 125px)"})
+                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-ingress-property",style:"width:calc(100% - 225px)"})
                         .appendTo(rowIngress);
+                    populateFnSelect(ingressProperty, 'ingress');
+                    var ingressOverrideBtn = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy this shared function to local (override locally for this ThingType)'})
+                        .html('<i class="fa fa-code-fork"></i> Override')
+                        .appendTo(rowIngress);
+                    ingressOverrideBtn.click(function(e) {
+                        e.preventDefault();
+                        overrideCentralFunctionLocally('ingress', ingressProperty.val(), ingressProperty);
+                    });
+                    ingressProperty.on('change', function() { updateOverrideBtnState(ingressProperty, ingressOverrideBtn); });
+                    updateOverrideBtnState(ingressProperty, ingressOverrideBtn);
 
-                    $("#node-config-ingress-list-items")
-                        .editableList('items')
-                        .each(function() {
-                            var item = $(this);
-                            let name = item.find(".node-config-ingress-name-property").val();
-                            let id = item.find(".node-config-ingress-id-property").val();
-                            ingressProperty.append($("<option></option>").val(id).text(name));
-                        })
                     //Egress
-                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 125px)"})
+                    var egressProperty = $('<select/>',{class:"node-config-thingtype-egress-property",style:"width:calc(100% - 225px)"})
                         .appendTo(rowEgress);
-
-                    $("#node-config-egress-list-items")
-                        .editableList('items')
-                        .each(function() {
-                            var item = $(this);
-                            let name = item.find(".node-config-egress-name-property").val();
-                            let id = item.find(".node-config-egress-id-property").val();
-                            egressProperty.append($("<option></option>").val(id).text(name));
-                        })                    
+                    populateFnSelect(egressProperty, 'egress');
+                    var egressOverrideBtn = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy this shared function to local (override locally for this ThingType)'})
+                        .html('<i class="fa fa-code-fork"></i> Override')
+                        .appendTo(rowEgress);
+                    egressOverrideBtn.click(function(e) {
+                        e.preventDefault();
+                        overrideCentralFunctionLocally('egress', egressProperty.val(), egressProperty);
+                    });
+                    egressProperty.on('change', function() { updateOverrideBtnState(egressProperty, egressOverrideBtn); });
+                    updateOverrideBtnState(egressProperty, egressOverrideBtn);
                     
+                    var historyProperty = $('<input/>',{style:"width:auto",class:"node-config-thingtype-history-property",type:"checkbox"})
+                        .appendTo(rowHistory)
+                    $('<span/>',{style:"margin-left:10px; margin-right:5px; font-size:0.85em; color:#888;"})
+                        .text('all updates')
+                        .appendTo(rowHistory)
+                    var historyAllProperty = $('<input/>',{style:"width:auto",class:"node-config-thingtype-historyall-property",type:"checkbox"})
+                        .appendTo(rowHistory)
+
                     // Notes
                     var notesProperty = $('<textarea/>',{class:"node-config-thingtype-notes-property",style:"width:calc(100% - 125px)"})
                         .appendTo(rowNotes)
+
+                    // Tags
+                    var tagsProperty = $('<input/>',{class:"node-config-thingtype-tags-property",style:"width:calc(100% - 125px)",type:"text",placeholder:"comma,separated,tags"})
+                        .appendTo(rowTags)
 
                     // Show/hide ingress/egress/command
                     itemTypeProperty.change( function() {
                         let val = itemTypeProperty.val();
                         switch(val) {
                             case 'both':
-                                rowTopicFilter.show();
+                                rowTopicFilter.show(); rowFilterList.show();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.show();
                                 rowOutput.show();
                                 break;
                             case 'status':
-                                rowTopicFilter.show();
+                                rowTopicFilter.show(); rowFilterList.show();
                                 rowTopicSuffix.hide();
                                 rowEgress.hide();
                                 rowIngress.show();
                                 rowOutput.hide();
                                 break;
                             case 'command':
-                                rowTopicFilter.hide();
+                                rowTopicFilter.hide(); rowFilterList.hide();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.hide();
                                 rowOutput.show();
                                 break;
                             case 'loopback_command':
-                                rowTopicFilter.hide();
+                                rowTopicFilter.hide(); rowFilterList.hide();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.hide();
                                 rowOutput.hide();
                                 break;
                             case 'loopback_both':
-                                rowTopicFilter.show();
+                                rowTopicFilter.show(); rowFilterList.show();
                                 rowTopicSuffix.show();
                                 rowEgress.show();
                                 rowIngress.show();
@@ -734,15 +1029,28 @@
                     if (Object.keys(item).length != 0) {
                         nameProperty.val(item.name);
                         idProperty.val(item.id);
-                        topicFilterProperty.typedInput('type',item.topicFilterType);
-                        topicFilterProperty.typedInput('value',item.topicFilterValue);
+                        filterModeProperty.val(item.topicFilterMode || 'and');
+
+                        // Load filters — migrate old single-filter format if needed
+                        var existingFilters = item.topicFilters;
+                        if ((!existingFilters || existingFilters.length === 0) && item.topicFilterValue) {
+                            existingFilters = [{ field: 'topic', matchType: item.topicFilterType || 'mqtt', value: item.topicFilterValue }];
+                        }
+                        if (existingFilters && existingFilters.length > 0) {
+                            existingFilters.forEach(function(f) { filterListEl.editableList('addItem', f); });
+                        }
+
                         topicSuffixProperty.val(item.topicSuffix);
                         itemTypeProperty.val(item.type);
-                        ingressProperty.val(item.ingress);
-                        egressProperty.val(item.egress);
+                        ingressProperty.val(item.ingress).trigger('change');
+                        egressProperty.val(item.egress).trigger('change');
                         notesProperty.val(item.notes);
+                        tagsProperty.val(Array.isArray(item.tags) ? item.tags.join(', ') : (item.tags || ''));
                         if (typeof item.output == 'undefined') { item.output = 1; }
                         outputProperty.val(item.output);
+                        haTypeProperty.val(item.haType || '');
+                        historyProperty.prop('checked', item.history || false);
+                        historyAllProperty.prop('checked', item.historyAllUpdates || false);
                     }
                     itemTypeProperty.trigger('change');
                 },
@@ -882,11 +1190,67 @@
                             .appendTo(rowEditor)
 
                         //Name property
-                        var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 115px)",class:"node-config-"+fn_type+"-name-property",type:"text"})
+                        var nameProperty = $('<input/>',{style: "padding-right:10px; width: calc(100% - 195px)",class:"node-config-"+fn_type+"-name-property",type:"text"})
                             .appendTo(rowName)
                         var idProperty = $('<input/>',{class:"node-config-"+fn_type+"-id-property",type:"hidden"})
                             .appendTo(rowName)
                             .val(halCreateId())
+
+                        // Promote-to-central button
+                        var promoteButton = $('<button/>',{type:'button',style:'margin-left:5px; padding:2px 8px; font-size:0.8em;',title:'Move this function to the EventHandler\'s shared library'})
+                            .html('<i class="fa fa-arrow-up"></i> Promote')
+                            .appendTo(rowName);
+                        promoteButton.click(function(e) {
+                            e.preventDefault();
+                            const ehs = getAllEventHandlers();
+                            if (ehs.length === 0) {
+                                RED.notify('No EventHandler config found.', 'warning');
+                                return;
+                            }
+                            let targetEh;
+                            if (ehs.length === 1) {
+                                targetEh = ehs[0];
+                            } else {
+                                const choice = prompt('Promote to which EventHandler?\n' + ehs.map((e,i) => (i+1)+'. '+e.name).join('\n'), '1');
+                                const idx = parseInt(choice, 10) - 1;
+                                if (isNaN(idx) || idx < 0 || idx >= ehs.length) return;
+                                targetEh = ehs[idx];
+                            }
+                            const id = idProperty.val();
+                            const name = nameProperty.val();
+                            const editorId = (fn_type + '-' + id).split('.').join('');
+                            const fn = editors[editorId] ? editors[editorId].getValue() : '';
+
+                            const ehNode = RED.nodes.node(targetEh.id);
+                            if (!ehNode) {
+                                RED.notify('Cannot access EventHandler ' + targetEh.name, 'error');
+                                return;
+                            }
+                            const propName = fn_type + 'Library';
+                            ehNode[propName] = ehNode[propName] || [];
+                            if (ehNode[propName].some(f => f.id === id)) {
+                                if (!confirm('A function with id ' + id + ' already exists in '+targetEh.name+'. Overwrite?')) return;
+                                ehNode[propName] = ehNode[propName].filter(f => f.id !== id);
+                            }
+                            ehNode[propName].push({ name: name, id: id, fn: fn });
+                            ehNode.changed = true;
+                            RED.nodes.dirty(true);
+
+                            // Remove this row from the local list
+                            try {
+                                $("#node-config-" + fn_type + "-list-items").editableList('removeItem', opt);
+                            } catch (err) {
+                                const li = container.closest('li');
+                                li.find('.red-ui-editableList-item-remove').first().click();
+                            }
+                            delete editors[editorId];
+
+                            refreshAllItemDropdowns();
+                            setTimeout(function() {
+                                refreshAllItemDropdowns();
+                                RED.notify('Promoted "' + name + '" to ' + targetEh.name + '. Local copy removed.', 'success');
+                            }, 100);
+                        });
 
                         //Add name+id values
                         if (Object.keys(opt).length != 0) {
@@ -990,6 +1354,27 @@
             addAttributes(this.attributes);
             addItems(this.items);
 
+            // ── Copy item from another ThingType ──────────────────────────────
+            $('#thingtype-copy-item-btn').click(function(e) {
+                e.preventDefault();
+                pickItemFromThingTypes({
+                    title: 'Copy item from another ThingType',
+                    subtitle: 'The full item (incl. ID, ingress/egress refs) will be cloned into this ThingType.',
+                    excludeTtId: node.id
+                }, function(srcItem) {
+                    // Deep-clone to avoid sharing references
+                    const cloned = JSON.parse(JSON.stringify(srcItem));
+                    // Warn on ID collision within this TT
+                    let collision = false;
+                    $("#node-config-thingtype-list-items").editableList('items').each(function() {
+                        if ($(this).find(".node-config-thingtype-id-property").val() === cloned.id) collision = true;
+                    });
+                    if (collision && !confirm('An item with id ' + cloned.id + ' already exists in this ThingType. Add anyway?')) return;
+                    $("#node-config-thingtype-list-items").editableList('addItem', cloned);
+                    RED.notify('Item "' + cloned.name + '" copied.', 'success');
+                });
+            });
+
             // Add ingress items to heartbeat
             updateHbFunctions(node.hbLWT);
             if (typeof node.filterFunction == 'undefined') {
@@ -1055,12 +1440,12 @@
                     },
                     {
                         name: 'attributes',
-                        get: function() { return JSON.stringify(getAttributes()); },
+                        get: function() { return JSON.stringify(localGetAttributes()); },
                         set: function(v) { addAttributes(JSON.parse(v)); }
                     },
                     {
                         name: 'items',
-                        get: function() { return JSON.stringify(getItems()); },
+                        get: function() { return JSON.stringify(localGetItems()); },
                         set: function(v) { addItems(JSON.parse(v)); }
                     },                    
                     {
@@ -1079,14 +1464,31 @@
                         set: function(v) { $("#node-config-input-hbTTL").val(v) }
                     },
                     {
-                        name: 'heartbeat_topicfilter',
-                        get: function() { return $("#node-config-input-hbFilterVal").typedInput('value'); },
-                        set: function(v) { $("#node-config-input-hbFilterVal").typedInput('value',v) }
+                        name: 'heartbeat_filters',
+                        get: function() {
+                            var filters = [];
+                            $('#hb-filter-list').editableList('items').each(function() {
+                                var item = $(this);
+                                filters.push({
+                                    field:     item.find('.hb-filter-field').typedInput('value'),
+                                    matchType: item.find('.hb-filter-match').typedInput('type'),
+                                    value:     item.find('.hb-filter-match').typedInput('value')
+                                });
+                            });
+                            return JSON.stringify(filters);
+                        },
+                        set: function(v) {
+                            try {
+                                var filters = JSON.parse(v);
+                                $('#hb-filter-list').editableList('empty');
+                                filters.forEach(function(f) { $('#hb-filter-list').editableList('addItem', f); });
+                            } catch(e) {}
+                        }
                     },
                     {
-                        name: 'heartbeat_topicfilterType',
-                        get: function() { return $("#node-config-input-hbFilterVal").typedInput('type'); },
-                        set: function(v) { $("#node-config-input-hbFilterVal").typedInput('type',v); }
+                        name: 'heartbeat_filterMode',
+                        get: function() { return $("#node-config-input-hbFilterMode").val() || 'and'; },
+                        set: function(v) { $("#node-config-input-hbFilterMode").val(v || 'and'); }
                     },
                     {
                         name: 'heartbeat_ingress',
@@ -1121,12 +1523,15 @@
             
             node.statusFn = editors['statusFn'].getValue();
 
-            node.attributes = getAttributes();
-            node.items = getItems();
+            node.attributes = localGetAttributes();
+            node.items = localGetItems();
 
             for (let d in node.items) {
-                if (node.items[d].output > node.outputs) { node.outputs = node.items[d].output; }
-                switch(node.items[d].type) {
+                const t = node.items[d].type;
+                if ((t === 'both' || t === 'command') && node.items[d].output > node.outputs) {
+                    node.outputs = node.items[d].output;
+                }
+                switch(t) {
                     case 'both':
                         node.thingStatus = true;
                         node.thingCommand = true;
@@ -1149,13 +1554,26 @@
                 }
             }
 
+            // Save hbFilters from list and clear legacy fields
+            node.hbFilters = [];
+            $('#hb-filter-list').editableList('items').each(function() {
+                var item = $(this);
+                node.hbFilters.push({
+                    field:     item.find('.hb-filter-field').typedInput('value'),
+                    matchType: item.find('.hb-filter-match').typedInput('type'),
+                    value:     item.find('.hb-filter-match').typedInput('value')
+                });
+            });
+            node.hbFilterVal = '';
+            node.hbFilterType = '';
+
             // Create heartbeat item
             if ($("#node-config-input-hbCheck").is(":checked")) {
                 let r = {
                         name: "Alive",
                         id: "1",
-                        topicFilterType:$("#node-config-input-hbFilterType").val(),
-                        topicFilterValue:$("#node-config-input-hbFilterVal").val(),
+                        topicFilters: node.hbFilters,
+                        topicFilterMode: $("#node-config-input-hbFilterMode").val() || 'and',
                         topicSuffix: "",
                         readOnly: true,
                         type: 'status',

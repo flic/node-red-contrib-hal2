@@ -1,50 +1,653 @@
 <script type="text/x-red" data-template-name="hal2EventHandler">
-    <div class="form-row">
-        <p>The configuration is used for firing events between nodes.</br>
-        Use the same config for all nodes that should be able to communicate.</br>
-        If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
-    </div>   
-    <div class="form-row">
-        <label for="node-config-input-name" style="width:150px"><i class="fa fa-tag"></i> Name</label>
-        <input type="text" id="node-config-input-name" placeholder="Name" style="width:calc(100% - 185px)">
+    <div class="form-row tabs-row">
+        <ul style="min-width: 600px; margin-bottom: 20px;" id="hal2eh-tabs"></ul>
     </div>
-    <div class="form-row">
-        <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
-        <select id="node-config-input-contextStore" style="width:calc(100% - 185px)"></select>
-    </div>
-    <div class="form-row">
-        <label for="node-config-input-maxlisteners" style="width:150px"><i class="fa fa-sign-out"></i> Max event listeners</label>
-        <input type="number" id="node-config-input-maxlisteners" style="width: 80px;" min="0" max="500" value="50"> (0 for unlimited)
-    </div>
-    <div class="form-row">
-        <label for="node-config-input-heartbeat" style="width:150px"><i class="fa fa-heartbeat"></i> Heartbeat check interval</label>
-        <input type="number" id="node-config-input-heartbeat" style="width: 80px;" min="1" value="60"> seconds
+    <div id="hal2eh-tabs-content" style="min-height: calc(100% - 95px);">
+
+        <!-- General tab -->
+        <div id="hal2eh-tab-general" style="display:none">
+            <div class="form-row">
+                <p>The configuration is used for firing events between nodes.<br>
+                Use the same config for all nodes that should be able to communicate.<br>
+                If you have nodes on different tabs, make sure to select <b>on all flows</b>.</p>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-name" style="width:150px"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-config-input-name" placeholder="Name" style="width:calc(100% - 185px)">
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-locationName" style="width:150px"><i class="fa fa-map-marker"></i> Location</label>
+                <input type="text" id="node-config-input-locationName" placeholder="e.g. Home, Cabin" style="width:calc(100% - 185px)">
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-contextStore" style="width:150px"><i class="fa fa-database"></i> Context store</label>
+                <select id="node-config-input-contextStore" style="width:calc(100% - 185px)"></select>
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-maxlisteners" style="width:150px"><i class="fa fa-sign-out"></i> Max event listeners</label>
+                <input type="number" id="node-config-input-maxlisteners" style="width:80px" min="0" max="500" value="50"> (0 for unlimited)
+            </div>
+            <div class="form-row">
+                <label for="node-config-input-heartbeat" style="width:150px"><i class="fa fa-heartbeat"></i> Heartbeat interval</label>
+                <input type="number" id="node-config-input-heartbeat" style="width:80px" min="1" value="60"> seconds
+            </div>
+        </div>
+
+        <!-- Groups tab -->
+        <div id="hal2eh-tab-groups" style="display:none">
+            <div class="form-row">
+                <p>Groups let you control and observe several Things at once. Membership is set per item on each
+                Thing; a group's identity lives here. Pick a <b>HAType</b> to keep a group homogeneous — only
+                items of that type can join. Choose <b>Other / Mixed</b> for a free-form group that accepts any
+                item; then it is your responsibility that the members can handle the broadcast command.</p>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-groups-list-items"></ol>
+            </div>
+        </div>
+
+        <!-- History tab -->
+        <div id="hal2eh-tab-history" style="display:none">
+            <div class="form-row">
+                <label style="width:150px"><i class="fa fa-history"></i> Enable history</label>
+                <input type="checkbox" id="node-config-input-historyEnabled" style="width:23px; margin:0">
+                <label for="node-config-input-historyEnabled" style="margin:0; width:auto;"> Enable history logging</label>
+            </div>
+            <div id="hal2eh-history-details">
+                <div class="form-row">
+                    <label for="node-config-input-historyDbPath" style="width:150px"><i class="fa fa-database"></i> Database path</label>
+                    <input type="text" id="node-config-input-historyDbPath" placeholder="/data/hal2-history.db" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-historyRetentionDays" style="width:150px"><i class="fa fa-clock-o"></i> Retention</label>
+                    <input type="number" id="node-config-input-historyRetentionDays" style="width:80px" min="1" value="30"> days
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-hal2CorrelationMs" style="width:150px"><i class="fa fa-link"></i> Hal2 correlation</label>
+                    <input type="number" id="node-config-input-hal2CorrelationMs" style="width:80px" min="0" max="60000" value="5000"> ms
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>When hal2 sends a command, the (thing, item) pair is marked for this time window. A following HA confirmation within the window is then logged as <code>source='hal2'</code> instead of <code>'external'</code>, so that <code>analyze_patterns</code> can filter out already-automated events. Default 5000 ms. Set to 0 to disable.</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- MCP tab -->
+        <div id="hal2eh-tab-mcp" style="display:none">
+            <div class="form-row">
+                <label style="width:150px"><i class="fa fa-plug"></i> Enable MCP</label>
+                <input type="checkbox" id="node-config-input-mcpEnabled" style="width:23px; margin:0">
+                <label for="node-config-input-mcpEnabled" style="margin:0; width:auto;"> Enable MCP server</label>
+            </div>
+
+            <div id="hal2eh-mcp-details">
+                <div class="form-row">
+                    <label for="node-config-input-mcpServerName" style="width:150px"><i class="fa fa-server"></i> Server name</label>
+                    <input type="text" id="node-config-input-mcpServerName" placeholder="hal2-mcp" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-mcpServerUrl" style="width:150px"><i class="fa fa-globe"></i> MCP server URL</label>
+                    <input type="text" id="node-config-input-mcpServerUrl" placeholder="https://nodered.example.com" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-httpPathPrefix" style="width:150px"><i class="fa fa-link"></i> HTTP path prefix</label>
+                    <input type="text" id="node-config-input-httpPathPrefix" placeholder="/prefix (optional)" style="width:calc(100% - 185px)">
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label for="node-config-input-pocketidUrl" style="width:150px"><i class="fa fa-lock"></i> Identity provider</label>
+                    <input type="text" id="node-config-input-pocketidUrl" placeholder="https://idp.example.com (OIDC issuer URL)" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>OIDC issuer base URL. Endpoints are auto-discovered from <code>/.well-known/openid-configuration</code> (falling back to PocketID's path layout). The provider must issue <b>JWT access tokens</b> verifiable via its JWKS.</small>
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-pocketidClientId" style="width:150px"><i class="fa fa-id-card"></i> Client ID</label>
+                    <input type="text" id="node-config-input-pocketidClientId" placeholder="Client ID" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
+                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="Client secret" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-mcpRedirectUris" style="width:150px"><i class="fa fa-mail-forward"></i> Redirect URIs</label>
+                    <input type="text" id="node-config-input-mcpRedirectUris" placeholder="https://claude.ai/api/mcp/auth_callback" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Allowed MCP-client callback URL(s), space/comma-separated (add more for other clients). Defaults to Claude.ai. These must also be whitelisted on the identity provider's client.</small>
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-mcpScopes" style="width:150px"><i class="fa fa-list"></i> OIDC scopes</label>
+                    <input type="text" id="node-config-input-mcpScopes" placeholder="openid profile email" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Space-separated list. Add e.g. <code>groups</code> to include group membership in the JWT — requires your identity provider to be configured to send that claim for the scope.</small>
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label for="node-config-input-localDebugToken" style="width:150px"><i class="fa fa-bug"></i> Local debug token</label>
+                    <input type="password" id="node-config-input-localDebugToken" placeholder="(optional, skips OAuth locally)" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label for="node-config-input-tokenCacheTTL" style="width:150px"><i class="fa fa-clock-o"></i> Token cache TTL</label>
+                    <input type="number" id="node-config-input-tokenCacheTTL" style="width:80px" min="30" value="300"> seconds
+                </div>
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label style="width:150px"><i class="fa fa-terminal"></i> Admin tools</label>
+                    <input type="checkbox" id="node-config-input-adminToolsEnabled" style="width:23px; margin:0">
+                    <label for="node-config-input-adminToolsEnabled" style="margin:0; width:auto;"> Enable Node-RED admin tools</label>
+                </div>
+                <div id="hal2eh-admin-details">
+                    <div class="form-row">
+                        <label for="node-config-input-adminToken" style="width:150px"><i class="fa fa-shield"></i> Admin token</label>
+                        <input type="password" id="node-config-input-adminToken" placeholder="NODE_RED_ADMIN_TOKEN" style="width:calc(100% - 185px)" autocomplete="off">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-adminPort" style="width:150px"><i class="fa fa-plug"></i> Admin API port</label>
+                        <input type="number" id="node-config-input-adminPort" style="width:80px" min="1" max="65535" value="1880">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-adminRequiredClaim" style="width:150px"><i class="fa fa-user-secret"></i> Required claim</label>
+                        <input type="text" id="node-config-input-adminRequiredClaim" placeholder="groups" style="width:calc(100% - 185px)">
+                    </div>
+                    <div class="form-row">
+                        <label for="node-config-input-adminRequiredValue" style="width:150px"><i class="fa fa-check"></i> Required value</label>
+                        <input type="text" id="node-config-input-adminRequiredValue" placeholder="admin" style="width:calc(100% - 185px)">
+                    </div>
+                    <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                        <small>The JWT claim (default <code>groups</code>) must contain the value (default <code>admin</code>) for the admin tools to be callable. Leave the value empty to allow all authenticated users.</small>
+                    </div>
+                    <div class="form-row" style="background:#fff8e1; border:1px solid #ffe082; border-radius:4px; padding:8px 12px; margin-top:4px;">
+                        <i class="fa fa-info-circle" style="color:#f9a825;"></i>
+                        <span style="font-size:12px; margin-left:6px;">
+                            Enabled admin tools: <strong>get_flows</strong>, <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
+                            These call the Node-RED admin API on localhost:&lt;port&gt;.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Shared Functions tab -->
+        <div id="hal2eh-tab-libraries" style="display:none">
+            <div class="form-row">
+                <p>Shared ingress and egress functions available to any ThingType using this EventHandler. Items in ThingTypes can reference these by ID — local TT functions take priority on collision.</p>
+            </div>
+            <div class="form-row">
+                <label style="width:150px"><i class="fa fa-sign-in"></i> Ingress library</label>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-ingress-list-items"></ol>
+            </div>
+            <div class="form-row" style="margin-top:18px;">
+                <label style="width:150px"><i class="fa fa-sign-out"></i> Egress library</label>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-egress-list-items"></ol>
+            </div>
+        </div>
     </div>
 </script>
-    
+
+<script type="text/x-red" data-help-name="hal2EventHandler">
+    <p>The central config node of hal2 — a shared event bus that <code>hal2Thing</code>,
+    <code>hal2Value</code>, <code>hal2Gate</code>, <code>hal2Action</code> and <code>hal2Event</code>
+    nodes attach to. Use the <em>same</em> Event handler for every node that needs to talk to each
+    other. It also hosts several optional services, configured on its tabs:</p>
+
+    <li><strong>Shared functions</strong>: reusable ingress/egress message-transform functions that
+    ThingTypes can reference by id, so logic is defined once instead of copied per type. Each has an
+    info button showing which ThingTypes use it.</li>
+    <li><strong>Groups</strong>: group items across Things by HAType (e.g. all "light" items) so they
+    can be controlled together; referenced by <code>hal2Action</code> / <code>hal2Event</code>.</li>
+    <li><strong>History</strong>: optional SQLite logging of item state changes with a retention
+    window. Powers the <code>get_history</code> (incl. server-side bucketed downsampling) and
+    <code>analyze_patterns</code> tools.</li>
+    <li><strong>MCP server</strong>: an embedded, OAuth-protected <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a>
+    server that exposes the device tool catalog to AI assistants such as Claude. Works with any
+    standard OIDC identity provider (endpoints auto-discovered), carries a per-location identifier,
+    and supports a local debug token. Admin tools (<code>get_flow</code>/<code>deploy_flow</code>) are
+    opt-in.</li>
+    <li><strong>Heartbeat</strong>: per-thing liveness tracking surfaced as the <code>alive</code>
+    flag in <code>get_all_states</code>.</li>
+
+    <p>Full configuration, the reverse-proxy paths the MCP server needs, and identity-provider
+    requirements are documented in the
+    <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README on GitHub</a>.
+    The complete tool catalog is in
+    <a href="https://github.com/flic/node-red-contrib-hal2/blob/main/docs/API.md" target="_blank">docs/API.md</a>.</p>
+</script>
+
 <script type="text/javascript">
+    var hal2ehEditors = {};
+
+    function hal2ehGetFunctions(fn_type) {
+        let f = [];
+        $("#node-config-eh-"+fn_type+"-list-items")
+            .editableList('items')
+            .each(function() {
+                let item = $(this);
+                let name = item.find(".node-config-eh-"+fn_type+"-name-property").val();
+                let id = item.find(".node-config-eh-"+fn_type+"-id-property").val();
+                let editorId = "eh-"+fn_type+"-"+id;
+                editorId = editorId.split('.').join("");
+                let fn = hal2ehEditors[editorId] ? hal2ehEditors[editorId].getValue() : '';
+                f.push({ name: name, id: id, fn: fn });
+            });
+        return f;
+    }
+
+    function hal2ehCreateId() {
+        return ((Math.random() + 1).toString(16) + "0000000").substring(2,12);
+    }
+
     RED.nodes.registerType('hal2EventHandler', {
         category: 'config',
         defaults: {
-            name:           {value: "Event handler"},
-            contextStore:   {},
-            maxlisteners:   {value: "50"},
-            checkHeartbeat: {value: false},
-            heartbeat:      {value: 3600}
+            name:              { value: "Event handler" },
+            locationName:      { value: '' },
+            contextStore:      {},
+            maxlisteners:      { value: "50" },
+            checkHeartbeat:    { value: false },
+            heartbeat:         { value: 3600 },
+            groups:            { value: [], required: false },
+            // History
+            historyEnabled:        { value: false },
+            historyDbPath:         { value: '' },
+            historyRetentionDays:  { value: 30 },
+            hal2CorrelationMs:     { value: 5000, validate: RED.validators.number() },
+            // MCP
+            mcpEnabled:        { value: false },
+            mcpServerName:     { value: 'hal2-mcp' },
+            mcpServerUrl:      { value: '' },
+            httpPathPrefix:    { value: '' },
+            pocketidUrl:       { value: '' },
+            mcpRedirectUris:   { value: 'https://claude.ai/api/mcp/auth_callback' },
+            mcpScopes:         { value: 'openid profile email' },
+            tokenCacheTTL:     { value: 300 },
+            adminToolsEnabled: { value: false },
+            adminPort:         { value: 1880 },
+            adminRequiredClaim:{ value: 'groups' },
+            adminRequiredValue:{ value: 'admin' },
+            // Shared function libraries
+            ingressLibrary:    { value: [], required: false },
+            egressLibrary:     { value: [], required: false }
+        },
+        credentials: {
+            pocketidClientId:     { type: 'text' },
+            pocketidClientSecret: { type: 'password' },
+            adminToken:           { type: 'password' },
+            localDebugToken:      { type: 'password' }
         },
         label: function () {
             return this.name || "Event handler";
         },
         oneditprepare: function () {
+            var node = this;
+
+            // ── Tabs ──────────────────────────────────────────────────────────
+            var tabs = RED.tabs.create({
+                id: 'hal2eh-tabs',
+                onchange: function (tab) {
+                    $('#hal2eh-tabs-content').children().hide();
+                    $('#' + tab.id).show();
+                }
+            });
+            tabs.addTab({ id: 'hal2eh-tab-general',   label: 'General' });
+            tabs.addTab({ id: 'hal2eh-tab-groups',    label: 'Groups' });
+            tabs.addTab({ id: 'hal2eh-tab-history',   label: 'History' });
+            tabs.addTab({ id: 'hal2eh-tab-mcp',       label: 'MCP' });
+            tabs.addTab({ id: 'hal2eh-tab-libraries', label: 'Shared Functions' });
+
+            // ── Context stores ────────────────────────────────────────────────
             var contextStores = RED.settings.context.stores;
-            //Context stores from setup
-            for (let c in contextStores) {
-                $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>").appendTo("#node-config-input-contextStore");
+            for (var c in contextStores) {
+                $("<option value='" + contextStores[c] + "'> " + contextStores[c] + "</option>")
+                    .appendTo("#node-config-input-contextStore");
             }
-            if (this.contextStore) {
-                $("#node-config-input-contextStore").val(this.contextStore);
-                $("#node-config-input-contextStore").trigger("change");
+            if (node.contextStore) {
+                $("#node-config-input-contextStore").val(node.contextStore).trigger("change");
             }
+
+            // ── Groups editableList ───────────────────────────────────────────
+            $("#node-config-eh-groups-list-items").editableList({
+                addItem: function(container, i, opt) {
+                    var group = opt || {};
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    var rowName    = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
+                    var rowType    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    var rowNotes   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+
+                    var expandButton = $('<span/>', { style: "margin-left:5px; margin-right:10px" })
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        } else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                        rowDetails.change();
+                    });
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") { rowDetails.show(); }
+                        else { rowDetails.hide(); }
+                    });
+
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;", class: "fa fa-object-group" })
+                        .appendTo(rowName).append(' Group');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-bookmark" })
+                        .appendTo(rowType).append(' HAType');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-clock-o" })
+                        .appendTo(rowRate).append(' Rate limit');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;vertical-align:top;", class: "fa fa-file" })
+                        .appendTo(rowNotes).append(' Notes');
+
+                    var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 160px)", class: "node-config-eh-group-name-property", type: "text", placeholder: "Group name" })
+                        .appendTo(rowName).prop('required', true);
+                    var idProperty = $('<input/>', { class: "node-config-eh-group-id-property", type: "hidden" })
+                        .appendTo(rowName).val(group.id || halCreateId());
+
+                    var infoButton = $('<button type="button"/>', { style: "margin-left:5px;" }).appendTo(rowName);
+                    $('<i/>', { class: "fa fa-info-circle" }).appendTo(infoButton);
+                    infoButton.on('click', function(e) {
+                        e.preventDefault();
+                        var groupId = idProperty.val();
+                        var groupName = nameProperty.val() || groupId;
+
+                        // Members — Things whose items reference this group.
+                        var memberRows = '';
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== groupId) { continue; }
+                                var itemName = thing.groups[g].item;
+                                if (tt && Array.isArray(tt.items)) {
+                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                    if (it) { itemName = it.name; }
+                                }
+                                var mws = RED.nodes.workspace(thing.z);
+                                memberRows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + (mws ? mws.label : '') + '</td></tr>';
+                            }
+                        }
+
+                        // Used in — Action/Event nodes that reference this group by id.
+                        var usageRows = '';
+                        try {
+                            var actions = RED.nodes.filterNodes({ type: "hal2Action" });
+                            for (var ai in actions) {
+                                var action = RED.nodes.node(actions[ai].id);
+                                for (var c in action.commandset) {
+                                    if (action.commandset[c].category === 'hal2Group' && action.commandset[c].thing === groupId) {
+                                        var aws = RED.nodes.workspace(action.z);
+                                        usageRows += '<tr><td><b>Action</b></td><td>' + action.name + '</td><td>' + (aws ? aws.label : '') + '</td></tr>';
+                                        break;
+                                    }
+                                }
+                            }
+                            var events = RED.nodes.filterNodes({ type: "hal2Event" });
+                            for (var ei in events) {
+                                var event = RED.nodes.node(events[ei].id);
+                                if (event.typeSel === 'hal2Group' && event.thing === groupId) {
+                                    var ews = RED.nodes.workspace(event.z);
+                                    usageRows += '<tr><td><b>Event</b></td><td>' + event.name + '</td><td>' + (ews ? ews.label : '') + '</td></tr>';
+                                }
+                            }
+                        } catch (err) { console.log('Error: ' + err.message); }
+
+                        var tableStyle = 'border-collapse:separate;border-spacing:10px;';
+                        var message = '<font size=+1>Group ' + groupName + '</font>';
+
+                        message += '<br><b>Members</b>';
+                        if (memberRows) {
+                            message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Workspace</th></tr>' + memberRows + '</table>';
+                        } else {
+                            message += '<br>No things are members of this group.<br>';
+                        }
+
+                        message += '<br><b>Used in</b>';
+                        if (usageRows) {
+                            message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">Type</th><th style="text-align:left;">Name</th><th style="text-align:left;">Workspace</th></tr>' + usageRows + '</table>';
+                        } else {
+                            message += '<br>Not referenced by any Action or Event.';
+                        }
+
+                        RED.notify(message, { timeout: 15000 });
+                    });
+
+                    var haTypeProperty = $('<select/>', { class: "node-config-eh-group-hatype-property", style: "width:calc(100% - 125px)" })
+                        .appendTo(rowType);
+
+                    // Item HATypes of the group's current members. A candidate group
+                    // type is offered only if EVERY member can honour it (halGroupAccepts),
+                    // which is directional: a switch+light+dimmer group offers Switch/Light
+                    // (the dimmers can do on/off) but NOT Dimmer (the switches can't be
+                    // dimmed). 'other' is always allowed and the current value is always
+                    // kept, so you can never get trapped; an empty group imposes no
+                    // restriction. Runtime ignores group haType (it only gates which items
+                    // are offered to new members), so this never orphans members.
+                    var memberHaTypes = (function() {
+                        var list = [];
+                        var gid = idProperty.val();
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== gid) { continue; }
+                                var ht = '';
+                                if (tt && Array.isArray(tt.items)) {
+                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                    if (it) { ht = it.haType || ''; }
+                                }
+                                list.push(ht);
+                            }
+                        }
+                        return list;
+                    })();
+
+                    var currentHaType = group.haType || 'other';
+                    halHaTypes().forEach(function(h) {
+                        var allowed;
+                        if (memberHaTypes.length === 0) { allowed = true; }   // empty group: no restriction
+                        else if (h.v === 'other') { allowed = true; }         // 'other' accepts anything
+                        else { allowed = memberHaTypes.every(function(ht) { return halGroupAccepts(h.v, ht); }); }
+                        if (allowed || h.v === currentHaType) {
+                            haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
+                        }
+                    });
+                    haTypeProperty.val(currentHaType);
+
+                    var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
+                        .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);
+                    $('<span/>', { style: "margin-left:6px;color:#888;" }).text('ms between member commands').appendTo(rowRate);
+
+                    var notesProperty = $('<textarea/>', { style: "width:calc(100% - 125px);background-color:#ffe;", class: "node-config-eh-group-notes-property" })
+                        .appendTo(rowNotes).val(group.notes || '');
+
+                    if (group.name) { nameProperty.val(group.name); }
+                },
+                removable: true,
+                sortable:  true,
+                addButton: "Group"
+            });
+
+            (node.groups || []).forEach(function(g) {
+                $("#node-config-eh-groups-list-items").editableList('addItem', g);
+            });
+
+            // ── History toggle ────────────────────────────────────────────────
+            function toggleHistory() {
+                if ($('#node-config-input-historyEnabled').is(':checked')) {
+                    $('#hal2eh-history-details').show();
+                } else {
+                    $('#hal2eh-history-details').hide();
+                }
+            }
+            $('#node-config-input-historyEnabled').on('change', toggleHistory);
+            toggleHistory();
+
+            // ── MCP toggle ────────────────────────────────────────────────────
+            function toggleMcp() {
+                if ($('#node-config-input-mcpEnabled').is(':checked')) {
+                    $('#hal2eh-mcp-details').show();
+                } else {
+                    $('#hal2eh-mcp-details').hide();
+                }
+            }
+            $('#node-config-input-mcpEnabled').on('change', toggleMcp);
+            toggleMcp();
+
+            // ── Admin tools toggle ────────────────────────────────────────────
+            function toggleAdmin() {
+                if ($('#node-config-input-adminToolsEnabled').is(':checked')) {
+                    $('#hal2eh-admin-details').show();
+                } else {
+                    $('#hal2eh-admin-details').hide();
+                }
+            }
+            $('#node-config-input-adminToolsEnabled').on('change', toggleAdmin);
+            toggleAdmin();
+
+            // ── Shared Function libraries (ingress + egress) ──────────────────
+            function createLibraryList(fn_type, defaultBody) {
+                $('#node-config-eh-'+fn_type+'-list-items').editableList({
+                    addItem: function(container, i, opt) {
+                        opt = opt || {};
+                        container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                        var rowName   = $('<div/>').appendTo(container);
+                        var rowEditor = $('<div/>',{style:"margin-top:8px;"}).appendTo(container).hide();
+
+                        var expandButton = $('<span/>',{style:"margin-left:5px;margin-right:10px;"})
+                            .html('<i class="fa fa-angle-right"></i>')
+                            .appendTo(rowName);
+                        expandButton.click(function(e) {
+                            e.preventDefault();
+                            var icon = this.firstElementChild;
+                            icon.className = (icon.className === "fa fa-angle-right") ? "fa fa-angle-down" : "fa fa-angle-right";
+                            rowEditor.change();
+                        });
+                        rowEditor.change(function () {
+                            if (expandButton.children()[0].className === "fa fa-angle-down") rowEditor.show();
+                            else rowEditor.hide();
+                        });
+
+                        $('<div/>',{style:"display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;",class:"fa fa-tag"})
+                            .appendTo(rowName).append(' Name');
+                        $('<div/>',{style:"display:inline-block;text-align:left;width:90px;padding-right:10px;box-sizing:border-box;",class:"fa fa-cog"})
+                            .appendTo(rowEditor).append(" Function");
+
+                        var nameProperty = $('<input/>',{style:"padding-right:10px;width:calc(100% - 160px)",class:"node-config-eh-"+fn_type+"-name-property",type:"text"})
+                            .appendTo(rowName);
+                        var idProperty = $('<input/>',{class:"node-config-eh-"+fn_type+"-id-property",type:"hidden"})
+                            .appendTo(rowName)
+                            .val(opt.id || hal2ehCreateId());
+
+                        // Info — which ThingTypes reference this shared function.
+                        var infoButton = $('<button type="button"/>', { style: "margin-left:5px;" }).appendTo(rowName);
+                        $('<i/>', { class: "fa fa-info-circle" }).appendTo(infoButton);
+                        infoButton.on('click', function(e) {
+                            e.preventDefault();
+                            var fnId = idProperty.val();
+                            var fnName = nameProperty.val() || fnId;
+                            var usageRows = '';
+                            RED.nodes.eachConfig(function(cfg) {
+                                if (cfg.type !== 'hal2ThingType') { return; }
+                                var refs = [];
+                                (cfg.items || []).forEach(function(it) {
+                                    if (it.ingress === fnId) { refs.push(it.name + ' (ingress)'); }
+                                    if (it.egress === fnId)  { refs.push(it.name + ' (egress)'); }
+                                });
+                                if (cfg.filterFunction === fnId) { refs.push('Thing filter (ingress)'); }
+                                if (cfg.hbLWT === fnId)          { refs.push('Heartbeat (ingress)'); }
+                                if (refs.length) {
+                                    usageRows += '<tr><td>' + (cfg.name || cfg.id) + '</td><td>' + refs.join(', ') + '</td></tr>';
+                                }
+                            });
+                            var tableStyle = 'border-collapse:separate;border-spacing:10px;';
+                            var message = '<font size=+1>' + fn_type.charAt(0).toUpperCase() + fn_type.slice(1) + ' function ' + fnName + '</font>';
+                            message += '<br><b>Used in ThingTypes</b>';
+                            if (usageRows) {
+                                message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">ThingType</th><th style="text-align:left;">Where</th></tr>' + usageRows + '</table>';
+                            } else {
+                                message += '<br>Not referenced by any ThingType.';
+                            }
+                            RED.notify(message, { timeout: 15000 });
+                        });
+
+                        if (opt.name) nameProperty.val(opt.name);
+                        else nameProperty.val(fn_type.charAt(0).toUpperCase()+fn_type.slice(1)+" function");
+
+                        var editorId = "eh-"+fn_type+"-"+idProperty.val();
+                        editorId = editorId.split('.').join("");
+                        $('<div/>',{id:editorId,style:"height:250px;min-height:150px;width:calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
+                            .appendTo(rowEditor);
+
+                        hal2ehEditors[editorId] = RED.editor.createEditor({
+                            id: editorId,
+                            mode: "ace/mode/nrjavascript",
+                            value: opt.fn || defaultBody,
+                            globals: { msg:true, context:true, RED:true, util:true, flow:true, global:true, console:true, Buffer:true, setTimeout:true, clearTimeout:true, setInterval:true, clearInterval:true }
+                        });
+                    },
+                    removable: true,
+                    sortable:  true,
+                    addButton: "Add "+fn_type+" function"
+                });
+            }
+            createLibraryList('ingress', '// return value from msg\nreturn msg.payload;');
+            createLibraryList('egress',  '// return msg to send\nmsg.payload = item;\nreturn msg;');
+
+            (node.ingressLibrary || []).forEach(function(f) {
+                $("#node-config-eh-ingress-list-items").editableList('addItem', f);
+            });
+            (node.egressLibrary || []).forEach(function(f) {
+                $("#node-config-eh-egress-list-items").editableList('addItem', f);
+            });
+        },
+        oneditsave: function () {
+            var node = this;
+            node.mcpEnabled        = $('#node-config-input-mcpEnabled').is(':checked');
+            node.adminToolsEnabled = $('#node-config-input-adminToolsEnabled').is(':checked');
+
+            node.groups = [];
+            $("#node-config-eh-groups-list-items")
+                .editableList('items')
+                .each(function () {
+                    var item = $(this);
+                    var name = (item.find(".node-config-eh-group-name-property").val() || '').trim();
+                    if (!name) { return; }
+                    node.groups.push({
+                        id:        item.find(".node-config-eh-group-id-property").val(),
+                        name:      name,
+                        haType:    item.find(".node-config-eh-group-hatype-property").val(),
+                        ratelimit: Number(item.find(".node-config-eh-group-ratelimit-property").val()) || 0,
+                        notes:     item.find(".node-config-eh-group-notes-property").val() || ''
+                    });
+                });
+
+            node.ingressLibrary = hal2ehGetFunctions('ingress');
+            node.egressLibrary  = hal2ehGetFunctions('egress');
         }
     });
 </script>

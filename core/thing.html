@@ -10,9 +10,14 @@
         <input type="text" id="node-input-thingType" style="width:calc(100% - 125px)" placeholder="Type">
     </div>
     <div class="form-row">
-        <label for="node-input-topicFilter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Topic filter</label>
-        <input type="text" id="node-input-topicFilter" placeholder="Filter on incoming topic" style="width:calc(100% - 170px)">
-        <input type="hidden" id="node-input-topicFilterType">
+        <label for="node-input-topicFilterMode" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filters</label>
+        <select id="node-input-topicFilterMode" style="width:70px; vertical-align:top; margin-top:3px;">
+            <option value="and">AND</option>
+            <option value="or">OR</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <ol id="thing-filter-list"></ol>
     </div>
     <div class="form-row">
         <label for="node-input-topicPrefix" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
@@ -27,9 +32,25 @@
         <label for="node-input-notes" style="width:95px; padding-right:10px;"><i class="fa fa-file"></i> Notes</label>
         <textarea id="node-input-notes" style="width:calc(100% - 170px)"></textarea>
     </div>
+    <div class="form-row">
+        <label for="node-input-tags" style="width:95px; padding-right:10px;"><i class="fa fa-tags"></i> Tags</label>
+        <input type="text" id="node-input-tags" placeholder="comma,separated,tags" style="width:calc(100% - 170px)">
+    </div>
     <div class="form-row" id="attributes"  style="width:100%" hidden>
         <label><i class="fa fa-tags"></i> Attributes</label>
         <ol id="attributes-list"></ol>
+    </div>
+    <div class="form-row" id="thing-groups" style="width:100%">
+        <label><i class="fa fa-object-group"></i> Groups</label>
+        <div id="thing-groups-header" style="width:100%; padding-right:28px; box-sizing:border-box; color:#888; font-size:0.85em; margin-bottom:4px; white-space:nowrap;"><span style="display:inline-block; width:calc(50% - 14px); margin-right:4px;">Item</span><span style="display:inline-block; width:16px;"></span><span style="display:inline-block; width:calc(50% - 14px); margin-left:4px;">Group</span></div>
+        <ol id="thing-groups-container"></ol>
+    </div>
+    <div class="form-row" id="thing-metadata" style="width:100%" hidden>
+        <label style="display:block; width:auto;">
+            <i class="fa fa-info-circle"></i> Metadata
+            <button type="button" id="thing-metadata-clear" class="red-ui-button red-ui-button-small" style="float:right;" title="Delete all metadata for this Thing"><i class="fa fa-trash-o"></i> Clear all</button>
+        </label>
+        <div id="thing-metadata-table" style="width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:3px; background:#f7f7f7;"></div>
     </div>
 </script>
 
@@ -39,7 +60,8 @@
     <li><strong>Topic filter</strong>: If configured, this parameter must match <code>msg.topic</code> on the incoming message. If not, the message is dropped. <i>Topic filter</i> can be a text string, a regex expression or an MQTT-formatted topic with + and # wildcards.</li>
     <li><strong>Topic</strong>: Used for filtering and creating item specific command topics. Will become <code>msg.topic</code> for outgoing messages.</li>
     <li><strong>Name</strong>: Node name, used to select the Thing in <i>Value</i>, <i>Gate</i>, <i>Action</i> and <i>Event</i> nodes.</li>    
-    <li><strong>Notes</strong>: Thing specific notes.</li>    
+    <li><strong>Notes</strong>: Thing specific notes. Exposed to MCP clients to help them understand what the device does.</li>
+    <li><strong>Tags</strong>: Comma-separated keywords (e.g. "outdoor, lake, dock"). Also exposed to MCP clients for filtering and semantic context.</li>
 </script>
 
 <script type="text/javascript">
@@ -70,10 +92,14 @@
                 }
             },
             attributes:         {},
-            topicFilter:        { value: "" },
+            topicFilters:       { value: [] },
+            topicFilterMode:    { value: 'and' },
+            topicFilter:        {},
             topicFilterType:    {},
             topicPrefix:        { value: "" },
             notes:              {},
+            tags:               { value: '' },
+            groups:             { value: [] }, //[{ item, group }] group membership
             outputs:            { value: 0 } //Store if outputs are enabled
         },
         inputs: 1,
@@ -85,16 +111,88 @@
         paletteLabel: "thing",
         oneditprepare: function () {
             var node = this;
+            $("#node-input-tags").val(Array.isArray(node.tags) ? node.tags.join(', ') : (node.tags || ''));
+            // Show "AND" rather than a blank select when the stored value is empty.
+            if (!$("#node-input-topicFilterMode").val()) { $("#node-input-topicFilterMode").val("and"); }
+
+            // Metadata panel: machine-managed facts (e.g. model, ipv6) written by an integration.
+            // Read-only values (runtime context, fetched from the admin endpoint), but the user can
+            // delete a single key or clear all. Note: an active source may re-publish deleted keys.
+            (function () {
+                if (!node.id || (typeof node.isDirty === 'function' && node.id.indexOf('_ADD_') === 0)) { return; }
+                var base = 'hal2/thing/' + node.id + '/metadata';
+
+                function loadMetadata() {
+                    $.getJSON(base, function (res) {
+                        var meta = (res && res.metadata) || {};
+                        var keys = Object.keys(meta).sort();
+                        var $t = $('#thing-metadata-table').empty();
+                        if (!keys.length) { $('#thing-metadata').prop('hidden', true); return; }
+                        keys.forEach(function (k) {
+                            var v = meta[k];
+                            if (v && typeof v === 'object') { try { v = JSON.stringify(v); } catch (e) { v = String(v); } }
+                            var $row = $('<div/>', { style: 'display:flex; align-items:center; padding:3px 8px; border-bottom:1px solid #eee;' });
+                            $('<div/>', { text: k, style: 'flex:0 0 32%; color:#888; font-family:monospace;' }).appendTo($row);
+                            $('<div/>', { text: (v === undefined || v === null) ? '' : String(v), style: 'flex:1 1 auto; font-family:monospace; word-break:break-all;' }).appendTo($row);
+                            $('<button/>', { type: 'button', class: 'red-ui-button red-ui-button-small', title: 'Delete this key', style: 'flex:0 0 auto; margin-left:6px;' })
+                                .html('<i class="fa fa-times"></i>')
+                                .on('click', function () { delKey(k); }).appendTo($row);
+                            $row.appendTo($t);
+                        });
+                        $('#thing-metadata').prop('hidden', false);
+                    });
+                }
+
+                function delKey(k) {
+                    $.ajax({ url: base + '/' + encodeURIComponent(k), method: 'DELETE' })
+                        .done(loadMetadata)
+                        .fail(function () { RED.notify('Failed to delete metadata key "' + k + '"', 'error'); });
+                }
+
+                $('#thing-metadata-clear').on('click', function () {
+                    if (!confirm('Delete all metadata for this Thing?')) { return; }
+                    $.ajax({ url: base, method: 'DELETE' })
+                        .done(loadMetadata)
+                        .fail(function () { RED.notify('Failed to clear metadata', 'error'); });
+                });
+
+                loadMetadata();
+            })();
             var typeMQTT = halTypeMQTT();
-            //Incoming topic filter
-            $('#node-input-topicFilter').typedInput({
-                default: 'mqtt',
-                typeField: $("#node-input-topicFilterType"),
-                types: ['str','re',typeMQTT],
+            var StrStartType   = { value: "StrStart",   label: "starts with", hasValue: true };
+            var StrEndType     = { value: "StrEnd",     label: "ends with",   hasValue: true };
+            var StrContainsType= { value: "StrContain", label: "contains",    hasValue: true };
+
+            // Incoming filter list
+            $('#thing-filter-list').editableList({
+                addItem: function(container, i, filter) {
+                    var row = $('<div/>').appendTo(container);
+                    var fieldInput = $('<input/>', {type:'text', class:'thing-filter-field', style:'width:160px; margin-right:5px;'}).appendTo(row);
+                    fieldInput.typedInput({ types: ['msg'] });
+                    fieldInput.typedInput('value', filter.field || 'topic');
+
+                    var matchInput = $('<input/>', {type:'text', class:'thing-filter-match', style:'width:calc(100% - 175px)'}).appendTo(row);
+                    matchInput.typedInput({ default:'mqtt', types:['str','re',typeMQTT,StrStartType,StrEndType,StrContainsType] });
+                    if (filter.matchType) {
+                        matchInput.typedInput('type', filter.matchType);
+                        matchInput.typedInput('value', filter.value || '');
+                    }
+                },
+                removable: true,
+                sortable: false,
+                addButton: 'Add filter'
             });
-            if (this.topicFilter) {
-                $("#node-input-topicFilter").typedInput('value',this.topicFilter).typedInput('type',this.topicFilterType);                           
+
+            // Load existing filters — migrate old single-filter format if needed
+            var filters = this.topicFilters;
+            if ((!filters || filters.length === 0) && this.topicFilter) {
+                filters = [{ field: 'topic', matchType: this.topicFilterType || 'mqtt', value: this.topicFilter }];
             }
+            if (filters && filters.length > 0) {
+                var list = $('#thing-filter-list');
+                filters.forEach(function(f) { list.editableList('addItem', f); });
+            }
+
             //Outgoing topic
             if (this.topicPrefix) {
                 $("#node-input-topicPrefix").val(this.topicPrefix);                         
@@ -170,6 +268,69 @@
                 }
             });
 
+            // ── Group membership ──────────────────────────────────────────────
+            // Vertical editableList: each row is one membership = an item paired with
+            // a compatible group. "Add group" appends a row. The group dropdown is
+            // filtered to groups whose family matches the chosen item (or 'other').
+            function thingGroupItems() {
+                var tt = RED.nodes.node($("#node-input-thingType").val());
+                return (tt && Array.isArray(tt.items)) ? tt.items.filter(function(it) { return it.id !== '1'; }) : [];
+            }
+            function thingGroupGroups() {
+                var eh = RED.nodes.node($("#node-input-eventHandler").val());
+                return (eh && Array.isArray(eh.groups)) ? eh.groups : [];
+            }
+
+            $("#thing-groups-container").editableList({
+                addItem: function(container, i, opt) {
+                    var membership = opt || {};
+                    var items = thingGroupItems();
+                    var groups = thingGroupGroups();
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    var row = $('<div/>').appendTo(container);
+                    var itemSel = $('<select/>', { class: "thing-group-item", style: "width:calc(50% - 14px); margin-right:4px;" }).appendTo(row);
+                    $('<i/>', { class: "fa fa-long-arrow-right", style: "width:16px; text-align:center; color:#888; vertical-align:middle;" }).appendTo(row);
+                    var groupSel = $('<select/>', { class: "thing-group-group", style: "width:calc(50% - 14px); margin-left:4px;" }).appendTo(row);
+
+                    items.forEach(function(it) {
+                        itemSel.append($("<option></option>").val(it.id)
+                            .text(it.name + (it.haType ? ' (' + it.haType + ')' : '')));
+                    });
+
+                    function repopulateGroups() {
+                        var it = items.find(function(x) { return x.id === itemSel.val(); });
+                        var itemHaType = it ? (it.haType || '') : '';
+                        var prev = groupSel.val();
+                        groupSel.children().remove();
+                        var compatible = groups.filter(function(g) {
+                            return halGroupAccepts(g.haType, itemHaType);
+                        });
+                        if (compatible.length === 0) {
+                            groupSel.append($("<option></option>").val('').text('— no compatible group —'));
+                            return;
+                        }
+                        compatible.forEach(function(g) {
+                            groupSel.append($("<option></option>").val(g.id)
+                                .text(g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')'));
+                        });
+                        if (prev) { groupSel.val(prev); }
+                    }
+                    itemSel.change(repopulateGroups);
+
+                    if (membership.item) { itemSel.val(membership.item); }
+                    repopulateGroups();
+                    if (membership.group) { groupSel.val(membership.group); }
+                },
+                removable: true,
+                sortable: false,
+                addButton: "Add group"
+            });
+
+            (Array.isArray(node.groups) ? node.groups : []).forEach(function(m) {
+                $("#thing-groups-container").editableList('addItem', m);
+            });
+
             $("#node-input-thingType").trigger('change');
 
             $('#info').click(function() {
@@ -209,15 +370,12 @@
                         }
                     }
 
-                    let groups = RED.nodes.filterNodes({type: "hal2Group"});
-                    for (let i in groups) {
-                        let group = RED.nodes.node(groups[i].id);
-                        for (let c in group.group) {
-                            if (group.group[c].thing == node.id) {
-                                let workspace = RED.nodes.workspace(group.z);
-                                message += '<tr><td><b>Group</b></td><td>'+group.name+'</td><td>'+workspace.label+'</td></tr>';
-                                break;
-                            }
+                    let eh = RED.nodes.node(node.eventHandler);
+                    let ehGroups = (eh && Array.isArray(eh.groups)) ? eh.groups : [];
+                    let myGroupIds = new Set((Array.isArray(node.groups) ? node.groups : []).map(m => m.group));
+                    for (let g of ehGroups) {
+                        if (myGroupIds.has(g.id)) {
+                            message += '<tr><td><b>Group</b></td><td>'+g.name+'</td><td>Event handler</td></tr>';
                         }
                     }
 
@@ -239,6 +397,32 @@
         },
         oneditsave: function () {
             var node = this;
+
+            node.tags = ($("#node-input-tags").val() || '').split(',').map(t => t.trim()).filter(Boolean);
+
+            // Group membership — one {item, group} per editableList row
+            node.groups = [];
+            $("#thing-groups-container").editableList('items').each(function() {
+                var r = $(this);
+                var item  = r.find('.thing-group-item').val();
+                var group = r.find('.thing-group-group').val();
+                if (item && group) {
+                    node.groups.push({ item: item, group: group });
+                }
+            });
+
+            node.topicFilters = [];
+            $('#thing-filter-list').editableList('items').each(function() {
+                var item = $(this);
+                node.topicFilters.push({
+                    field:     item.find('.thing-filter-field').typedInput('value'),
+                    matchType: item.find('.thing-filter-match').typedInput('type'),
+                    value:     item.find('.thing-filter-match').typedInput('value')
+                });
+            });
+            node.topicFilter = '';
+            node.topicFilterType = '';
+
             let TT = $("#node-input-thingType").val();
             if (TT) {
                 var thingType = RED.nodes.node(TT);

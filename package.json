@@ -1,7 +1,7 @@
 {
   "name": "node-red-contrib-hal2",
-  "version": "1.15.2",
-  "description": "A set of nodes to help with basic home automation logic",
+  "version": "2.0.0",
+  "description": "A set of nodes to help with basic home automation logic, now with MCP server support",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/flic/node-red-contrib-hal2.git"
@@ -13,6 +13,9 @@
   ],
   "author": "Fredrik Furtenbach",
   "license": "ISC",
+  "scripts": {
+    "docs:api": "node scripts/gen-api-docs.js"
+  },
   "engines": {
     "node": ">=14"
   },
@@ -30,8 +33,17 @@
       "hal2Gate": "core/gate.js",
       "hal2Action": "core/action.js",
       "hal2Group": "core/group.js",
-      "hal2Log": "core/log.js"
+      "hal2Log": "core/log.js",
+      "hal2MCPIn": "core/mcpin.js",
+      "hal2MCPOut": "core/mcpout.js",
+      "hal2MCPServer": "core/mcpserver.js",
+      "hal2Api": "core/api.js"
     }
   },
-  "dependencies": {}
+  "dependencies": {
+    "jose": "^4.15.5"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.11.1"
+  }
 }

@@ -43,9 +43,62 @@
             <input type="hidden" id="node-input-outputType">
         </div>
         <div class="form-row">
-            <label for="node-input-info" style="width:95px; padding-right:10px;"><i class="fa fa-info"></i> Item info</label>
-            <input type="checkbox" id="node-input-info" style="display: inline-block; width: auto; vertical-align: top;">
-        </div>        
+            <label for="node-input-outputInfo" style="width:95px; padding-right:10px;"><i class="fa fa-info"></i> Item info</label>
+            <input type="checkbox" id="node-input-outputInfo" style="display: inline-block; width: auto; vertical-align: top;">
+        </div>
+        <div class="form-row" id="row-history-mode" hidden>
+            <label for="node-input-historyMode" style="width:95px; padding-right:10px;"><i class="fa fa-history"></i> History</label>
+            <input type="checkbox" id="node-input-historyMode" style="display: inline-block; width: auto; vertical-align: top;">
+        </div>
+        <div class="form-row" id="row-history-range-mode" hidden>
+            <label for="node-input-historyRangeMode" style="width:95px; padding-right:10px;"><i class="fa fa-calendar"></i> Range</label>
+            <select id="node-input-historyRangeMode" style="width:calc(100% - 170px)">
+                <option value="relative" selected>Relative</option>
+                <option value="absolute">Absolute</option>
+            </select>
+        </div>
+        <div class="form-row" id="row-history-from" hidden>
+            <label style="width:95px; padding-right:10px;"><i class="fa fa-clock-o"></i> From</label>
+            <input type="number" id="node-input-historyFrom" min="1" value="24" style="width:60px;">
+            <select id="node-input-historyFromUnit" style="width:90px; margin-left:6px;">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+            </select>
+            <span style="margin-left:6px;">ago</span>
+        </div>
+        <div class="form-row" id="row-history-to" hidden>
+            <label style="width:95px; padding-right:10px;"><i class="fa fa-clock-o"></i> To</label>
+            <input type="number" id="node-input-historyTo" min="0" value="0" style="width:60px;">
+            <select id="node-input-historyToUnit" style="width:90px; margin-left:6px;">
+                <option value="minutes">minutes</option>
+                <option value="hours" selected>hours</option>
+                <option value="days">days</option>
+            </select>
+            <span style="margin-left:6px;">ago (0 = now)</span>
+        </div>
+        <div class="form-row" id="row-history-from-abs" hidden>
+            <label for="node-input-historyFromDate" style="width:95px; padding-right:10px;"><i class="fa fa-calendar-o"></i> From</label>
+            <input type="datetime-local" id="node-input-historyFromDate" style="width:calc(100% - 170px)">
+        </div>
+        <div class="form-row" id="row-history-to-abs" hidden>
+            <label for="node-input-historyToDate" style="width:95px; padding-right:10px;"><i class="fa fa-calendar-o"></i> To</label>
+            <input type="datetime-local" id="node-input-historyToDate" style="width:calc(100% - 170px)">
+        </div>
+        <div class="form-row" id="row-history-sources" hidden>
+            <label style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Sources</label>
+            <input type="checkbox" id="node-input-historySourceExternal" style="display:inline-block; width:auto; vertical-align:middle;">
+            <label for="node-input-historySourceExternal" style="width:auto; margin:0 10px 0 4px;">external</label>
+            <input type="checkbox" id="node-input-historySourceHal2" style="display:inline-block; width:auto; vertical-align:middle;">
+            <label for="node-input-historySourceHal2" style="width:auto; margin:0 10px 0 4px;">hal2</label>
+            <input type="checkbox" id="node-input-historySourceHeartbeat" style="display:inline-block; width:auto; vertical-align:middle;">
+            <label for="node-input-historySourceHeartbeat" style="width:auto; margin:0 0 0 4px;">heartbeat</label>
+        </div>
+        <div class="form-row" id="row-history-transitions" hidden>
+            <label for="node-input-historyTransitionsOnly" style="width:95px; padding-right:10px;"><i class="fa fa-exchange"></i> Transitions</label>
+            <input type="checkbox" id="node-input-historyTransitionsOnly" style="display: inline-block; width: auto; vertical-align: top;">
+            <label for="node-input-historyTransitionsOnly" style="width:auto; margin-left:4px;">only state changes</label>
+        </div>
         <div class="form-row">
             <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
             <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
@@ -72,9 +125,21 @@
             thing:          {},
             thingType:      {},   
             item:           { required: true   },           
-            outputValue:    { value: "payload" },
-            outputType:     { required: true   },
-            info:           { value: false     }
+            outputValue:      { value: "payload" },
+            outputType:       { required: true   },
+            outputInfo:       { value: false     },
+            historyMode:             { value: false      },
+            historyRangeMode:        { value: 'relative' },
+            historyFrom:             { value: 24         },
+            historyFromUnit:         { value: 'hours'    },
+            historyTo:               { value: 0          },
+            historyToUnit:           { value: 'hours'    },
+            historyFromDate:         { value: ''         },
+            historyToDate:           { value: ''         },
+            historySourceExternal:   { value: true       },
+            historySourceHal2:       { value: true       },
+            historySourceHeartbeat:  { value: false      },
+            historyTransitionsOnly:  { value: false      }
         },
         inputs:1,
         outputs:1,
@@ -173,6 +238,70 @@
                 $("#node-input-item").trigger('change');
             });
 
+            var historyDetailRows = [
+                "#row-history-range-mode",
+                "#row-history-from", "#row-history-to",
+                "#row-history-from-abs", "#row-history-to-abs",
+                "#row-history-sources", "#row-history-transitions"
+            ];
+
+            function hideHistoryDetails() {
+                historyDetailRows.forEach(function(sel) { $(sel).hide(); });
+            }
+
+            function showHistoryDetails() {
+                $("#row-history-range-mode").show();
+                $("#row-history-sources").show();
+                $("#row-history-transitions").show();
+                if ($("#node-input-historyRangeMode").val() === 'absolute') {
+                    $("#row-history-from").hide(); $("#row-history-to").hide();
+                    $("#row-history-from-abs").show(); $("#row-history-to-abs").show();
+                } else {
+                    $("#row-history-from-abs").hide(); $("#row-history-to-abs").hide();
+                    $("#row-history-from").show(); $("#row-history-to").show();
+                }
+            }
+
+            function updateHistoryVisibility() {
+                var isGet = $("#node-input-action").val() === 'get';
+                if (!isGet) { $("#row-history-mode").hide(); hideHistoryDetails(); return; }
+                var thingType;
+                if ($("#node-input-thing").val() == '0') {
+                    thingType = RED.nodes.node($("#node-input-thingType").val());
+                } else {
+                    var t = RED.nodes.node($("#node-input-thing").val());
+                    thingType = t ? RED.nodes.node(t.thingType) : null;
+                }
+                var itemId = $("#node-input-item").val();
+                var itemHasHistory = false;
+                if (thingType && thingType.items) {
+                    for (var d in thingType.items) {
+                        if (thingType.items[d].id == itemId && thingType.items[d].history) {
+                            itemHasHistory = true; break;
+                        }
+                    }
+                }
+                if (itemHasHistory) {
+                    $("#row-history-mode").show();
+                    if ($("#node-input-historyMode").is(':checked')) { showHistoryDetails(); }
+                    else { hideHistoryDetails(); }
+                } else {
+                    $("#row-history-mode").hide();
+                    hideHistoryDetails();
+                }
+            }
+
+            $("#node-input-historyMode").on('change', function() {
+                if ($(this).is(':checked')) { showHistoryDetails(); }
+                else { hideHistoryDetails(); }
+            });
+
+            $("#node-input-historyRangeMode").on('change', function() {
+                if ($("#node-input-historyMode").is(':checked')) { showHistoryDetails(); }
+            });
+
+            $("#node-input-action").on('change', updateHistoryVisibility);
+
             $("#node-input-item").change(function() {
                 $("#row-item-notes").hide();
                 if ($("#node-input-thing").val() == '0') {
@@ -190,7 +319,8 @@
                         }
                         break;
                     }
-                }                                     
+                }
+                updateHistoryVisibility();
             });
 
             $("#node-input-thingType").change(function() {
@@ -257,6 +387,26 @@
             if (typeof this.action == 'undefined') {
                 $("#node-input-action").val('get');
             }
+
+            // `info` is reserved by Node-RED as the per-node markdown documentation
+            // and crashes marked() if non-string. Field renamed; old value preserved.
+            var outputInfoVal = (typeof this.outputInfo !== 'undefined') ? this.outputInfo : (this.info || false);
+            $("#node-input-outputInfo").prop('checked', outputInfoVal);
+            this.info = undefined;
+
+            $("#node-input-historyMode").prop('checked', this.historyMode || false);
+            $("#node-input-historyRangeMode").val(this.historyRangeMode || 'relative');
+            if (this.historyFrom) { $("#node-input-historyFrom").val(this.historyFrom); }
+            if (this.historyFromUnit) { $("#node-input-historyFromUnit").val(this.historyFromUnit); }
+            if (typeof this.historyTo !== 'undefined') { $("#node-input-historyTo").val(this.historyTo); }
+            if (this.historyToUnit) { $("#node-input-historyToUnit").val(this.historyToUnit); }
+            if (this.historyFromDate) { $("#node-input-historyFromDate").val(this.historyFromDate); }
+            if (this.historyToDate) { $("#node-input-historyToDate").val(this.historyToDate); }
+            $("#node-input-historySourceExternal").prop('checked', this.historySourceExternal !== false);
+            $("#node-input-historySourceHal2").prop('checked', this.historySourceHal2 !== false);
+            $("#node-input-historySourceHeartbeat").prop('checked', this.historySourceHeartbeat === true);
+            $("#node-input-historyTransitionsOnly").prop('checked', this.historyTransitionsOnly || false);
+            updateHistoryVisibility();
         }
     });
 </script>

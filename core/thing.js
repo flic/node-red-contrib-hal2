@@ -1,4 +1,19 @@
 module.exports = function(RED) {
+    // Hybrid function lookup — local ThingType.{type} first, then EventHandler.{type}Library
+    function resolveFn(thing, type, id) {
+        const local = (thing.thingType && thing.thingType[type]) || [];
+        for (let n in local) {
+            if (local[n].id == id) return local[n].fn;
+        }
+        if (thing.eventHandler) {
+            const lib = thing.eventHandler[type + 'Library'] || [];
+            for (let n in lib) {
+                if (lib[n].id == id) return lib[n].fn;
+            }
+        }
+        return null;
+    }
+
     function matchTopic(ts,t) {
         if (ts == "#") {
             return true;
@@ -30,15 +45,32 @@ module.exports = function(RED) {
         return topic;
     }
 
-    //a=msg.topic, b=filter
+    //a=msg value, b=filter pattern
     var topicFilter = {
-        'str': function (a, b) { return a === b; },
-        're': function (a, b) { return (new RegExp(b)).test(a+""); },
-        'mqtt': function (a,b) { return matchTopic(b,a); },
-        'StrStart': function (a,b) { return (a.startsWith(b)) },
-        'StrEnd': function (a,b) { return (a.endsWith(b)) },
-        'StrContain': function (a,b) { return (a.includes(b)) }
+        'str':       function (a, b) { return a === b; },
+        're':        function (a, b) { return (new RegExp(b)).test(a+""); },
+        'mqtt':      function (a, b) { return matchTopic(b, a); },
+        'StrStart':  function (a, b) { return (a+"").startsWith(b); },
+        'StrEnd':    function (a, b) { return (a+"").endsWith(b); },
+        'StrContain':function (a, b) { return (a+"").includes(b); }
     };
+
+    function applyFilters(msg, filters, mode, topicPrefix) {
+        if (!filters || filters.length === 0) return true;
+        for (var i = 0; i < filters.length; i++) {
+            var f = filters[i];
+            var val = RED.util.getMessageProperty(msg, f.field);
+            var filterVal = f.value;
+            if (f.field === 'topic' && f.matchType === 'str' && topicPrefix) {
+                filterVal = fixTopic(filterVal, topicPrefix);
+            }
+            var fn = topicFilter[f.matchType];
+            var matched = fn ? fn(val, filterVal) : false;
+            if (mode === 'or') { if (matched) return true; }
+            else               { if (!matched) return false; }
+        }
+        return mode !== 'or';
+    }
 
     function hal2Thing(config) {
         RED.nodes.createNode(this,config);
@@ -47,10 +79,21 @@ module.exports = function(RED) {
         this.eventHandler = RED.nodes.getNode(config.eventHandler);
         this.name = config.name;
         this.notes = config.notes;
+        this.tags = config.tags || [];
         this.topicPrefix = config.topicPrefix;
-        this.topicFilter = config.topicFilter;
-        this.topicFilterType = config.topicFilterType;
         this.attributes = config.attributes;
+        this.groups = config.groups || [];   // [{ item, group }] — group membership, resolved by the EventHandler group engine
+
+        if (config.topicFilters && config.topicFilters.length > 0) {
+            this.topicFilters    = config.topicFilters;
+            this.topicFilterMode = config.topicFilterMode || 'and';
+        } else if (config.topicFilter) {
+            this.topicFilters    = [{ field: 'topic', matchType: config.topicFilterType || 'mqtt', value: config.topicFilter }];
+            this.topicFilterMode = 'and';
+        } else {
+            this.topicFilters    = [];
+            this.topicFilterMode = 'and';
+        }
         var node = this;
         var nodeContext = this.context();
         var date;
@@ -61,6 +104,11 @@ module.exports = function(RED) {
         node.heartbeat      = nodeContext.get("heartbeat",node.thingType.contextStore) || {};
         node.last_change    = nodeContext.get("last_change",node.thingType.contextStore) || {};
         node.hbTimestamp    = nodeContext.get("hbTimestamp",node.thingType.contextStore) || 0;
+        // Machine-managed, read-only metadata (key/value facts an integration writes in via the
+        // reserved <prefix>/_meta channel). Persisted exactly like state so it survives restarts.
+        // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
+        node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
+        node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
 
         function checkTimestamp() {
@@ -115,9 +163,14 @@ module.exports = function(RED) {
             var attribute;
             var item;
 
-            if (node.topicFilter) {
-                if (topicFilter[node.topicFilterType](msg.topic,node.topicFilter) === false) { return; }
+            if (node.topicFilters.length > 0) {
+                if (!applyFilters(msg, node.topicFilters, node.topicFilterMode)) { return; }
             }
+
+            // Reserved metadata channel: <prefix>/_meta (bulk replace) or <prefix>/_meta/<key>.
+            // Handled before items so it never runs as a normal state update.
+            var metaMatch = String(msg.topic || '').match(/(?:^|\/)_meta(?:\/([^/]+))?$/);
+            if (metaMatch) { node.updateMetadata(metaMatch[1], msg.payload); return; }
 
             if (!node.thingType.items) {
                 node.debug("No items configured. Dropping message.");
@@ -125,12 +178,7 @@ module.exports = function(RED) {
             }
 
             if (node.thingType.filterFunction != '0') {
-                for (let n in node.thingType.ingress) {
-                    if (node.thingType.ingress[n].id == node.thingType.filterFunction){
-                        var fn = node.thingType.ingress[n].fn;
-                        break;
-                    }
-                }
+                var fn = resolveFn(node, 'ingress', node.thingType.filterFunction);
                 var attribute = getAttributes();
                 var item = getItems();
                 msgClone =  RED.util.cloneMessage(msg);
@@ -147,12 +195,13 @@ module.exports = function(RED) {
             for (var i in node.thingType.items) {
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'ttl')) { continue; }
 
-                if (node.thingType.items[i].topicFilterValue) {
-                    var topic = node.thingType.items[i].topicFilterValue;
-                    if (node.thingType.items[i].topicFilterType == 'str') {
-                        topic = fixTopic(topic,node.topicPrefix);
-                    }
-                    if (topicFilter[node.thingType.items[i].topicFilterType](msg.topic,topic) == false) { continue; }
+                var itemFilters = node.thingType.items[i].topicFilters;
+                var itemFilterMode = node.thingType.items[i].topicFilterMode || 'and';
+                if ((!itemFilters || itemFilters.length === 0) && node.thingType.items[i].topicFilterValue) {
+                    itemFilters = [{ field: 'topic', matchType: node.thingType.items[i].topicFilterType || 'mqtt', value: node.thingType.items[i].topicFilterValue }];
+                }
+                if (itemFilters && itemFilters.length > 0) {
+                    if (!applyFilters(msg, itemFilters, itemFilterMode, node.topicPrefix)) { continue; }
                 }
 
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'timestamp')) {
@@ -178,12 +227,7 @@ module.exports = function(RED) {
                     continue;
                 }                
 
-                for (let n in node.thingType.ingress) {
-                    if (node.thingType.ingress[n].id == node.thingType.items[i].ingress){
-                        var fn = node.thingType.ingress[n].fn;
-                        break;
-                    }
-                }
+                var fn = resolveFn(node, 'ingress', node.thingType.items[i].ingress);
 
                 msgClone = RED.util.cloneMessage(msg);
                 attribute = getAttributes();
@@ -264,11 +308,108 @@ module.exports = function(RED) {
             if (Object.keys(attribute) != 0) {
                 eventmsg.thing.attributes = Object.assign({},attribute);
             }
-            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg);
+            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg,logtype);
             eventmsg.logtype = logtype;
             node.eventHandler.publishLog(eventmsg);
             node.showState();            
         }        
+
+        // --- metadata helpers (machine-managed, read-only) --------------------------------
+        function metaEmpty(v) { return v === undefined || v === null || v === ''; }
+        function metaPersist() {
+            nodeContext.set("metadata", node.metadata, node.thingType.contextStore);
+            nodeContext.set("metadataLastChange", node.metadataLastChange, node.thingType.contextStore);
+        }
+        // Flatten a nested object into dot-keyed leaves: { "a.b.c": value }. Recurses *plain*
+        // objects only; arrays and primitives are kept whole as leaf values.
+        function metaFlatten(obj, prefix, out) {
+            for (var k in obj) {
+                if (!Object.prototype.hasOwnProperty.call(obj, k)) { continue; }
+                var key = prefix ? (prefix + '.' + k) : String(k);
+                var v = obj[k];
+                if (v && typeof v === 'object' && !Array.isArray(v)) { metaFlatten(v, key, out); }
+                else { out[key] = v; }
+            }
+            return out;
+        }
+        // Apply one leaf key. An empty value removes that key *and any descendants* (its branch);
+        // otherwise it sets the key. Returns true if anything changed.
+        function metaApplyKey(key, val, now) {
+            if (metaEmpty(val)) {
+                var changed = false;
+                var pfx = key + '.';
+                for (var mk in node.metadata) {
+                    if (mk === key || mk.indexOf(pfx) === 0) {
+                        delete node.metadata[mk];
+                        delete node.metadataLastChange[mk];
+                        changed = true;
+                    }
+                }
+                return changed;
+            }
+            if (node.metadata[key] !== val) {
+                node.metadata[key] = val;
+                node.metadataLastChange[key] = now;
+                return true;
+            }
+            return false;
+        }
+        // Apply a payload under an optional key prefix: nested objects are flattened to dot-keys,
+        // everything else is a single leaf. Returns true if anything changed.
+        function metaApplyPayload(prefix, payload, now) {
+            if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+                var flat = metaFlatten(payload, prefix || '', {});
+                var changed = false;
+                for (var fk in flat) { if (metaApplyKey(fk, flat[fk], now)) { changed = true; } }
+                return changed;
+            }
+            // primitive / array / empty → single leaf (prefix is the key when set)
+            return prefix ? metaApplyKey(prefix, payload, now) : false;
+        }
+
+        // Update the machine-managed metadata bag. Technology-neutral; hal2 never interprets keys.
+        // Nested objects are flattened to dot-keys (level1.level2.level3 = value).
+        //   <prefix>/_meta/<key>  value/object -> set that key (objects flatten under <key>)
+        //   <prefix>/_meta/<key>  empty/null   -> remove that key and its branch
+        //   <prefix>/_meta        object        -> merge (flattened); a null/empty leaf removes it
+        //   <prefix>/_meta        JSON string   -> parsed, then merged as above
+        //   <prefix>/_meta        empty/null    -> clear all metadata
+        node.updateMetadata = function (key, payload) {
+            var now = Date.now();
+
+            if (typeof key !== 'undefined') {
+                if (metaApplyPayload(key, payload, now)) metaPersist();
+                return;
+            }
+
+            // Bare _meta: accept an object, or a JSON string we parse ourselves.
+            var obj = payload;
+            if (typeof obj === 'string') {
+                var s = obj.trim();
+                if (s === '') { obj = null; }
+                else {
+                    try { obj = JSON.parse(s); }
+                    catch (e) { node.warn("hal2 metadata: '_meta' string payload is not valid JSON"); return; }
+                }
+            }
+
+            if (obj === undefined || obj === null) {
+                if (!Object.keys(node.metadata).length) { return; }   // already empty
+                node.metadata = {};
+                node.metadataLastChange = {};
+                metaPersist();
+                return;
+            }
+
+            if (typeof obj !== 'object' || Array.isArray(obj)) {
+                node.warn("hal2 metadata: bare '_meta' expects a JSON object");
+                return;
+            }
+
+            if (metaApplyPayload('', obj, now)) { metaPersist(); }
+        };
+
+        node.getMetadata = function () { return node.metadata || {}; };
 
         node.showState = function () {
             var statusMsg = [];
@@ -352,13 +493,8 @@ module.exports = function(RED) {
 
                 let attribute = getAttributes();
                 let items = getItems();
-                for (let i in node.thingType.egress) {
-                    if (node.thingType.egress[i].id == item.egress){
-                        var fn = node.thingType.egress[i].fn;
-                        break;
-                    }
-                }
-             
+                var fn = resolveFn(node, 'egress', item.egress);
+
                 let _egressFn = new Function('msg','attribute','item',fn);
                 try {
                     command = _egressFn(command,attribute,items);
@@ -432,4 +568,37 @@ module.exports = function(RED) {
         checkTimestamp();
     }
     RED.nodes.registerType("hal2Thing",hal2Thing);
+
+    // Expose a Thing's live, machine-managed metadata to the editor (the edit dialog only sees
+    // config, not runtime context). Used by the read-only Metadata panel in the Thing GUI.
+    RED.httpAdmin.get('/hal2/thing/:id/metadata', RED.auth.needsPermission('flows.read'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.getMetadata === 'function') {
+            res.json({ metadata: n.getMetadata(), lastChange: n.metadataLastChange || {} });
+        } else {
+            res.json({ metadata: {}, lastChange: {} });
+        }
+    });
+
+    // Delete one metadata key (reuses the same runtime path as a `_meta/<key>` empty payload).
+    RED.httpAdmin.delete('/hal2/thing/:id/metadata/:key', RED.auth.needsPermission('flows.write'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.updateMetadata === 'function') {
+            n.updateMetadata(req.params.key, null);
+            res.json({ metadata: n.getMetadata() });
+        } else {
+            res.status(404).json({ error: 'thing not found' });
+        }
+    });
+
+    // Clear all metadata (reuses the bulk `_meta` empty-payload path).
+    RED.httpAdmin.delete('/hal2/thing/:id/metadata', RED.auth.needsPermission('flows.write'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.updateMetadata === 'function') {
+            n.updateMetadata(undefined, null);
+            res.json({ metadata: n.getMetadata() });
+        } else {
+            res.status(404).json({ error: 'thing not found' });
+        }
+    });
 }

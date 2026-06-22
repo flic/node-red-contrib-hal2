@@ -1,0 +1,576 @@
+[
+  {
+    "id": "tab-music-mcp",
+    "type": "tab",
+    "label": "Music Assistant MCP",
+    "disabled": false,
+    "info": "Music Assistant MCP-tools. Anslutning sker via WebSocket-RPC mot MUSIC_ASSISTANT_URL/ws. Kr\u00e4ver att 'ws'-modulen \u00e4r till\u00e5ten i Node-RED settings.js (functionExternalModules: true)."
+  },
+  {
+    "id": "ma-c1",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_get_outputs \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "ma-in-get-outputs",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Get outputs",
+    "eventHandler": "",
+    "toolName": "music_get_outputs",
+    "description": "List available AirPlay 2 speakers (HomePods and AirPlay-capable Sonos) registered in Music Assistant. Use this to discover speaker names before calling music_set_outputs.",
+    "inputSchema": "{\"type\":\"object\",\"properties\":{}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 80,
+    "wires": [
+      [
+        "ma-fn-get-outputs"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-get-outputs",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "players/all",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\ntry {\n    const players = await rpc('players/all');\n    const list = (players || [])\n        .filter(p => p.available !== false)\n        .filter(p => (p.provider || '').includes('airplay') || (p.type || '') === 'player')\n        .map(p => ({ id: p.player_id, name: p.display_name || p.name, provider: p.provider, type: p.type, state: p.state, volume: p.volume_level, group_childs: p.group_childs || [] }));\n    msg.payload = { outputs: list };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 360,
+    "y": 80,
+    "wires": [
+      [
+        "ma-out-get-outputs"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-get-outputs",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 80,
+    "wires": []
+  },
+  {
+    "id": "ma-c2",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_set_outputs \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "ma-in-set-outputs",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Set outputs",
+    "eventHandler": "",
+    "toolName": "music_set_outputs",
+    "description": "Select which rooms/speakers should receive audio. The first listed speaker becomes the sync leader; the rest are joined to it as AirPlay 2 group members. Workflow: 1) music_set_outputs to pick rooms, 2) music_play to start music.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"names\"],\"properties\":{\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"Speaker names (case-insensitive) \u2014 use music_get_outputs for available names. First entry becomes the leader.\"},\"volume\":{\"type\":\"integer\",\"description\":\"Volume 0-100 to set on grouped outputs (optional)\",\"minimum\":0,\"maximum\":100}}}",
+    "topic": "",
+    "timeout": 20,
+    "x": 120,
+    "y": 200,
+    "wires": [
+      [
+        "ma-fn-set-outputs"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-set-outputs",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "players/cmd/group",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { names, volume } = msg.payload;\nif (!names || !Array.isArray(names) || names.length === 0) { msg.payload = { error: 'names must be a non-empty array' }; return msg; }\ntry {\n    const players = await rpc('players/all');\n    const byName = new Map((players || []).map(p => [(p.display_name || p.name || '').toLowerCase(), p]));\n    const matched = names.map(n => byName.get(n.toLowerCase())).filter(Boolean);\n    const notFound = names.filter(n => !byName.has(n.toLowerCase()));\n    if (matched.length === 0) { msg.payload = { error: 'no matching speakers', not_found: notFound }; return msg; }\n    const leader = matched[0];\n    const members = matched.slice(1);\n    const wasPlaying = leader.state === 'playing' || leader.state === 'paused';\n    if (!wasPlaying) {\n        await rpc('players/cmd/ungroup', { player_id: leader.player_id }).catch(()=>{});\n    }\n    for (const m of members) {\n        // MA semantics: player_id joins target_player's group, so member joins leader\n        await rpc('players/cmd/group', { player_id: m.player_id, target_player: leader.player_id });\n    }\n    if (volume != null) {\n        for (const p of matched) {\n            await rpc('players/cmd/volume_set', { player_id: p.player_id, volume_level: volume });\n        }\n    }\n    if (wasPlaying && members.length > 0) {\n        // Sonos pauses on group change \u2014 resume playback on the leader\n        await rpc('players/cmd/play', { player_id: leader.player_id }).catch(()=>{});\n    }\n    flow.set('activeLeaderId', leader.player_id);\n    msg.payload = { success: true, leader: leader.display_name || leader.name, members: members.map(m => m.display_name || m.name), not_found: notFound };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 380,
+    "y": 200,
+    "wires": [
+      [
+        "ma-out-set-outputs"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-set-outputs",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 200,
+    "wires": []
+  },
+  {
+    "id": "ma-c3",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_play \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 280,
+    "wires": []
+  },
+  {
+    "id": "ma-in-play",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Play media",
+    "eventHandler": "",
+    "toolName": "music_play",
+    "description": "Play media on the currently grouped Music Assistant outputs. Call music_set_outputs first to pick rooms. Accepts either a Spotify URI (spotify:track:\u2026, spotify:playlist:\u2026) or a free-text query that will be searched.",
+    "inputSchema": "{\"type\":\"object\",\"properties\":{\"uri\":{\"type\":\"string\",\"description\":\"Spotify URI \u2014 e.g. spotify:playlist:37i9dQZF1DX... or spotify:track:4iV5W9uY...\"},\"query\":{\"type\":\"string\",\"description\":\"Free-text search; the first matching track is played (used when uri is not provided)\"},\"shuffle\":{\"type\":\"boolean\",\"description\":\"Enable shuffle mode before playing\"}}}",
+    "topic": "",
+    "timeout": 20,
+    "x": 120,
+    "y": 320,
+    "wires": [
+      [
+        "ma-fn-play"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-play",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "players/cmd/play_media",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { uri, query, shuffle } = msg.payload;\nif (!uri && !query) { msg.payload = { error: 'uri or query is required' }; return msg; }\ntry {\n    // Resolve playback target: find the active sync leader (first player in any group, or any active player)\n    const players = await rpc('players/all');\n    const activeId = flow.get('activeLeaderId');\n    let leader = activeId ? (players || []).find(p => p.player_id === activeId) : null;\n    if (!leader) leader = (players || []).find(p => p.group_childs && p.group_childs.length > 0);\n    if (!leader) leader = (players || []).find(p => p.state === 'playing' || p.state === 'paused');\n    if (!leader) leader = (players || []).find(p => p.available !== false && p.provider !== 'universal_player' && p.provider !== 'sendspin');\n    if (!leader) { msg.payload = { error: 'no available player \u2014 call music_set_outputs first' }; return msg; }\n    let mediaUri = uri;\n    if (!mediaUri && query) {\n        const search = await rpc('music/search', { search_query: query, media_types: ['track'], limit: 10 });\n        const candidates = (search && search.tracks) || (Array.isArray(search) ? search : []);\n        const rank = (u) => u.startsWith('library://') ? 0 : u.startsWith('spotify') ? 1 : u.startsWith('apple_music') ? 2 : 9;\n        const preferred = candidates.filter(t => t.uri).sort((a, b) => rank(a.uri) - rank(b.uri));\n        const hit = preferred[0];\n        if (!hit) { msg.payload = { error: 'no match for query: ' + query }; return msg; }\n        mediaUri = hit.uri;\n    }\n    await rpc('player_queues/play_media', { queue_id: leader.player_id, media: mediaUri, option: 'play' });\n    // Some providers (e.g. Sonos via universal_player) queue but don't auto-start. Force a play.\n    await rpc('players/cmd/play', { player_id: leader.player_id }).catch(()=>{});\n    if (shuffle) await rpc('players/cmd/shuffle', { player_id: leader.player_id, shuffle_enabled: true }).catch(()=>{});\n    msg.payload = { success: true, played_on: leader.display_name || leader.name, uri: mediaUri, shuffle: !!shuffle };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 400,
+    "y": 320,
+    "wires": [
+      [
+        "ma-out-play"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-play",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 320,
+    "wires": []
+  },
+  {
+    "id": "ma-c4",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_player \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 400,
+    "wires": []
+  },
+  {
+    "id": "ma-in-player",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Player control",
+    "eventHandler": "",
+    "toolName": "music_player",
+    "description": "Control Music Assistant playback and get player status. Use action=\"status\" (or omit) to get current state. Actions: play, pause, stop, next, previous, status. Optionally set group volume 0-100 alongside any action.",
+    "inputSchema": "{\"type\":\"object\",\"properties\":{\"action\":{\"type\":\"string\",\"enum\":[\"play\",\"pause\",\"stop\",\"next\",\"previous\",\"status\"],\"description\":\"Playback action \u2014 omit or use status to get player state\"},\"volume\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100,\"description\":\"Group volume 0-100 (can be combined with action)\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 440,
+    "wires": [
+      [
+        "ma-fn-player"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-player",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "Player control",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { action, volume } = msg.payload;\ntry {\n    const players = await rpc('players/all');\n    const activeId = flow.get('activeLeaderId');\n    let leader = activeId ? (players || []).find(p => p.player_id === activeId) : null;\n    if (!leader) leader = (players || []).find(p => p.group_childs && p.group_childs.length > 0);\n    if (!leader) leader = (players || []).find(p => p.state === 'playing' || p.state === 'paused');\n    if (!leader) leader = (players || []).find(p => p.available !== false && p.provider !== 'universal_player' && p.provider !== 'sendspin');\n    if (!leader) { msg.payload = { error: 'no available player' }; return msg; }\n    const results = {};\n    if (volume != null) {\n        await rpc('players/cmd/volume_set', { player_id: leader.player_id, volume_level: volume });\n        results.volume_set = volume;\n    }\n    if (!action || action === 'status') {\n        msg.payload = { ...results, state: leader.state, volume: leader.volume_level, current_item: leader.current_media || null, name: leader.display_name || leader.name };\n        return msg;\n    }\n    const cmds = { play: 'players/cmd/play', pause: 'players/cmd/pause', stop: 'players/cmd/stop', next: 'players/cmd/next', previous: 'players/cmd/previous' };\n    const cmd = cmds[action];\n    if (!cmd) { msg.payload = { error: 'Unknown action: ' + action }; return msg; }\n    await rpc(cmd, { player_id: leader.player_id });\n    msg.payload = { success: true, action, ...results };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 360,
+    "y": 440,
+    "wires": [
+      [
+        "ma-out-player"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-player",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 440,
+    "wires": []
+  },
+  {
+    "id": "ma-c5",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_set_volume \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 520,
+    "wires": []
+  },
+  {
+    "id": "ma-in-set-vol",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Set volume per speaker",
+    "eventHandler": "",
+    "toolName": "music_set_volume",
+    "description": "Set the volume for one or more speakers individually without changing which speakers are active. Use speaker names from music_get_outputs.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"outputs\"],\"properties\":{\"outputs\":{\"type\":\"array\",\"description\":\"Speakers and their target volumes\",\"items\":{\"type\":\"object\",\"required\":[\"name\",\"volume\"],\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"Speaker name from music_get_outputs\"},\"volume\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":100,\"description\":\"Volume 0-100\"}}}}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 140,
+    "y": 560,
+    "wires": [
+      [
+        "ma-fn-set-vol"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-set-vol",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "players/cmd/volume_set",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { outputs } = msg.payload;\nif (!outputs || !Array.isArray(outputs)) { msg.payload = { error: 'outputs must be an array of {name, volume}' }; return msg; }\ntry {\n    const players = await rpc('players/all');\n    const byName = new Map((players || []).map(p => [(p.display_name || p.name || '').toLowerCase(), p]));\n    const updated = [];\n    const notFound = [];\n    for (const { name, volume } of outputs) {\n        const p = byName.get((name || '').toLowerCase());\n        if (!p) { notFound.push(name); continue; }\n        await rpc('players/cmd/volume_set', { player_id: p.player_id, volume_level: volume });\n        updated.push({ name: p.display_name || p.name, volume });\n    }\n    msg.payload = { success: true, updated, not_found: notFound };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 390,
+    "y": 560,
+    "wires": [
+      [
+        "ma-out-set-vol"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-set-vol",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 560,
+    "wires": []
+  },
+  {
+    "id": "ma-c6",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_search \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 640,
+    "wires": []
+  },
+  {
+    "id": "ma-in-search",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Search library",
+    "eventHandler": "",
+    "toolName": "music_search",
+    "description": "Search the Music Assistant library and connected providers (Spotify, etc.) for tracks, albums, artists or playlists. Returns matching items with their URIs \u2014 use those URIs with music_play.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"query\"],\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Search terms\"},\"type\":{\"type\":\"string\",\"description\":\"Comma-separated media types: track, album, artist, playlist (default: track,album,artist,playlist)\"},\"limit\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":25,\"description\":\"Max results per type (default 5)\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 130,
+    "y": 680,
+    "wires": [
+      [
+        "ma-fn-search"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-search",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "music/search",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { query, type, limit } = msg.payload;\nif (!query) { msg.payload = { error: 'query is required' }; return msg; }\nconst types = (type || 'track,album,artist,playlist').split(',').map(s => s.trim()).filter(Boolean);\ntry {\n    const r = await rpc('music/search', { search_query: query, media_types: types, limit: (limit || 5) * 3 });\n    const rank = (uri) => uri && uri.startsWith('library://') ? 0 : uri && uri.startsWith('spotify') ? 1 : uri && uri.startsWith('apple_music') ? 2 : 9;\n    const pick = (arr, fn) => Array.isArray(arr) ? arr.filter(x => x.uri).sort((a, b) => rank(a.uri) - rank(b.uri)).slice(0, limit || 5).map(fn) : [];\n    const result = {\n        tracks: pick(r && r.tracks, t => ({ name: t.name, artist: (t.artists && t.artists[0] && t.artists[0].name) || null, album: (t.album && t.album.name) || null, uri: t.uri })),\n        albums: pick(r && r.albums, a => ({ name: a.name, artist: (a.artists && a.artists[0] && a.artists[0].name) || null, uri: a.uri })),\n        artists: pick(r && r.artists, a => ({ name: a.name, uri: a.uri })),\n        playlists: (Array.isArray(r && r.playlists) ? r.playlists : []).filter(x => x.uri).sort((a, b) => { const score = (p) => { let s = p.uri.startsWith('library://') ? 0 : p.uri.startsWith('spotify') ? 10 : p.uri.startsWith('apple_music') ? 20 : 30; const o = (p.owner || '').toString().toLowerCase(); if (o === 'spotify' || o === 'apple music') s -= 5; return s; }; return score(a) - score(b); }).slice(0, limit || 5).map(p => ({ name: p.name, uri: p.uri, owner: p.owner || null }))\n    };\n    msg.payload = JSON.stringify(result);\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 360,
+    "y": 680,
+    "wires": [
+      [
+        "ma-out-search"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-search",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 680,
+    "wires": []
+  },
+  {
+    "id": "ma-c7",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_dstm \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 760,
+    "wires": []
+  },
+  {
+    "id": "ma-in-dstm",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Don't Stop The Music",
+    "eventHandler": "",
+    "toolName": "music_dstm",
+    "description": "Toggle endless radio continuation (Don't Stop The Music) on the active queue. When enabled, Music Assistant appends similar tracks based on recently played items when the queue runs out, keeping music playing indefinitely.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"enabled\"],\"properties\":{\"enabled\":{\"type\":\"boolean\",\"description\":\"Turn DSTM on or off\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 130,
+    "y": 800,
+    "wires": [
+      [
+        "ma-fn-dstm"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-dstm",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "player_queues/dynamic",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { enabled } = msg.payload;\nif (typeof enabled !== 'boolean') { msg.payload = { error: 'enabled (boolean) is required' }; return msg; }\ntry {\n    const players = await rpc('players/all');\n    const activeId = flow.get('activeLeaderId');\n    let leader = activeId ? (players || []).find(p => p.player_id === activeId) : null;\n    if (!leader) leader = (players || []).find(p => p.group_childs && p.group_childs.length > 0);\n    if (!leader) leader = (players || []).find(p => p.state === 'playing' || p.state === 'paused');\n    if (!leader) leader = (players || []).find(p => p.available !== false && p.provider !== 'universal_player' && p.provider !== 'sendspin');\n    if (!leader) { msg.payload = { error: 'no available player \u2014 call music_set_outputs first' }; return msg; }\n    const queueId = leader.active_queue || leader.player_id;\n    await rpc('player_queues/dont_stop_the_music', { queue_id: queueId, dont_stop_the_music_enabled: enabled });\n    msg.payload = { success: true, queue: leader.display_name || leader.name, enabled };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 390,
+    "y": 800,
+    "wires": [
+      [
+        "ma-out-dstm"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-dstm",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 800,
+    "wires": []
+  },
+  {
+    "id": "ma-c8",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_repeat \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 880,
+    "wires": []
+  },
+  {
+    "id": "ma-in-repeat",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Repeat mode",
+    "eventHandler": "",
+    "toolName": "music_repeat",
+    "description": "Set the repeat mode on the active queue. off = no repeat, one = loop the current track, all = loop the whole queue.",
+    "inputSchema": "{\"type\":\"object\",\"required\":[\"mode\"],\"properties\":{\"mode\":{\"type\":\"string\",\"enum\":[\"off\",\"one\",\"all\"],\"description\":\"Repeat mode\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 120,
+    "y": 920,
+    "wires": [
+      [
+        "ma-fn-repeat"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-repeat",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "player_queues/repeat",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { mode } = msg.payload;\nif (!['off','one','all'].includes(mode)) { msg.payload = { error: \"mode must be 'off', 'one' or 'all'\" }; return msg; }\ntry {\n    const players = await rpc('players/all');\n    const activeId = flow.get('activeLeaderId');\n    let leader = activeId ? (players || []).find(p => p.player_id === activeId) : null;\n    if (!leader) leader = (players || []).find(p => p.group_childs && p.group_childs.length > 0);\n    if (!leader) leader = (players || []).find(p => p.state === 'playing' || p.state === 'paused');\n    if (!leader) leader = (players || []).find(p => p.available !== false && p.provider !== 'universal_player' && p.provider !== 'sendspin');\n    if (!leader) { msg.payload = { error: 'no available player' }; return msg; }\n    const queueId = leader.active_queue || leader.player_id;\n    // NOTE: verify command name against running MA \u2014 likely 'player_queues/repeat' or 'player_queues/set_repeat'.\n    await rpc('player_queues/repeat', { queue_id: queueId, repeat_mode: mode });\n    msg.payload = { success: true, queue: leader.display_name || leader.name, mode };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 380,
+    "y": 920,
+    "wires": [
+      [
+        "ma-out-repeat"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-repeat",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 590,
+    "y": 920,
+    "wires": []
+  },
+  {
+    "id": "ma-c-fav",
+    "type": "comment",
+    "z": "tab-music-mcp",
+    "name": "music_favorite \u2013 MCP-tool",
+    "info": "",
+    "x": 120,
+    "y": 1000,
+    "wires": []
+  },
+  {
+    "id": "ma-in-fav",
+    "type": "hal2MCPIn",
+    "z": "tab-music-mcp",
+    "name": "Favorite track",
+    "eventHandler": "",
+    "toolName": "music_favorite",
+    "description": "Mark the currently playing track (or a specific URI) as favorited/liked in Music Assistant. The favorite propagates to the underlying provider (e.g. Spotify 'Liked Songs') if the provider is configured with library-modify scope. Defaults to the currently playing track when uri is omitted.",
+    "inputSchema": "{\"type\": \"object\", \"required\": [\"action\"], \"properties\": {\"action\": {\"type\": \"string\", \"enum\": [\"add\", \"remove\"], \"description\": \"Whether to add (like) or remove (unlike) the favorite\"}, \"uri\": {\"type\": \"string\", \"description\": \"Optional media URI. Defaults to the currently playing track on the active leader.\"}}}",
+    "topic": "",
+    "timeout": 15,
+    "x": 130,
+    "y": 1040,
+    "wires": [
+      [
+        "ma-fn-fav"
+      ]
+    ]
+  },
+  {
+    "id": "ma-fn-fav",
+    "type": "function",
+    "z": "tab-music-mcp",
+    "name": "music/favorites/{add,remove}_item",
+    "func": "const maUrl = env.get('MUSIC_ASSISTANT_URL');\nif (!maUrl) { node.error('MUSIC_ASSISTANT_URL not set'); return null; }\nconst maToken = env.get('MUSIC_ASSISTANT_TOKEN');\nif (!maToken) { node.error('MUSIC_ASSISTANT_TOKEN not set'); return null; }\nconst wsUrl = maUrl.replace(/^http/, 'ws').replace(/\\/$/, '') + '/ws';\nconst rpc = (command, args) => new Promise((resolve, reject) => {\n    const sock = new ws(wsUrl);\n    const id = Date.now().toString() + '-' + Math.random().toString(36).slice(2,8);\n    const authId = id + '-auth';\n    let done = false;\n    const finish = (fn, v) => { if (done) return; done = true; try { sock.close(); } catch(e){} fn(v); };\n    sock.on('open', () => { try { sock.send(JSON.stringify({ command: 'auth', message_id: authId, args: { token: maToken } })); } catch(e) { finish(reject, e); } });\n    sock.on('message', raw => { try { const m = JSON.parse(raw.toString()); if (m.message_id === authId) { if (m.error === undefined) { sock.send(JSON.stringify({ command, message_id: id, args: args || {} })); } else { finish(reject, new Error('auth failed: ' + JSON.stringify(m))); } } else if (m.message_id === id) { if (m.error === undefined) finish(resolve, m.result); else finish(reject, new Error('rpc error: ' + JSON.stringify(m))); } } catch(e){} });\n    sock.on('error', e => finish(reject, e));\n    sock.on('close', () => finish(reject, new Error('socket closed before response')));\n    setTimeout(() => finish(reject, new Error('timeout')), 10000);\n});\nconst { action, uri } = msg.payload;\nif (!['add','remove'].includes(action)) { msg.payload = { error: \"action must be 'add' or 'remove'\" }; return msg; }\ntry {\n    let targetUri = uri;\n    if (!targetUri) {\n        const players = await rpc('players/all');\n        const activeId = flow.get('activeLeaderId');\n        let leader = activeId ? (players || []).find(p => p.player_id === activeId) : null;\n        if (!leader) leader = (players || []).find(p => p.group_childs && p.group_childs.length > 0);\n        if (!leader) leader = (players || []).find(p => p.state === 'playing' || p.state === 'paused');\n        if (!leader || !leader.current_media || !leader.current_media.uri) {\n            msg.payload = { error: 'nothing playing \u2014 pass uri explicitly' };\n            return msg;\n        }\n        targetUri = leader.current_media.uri;\n    }\n    if (action === 'add') {\n        await rpc('music/favorites/add_item', { item: targetUri });\n    } else {\n        try {\n            await rpc('music/favorites/remove_item', { item: targetUri });\n        } catch (e1) {\n            const mediaType = (targetUri.includes('/track/') || targetUri.includes(':track:')) ? 'track' : null;\n            if (!mediaType) throw new Error('cannot determine media_type for remove: ' + e1.message);\n            await rpc('music/favorites/remove_item', { media_type: mediaType, library_item_id: targetUri });\n        }\n    }\n    msg.payload = { success: true, action, uri: targetUri };\n} catch(e) {\n    msg.payload = { error: 'MA error: ' + e.message };\n}\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [
+      {
+        "var": "ws",
+        "module": "ws"
+      }
+    ],
+    "x": 410,
+    "y": 1040,
+    "wires": [
+      [
+        "ma-out-fav"
+      ]
+    ]
+  },
+  {
+    "id": "ma-out-fav",
+    "type": "hal2MCPOut",
+    "z": "tab-music-mcp",
+    "name": "",
+    "eventHandler": "",
+    "x": 670,
+    "y": 1040,
+    "wires": []
+  }
+]

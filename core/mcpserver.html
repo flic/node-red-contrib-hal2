@@ -1,0 +1,52 @@
+<script type="text/html" data-template-name="hal2MCPServer">
+    <div class="form-row">
+        <label for="node-config-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-config-input-name" placeholder="My MCP Server">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-eventHandler"><i class="fa fa-cog"></i> Event handler</label>
+        <input type="text" id="node-config-input-eventHandler">
+    </div>
+    <div class="form-row">
+        <label for="node-config-input-mode"><i class="fa fa-sitemap"></i> Mode</label>
+        <select id="node-config-input-mode" style="width:calc(100% - 105px)">
+            <option value="embedded">Embedded — use existing /mcp endpoint</option>
+            <option value="standalone">Standalone — new endpoint with own path</option>
+        </select>
+    </div>
+    <div class="form-row" id="row-path">
+        <label for="node-config-input-path"><i class="fa fa-link"></i> Path</label>
+        <input type="text" id="node-config-input-path" placeholder="jellyfin" style="width:calc(100% - 105px)">
+        <div style="margin-top:4px; font-size:0.85em; color:#888">Registers endpoint: POST /mcp/<em>path</em></div>
+    </div>
+    <div class="form-row" id="row-instructions">
+        <label for="node-config-input-instructions" style="vertical-align:top; margin-top:4px"><i class="fa fa-comment"></i> Instructions</label>
+        <textarea id="node-config-input-instructions" rows="3" style="width:calc(100% - 105px);" placeholder="Optional instructions for Claude about this server."></textarea>
+    </div>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('hal2MCPServer', {
+        category : 'config',
+        defaults : {
+            name         : { value: '' },
+            eventHandler : { value: '', type: 'hal2EventHandler', required: true },
+            mode         : { value: 'embedded' },
+            path         : { value: '' },
+            instructions : { value: '' }
+        },
+        label : function () {
+            if (this.mode === 'standalone') return this.name || '/mcp/' + (this.path || '?');
+            return this.name || 'embedded';
+        },
+        oneditprepare: function () {
+            function updateVisibility() {
+                var mode = $('#node-config-input-mode').val();
+                $('#row-path').toggle(mode === 'standalone');
+                $('#row-instructions').toggle(mode === 'standalone');
+            }
+            $('#node-config-input-mode').on('change', updateVisibility);
+            updateVisibility();
+        }
+    });
+</script>

@@ -1,0 +1,64 @@
+<script type="text/x-red" data-template-name="hal2Api">
+    <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-allowAdminTools" style="width:auto"><i class="fa fa-shield"></i> Allow admin tools</label>
+        <input type="checkbox" id="node-input-allowAdminTools" style="display: inline-block; width: auto; vertical-align: top;">
+    </div>
+    <div class="form-tips">Admin tools (<code>get_flow</code>, <code>deploy_flow</code>) are only exposed when this is checked. Leave off unless the flow exposing this node is trusted.</div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Api">
+    <p>JSON-in / JSON-out gateway to the hal2 tool catalog. Wire it behind an
+    <code>http in</code>, MQTT, or any node that produces a JSON message, to query
+    device state and control devices over a simple request/response contract.</p>
+
+    <h3>Input</h3>
+    <p><code>msg.payload</code> = <code>{ "tool": "&lt;name&gt;", "args": { ... } }</code>.
+    <code>msg.tool</code> / <code>msg.args</code> override the payload fields if present.
+    Optional <code>msg.claims</code> is passed through to the tool (used for admin role checks).</p>
+
+    <h3>Output</h3>
+    <p><code>msg.payload</code> = <code>{ "ok": true, "result": ... }</code> on success, or
+    <code>{ "ok": false, "error": { "code", "message" } }</code> on failure.</p>
+
+    <h3>Tools</h3>
+    <p>The available tools and their arguments mirror the MCP catalog and are documented in
+    <a href="https://github.com/flic/node-red-contrib-hal2/blob/main/docs/API.md" target="_blank">docs/API.md</a>
+    (auto-generated on GitHub). Read tools (e.g. <code>get_all_states</code>, <code>get_state</code>,
+    <code>get_history</code>, <code>get_scenes</code>, <code>get_presence</code>, <code>get_alerts</code>)
+    and control tools (e.g. <code>set_light</code>, <code>control_cover</code>, <code>control_climate</code>,
+    <code>activate_scene</code>) are always available. Admin tools require <strong>Allow admin tools</strong>.</p>
+
+    <li><strong>Event handler</strong>: the hal2EventHandler whose devices this API serves.</li>
+    <li><strong>Allow admin tools</strong>: expose <code>get_flow</code> / <code>deploy_flow</code> through this node.</li>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Api', {
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            eventHandler: {
+                value: "Event handler",
+                type: "hal2EventHandler",
+                required: true
+            },
+            name:            {},
+            allowAdminTools: { value: false }
+        },
+        inputs: 1,
+        outputs: 1,
+        icon: "font-awesome/fa-exchange",
+        label: function() {
+            return this.name || "api";
+        },
+        paletteLabel: "api"
+    });
+</script>

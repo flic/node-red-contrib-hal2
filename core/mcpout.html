@@ -1,0 +1,31 @@
+<script type="text/html" data-template-name="hal2MCPOut">
+    <div class="form-row">
+        <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name">
+    </div>
+    <div class="form-row">
+        <label for="node-input-mcpServer"><i class="fa fa-server"></i> MCP Server</label>
+        <input type="text" id="node-input-mcpServer">
+    </div>
+    <div class="form-row">
+        <label for="node-input-emptyMessage"><i class="fa fa-comment-o"></i> Empty response</label>
+        <input type="text" id="node-input-emptyMessage" placeholder="No results found.">
+    </div>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('hal2MCPOut', {
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults  : {
+            name        : { value: '' },
+            mcpServer   : { value: '', type: 'hal2MCPServer', required: true },
+            emptyMessage: { value: 'No results found.' }
+        },
+        inputs    : 1,
+        outputs   : 0,
+        icon      : 'font-awesome/fa-sign-in',
+        paletteLabel: 'MCP Out',
+        label     : function () { return this.name || 'MCP Out'; }
+    });
+</script>

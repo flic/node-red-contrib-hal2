@@ -197,7 +197,7 @@
                 $("#div-error").show();
                 return;
             }  
-            var groupsList = halGetGroups(RED);
+            var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val());
             var thingTypeList = halGetThingTypes(RED,thingsList,true);
 
             $('#node-input-rate').spinner({
@@ -293,11 +293,25 @@
                     });
 
             $("#node-input-thing").change(function() {
-                let thing = RED.nodes.node($("#node-input-thing").val());
-                if (typeof thing === 'undefined') { return }
                 $("#node-input-item").children().remove();
 
-                if (thing.type == "hal2Thing") {    
+                // Groups are not nodes — the item field carries the group id.
+                if ($("#node-input-typeSel").val() == 'hal2Group') {
+                    $("#div-item").hide();
+                    $("#row-notes").hide();
+                    $("#row-item-notes").hide();
+                    var gid = $("#node-input-thing").val();
+                    if (gid) {
+                        $("<option value='" + gid + "'>" + gid + "</option>").appendTo("#node-input-item");
+                        $("#node-input-item").val(gid);
+                    }
+                    return;
+                }
+
+                let thing = RED.nodes.node($("#node-input-thing").val());
+                if (typeof thing === 'undefined') { return }
+
+                if (thing.type == "hal2Thing") {
                     $("#div-item").show();
                     // Show notes
                     if (thing.notes) {
