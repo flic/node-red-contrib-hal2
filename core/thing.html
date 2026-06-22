@@ -112,6 +112,8 @@
         oneditprepare: function () {
             var node = this;
             $("#node-input-tags").val(Array.isArray(node.tags) ? node.tags.join(', ') : (node.tags || ''));
+            // Show "AND" rather than a blank select when the stored value is empty.
+            if (!$("#node-input-topicFilterMode").val()) { $("#node-input-topicFilterMode").val("and"); }
 
             // Metadata panel: machine-managed facts (e.g. model, ipv6) written by an integration.
             // Read-only values (runtime context, fetched from the admin endpoint), but the user can
