@@ -421,10 +421,17 @@ module.exports = function(RED) {
         node.log('MCP enabled: ' + !!config.mcpEnabled + ', prefix: "' + mcpPrefix + '", location: "' + (config.locationName || '') + '"');
 
             const mcpServerUrl  = config.mcpServerUrl  || '';
-            const pocketidUrl   = config.pocketidUrl   || '';
+            // Identity provider (OIDC issuer) base URL. Stored under the legacy key `pocketidUrl`
+            // for backward compatibility, but it can point at any OIDC provider — its real
+            // endpoints are auto-discovered (see getOidcConfig below).
+            const issuerUrl     = (config.pocketidUrl || '').replace(/\/$/, '');
             const mcpServerName = config.mcpServerName || 'hal2-mcp';
+            // Redirect URI(s) the DCR shim advertises (space/newline/comma-separated). These must
+            // also be whitelisted on the IdP client. Defaults to the Claude.ai MCP callback.
+            const redirectUris  = (config.mcpRedirectUris || 'https://claude.ai/api/mcp/auth_callback')
+                                    .split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
 
-            node.log('MCP init: serverUrl=' + mcpServerUrl + ', pocketidUrl=' + pocketidUrl);
+            node.log('MCP init: serverUrl=' + mcpServerUrl + ', issuer=' + issuerUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
             const adminEnabled  = config.adminToolsEnabled === true;
             const adminPort     = Number(config.adminPort || 1880);
@@ -457,11 +464,52 @@ module.exports = function(RED) {
 
             const localDebugToken = (node.credentials && node.credentials.localDebugToken) || '';
 
-            // Lazy JWKS — only fetched on first real token validation.
+            // ── OIDC discovery (with PocketID-style fallback paths) ────────────
+            // Discover the IdP's real endpoints from /.well-known/openid-configuration so any
+            // spec-compliant OIDC provider works. If discovery is unavailable, fall back to the
+            // path layout PocketID uses — preserving existing behaviour.
+            let oidcConfig = null, oidcConfigPromise = null;
+            function fallbackEndpoints() {
+                return {
+                    issuer                 : issuerUrl,
+                    authorization_endpoint : issuerUrl + '/authorize',
+                    token_endpoint         : issuerUrl + '/api/oidc/token',
+                    userinfo_endpoint      : issuerUrl + '/api/oidc/userinfo',
+                    jwks_uri               : issuerUrl + '/.well-known/jwks.json'
+                };
+            }
+            function getOidcConfig() {
+                if (oidcConfig) return Promise.resolve(oidcConfig);
+                if (!oidcConfigPromise) {
+                    oidcConfigPromise = (async () => {
+                        const fb = fallbackEndpoints();
+                        if (!issuerUrl) { oidcConfig = fb; return fb; }
+                        try {
+                            const r = await httpGet(issuerUrl + '/.well-known/openid-configuration', {});
+                            if (r.status === 200 && r.body && typeof r.body === 'object' && r.body.jwks_uri) {
+                                oidcConfig = Object.assign(fb, r.body);   // discovered values win, per-field fallback
+                                node.log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer);
+                            } else {
+                                node.warn('MCP OIDC discovery returned ' + r.status + ' — using fallback endpoint paths');
+                                oidcConfig = fb;
+                            }
+                        } catch (e) {
+                            node.warn('MCP OIDC discovery failed: ' + e.message + ' — using fallback endpoint paths');
+                            oidcConfig = fb;
+                        }
+                        return oidcConfig;
+                    })();
+                }
+                return oidcConfigPromise;
+            }
+            if (issuerUrl) { getOidcConfig().catch(() => {}); }   // warm the cache (non-blocking)
+
+            // Lazy JWKS — built from the discovered jwks_uri on first real token validation.
             let jwks = null;
-            function getJwks() {
+            async function getJwks() {
                 if (!jwks) {
-                    jwks = jose.createRemoteJWKSet(new URL(pocketidUrl + '/.well-known/jwks.json'));
+                    const oidc = await getOidcConfig();
+                    jwks = jose.createRemoteJWKSet(new URL(oidc.jwks_uri));
                 }
                 return jwks;
             }
@@ -477,13 +525,14 @@ module.exports = function(RED) {
                     return tokenCache[cacheKey].claims;
                 }
                 try {
-                    const { payload } = await jose.jwtVerify(token, getJwks());
+                    const { payload } = await jose.jwtVerify(token, await getJwks());
                     // Enrich with userinfo — access tokens are minimal by OIDC convention,
                     // rich claims (email, name, groups) live in the userinfo response.
                     // JWT payload wins on collisions so verified fields stay authoritative.
                     let claims = payload;
                     try {
-                        const r = await httpGet(pocketidUrl + '/api/oidc/userinfo',
+                        const oidc = await getOidcConfig();
+                        const r = await httpGet(oidc.userinfo_endpoint,
                             { 'Authorization': 'Bearer ' + token });
                         if (r.status === 200 && r.body && typeof r.body === 'object') {
                             claims = Object.assign({}, r.body, payload);
@@ -1538,14 +1587,15 @@ module.exports = function(RED) {
             // ── OAuth: /.well-known/oauth-authorization-server ────────────────
 
             node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-authorization-server');
-            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-authorization-server', (_req, res) => {
+            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-authorization-server', async (_req, res) => {
+                const oidc = await getOidcConfig();
                 res.status(200).json({
                     issuer                                : mcpServerUrl,
-                    authorization_endpoint                : pocketidUrl + '/authorize',
-                    token_endpoint                        : pocketidUrl + '/api/oidc/token',
-                    userinfo_endpoint                     : pocketidUrl + '/api/oidc/userinfo',
+                    authorization_endpoint                : oidc.authorization_endpoint,
+                    token_endpoint                        : oidc.token_endpoint,
+                    userinfo_endpoint                     : oidc.userinfo_endpoint,
                     registration_endpoint                 : mcpServerUrl + mcpPrefix + '/oauth/register',
-                    jwks_uri                              : pocketidUrl + '/.well-known/jwks.json',
+                    jwks_uri                              : oidc.jwks_uri,
                     scopes_supported                      : mcpScopesArr,
                     response_types_supported              : ['code'],
                     grant_types_supported                 : ['authorization_code', 'refresh_token'],
@@ -1560,13 +1610,15 @@ module.exports = function(RED) {
             RED.httpNode.post(mcpPrefix + '/oauth/register', (req, res) => {
                 const clientId     = (node.credentials && node.credentials.pocketidClientId)     || '';
                 const clientSecret = (node.credentials && node.credentials.pocketidClientSecret) || '';
-                const requested    = req.body || {};
-                const redirectUris = requested.redirect_uris || ['https://claude.ai/api/mcp/auth_callback'];
+                const requested       = req.body || {};
+                // Echo the client's requested redirect_uris if given, else the configured set.
+                const clientRedirects = (Array.isArray(requested.redirect_uris) && requested.redirect_uris.length)
+                    ? requested.redirect_uris : redirectUris;
                 res.status(201).json({
                     client_id                  : clientId,
                     client_secret              : clientSecret,
                     client_id_issued_at        : Math.floor(Date.now() / 1000),
-                    redirect_uris              : redirectUris,
+                    redirect_uris              : clientRedirects,
                     grant_types                : ['authorization_code', 'refresh_token'],
                     response_types             : ['code'],
                     token_endpoint_auth_method : 'client_secret_post',

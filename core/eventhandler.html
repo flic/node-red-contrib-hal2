@@ -97,8 +97,11 @@
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
-                    <label for="node-config-input-pocketidUrl" style="width:150px"><i class="fa fa-lock"></i> PocketID URL</label>
-                    <input type="text" id="node-config-input-pocketidUrl" placeholder="https://pocketid.example.com" style="width:calc(100% - 185px)">
+                    <label for="node-config-input-pocketidUrl" style="width:150px"><i class="fa fa-lock"></i> Identity provider</label>
+                    <input type="text" id="node-config-input-pocketidUrl" placeholder="https://idp.example.com (OIDC issuer URL)" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>OIDC issuer base URL. Endpoints are auto-discovered from <code>/.well-known/openid-configuration</code> (falling back to PocketID's path layout). The provider must issue <b>JWT access tokens</b> verifiable via its JWKS.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-pocketidClientId" style="width:150px"><i class="fa fa-id-card"></i> Client ID</label>
@@ -109,11 +112,18 @@
                     <input type="password" id="node-config-input-pocketidClientSecret" placeholder="Client secret" style="width:calc(100% - 185px)" autocomplete="off">
                 </div>
                 <div class="form-row">
+                    <label for="node-config-input-mcpRedirectUris" style="width:150px"><i class="fa fa-mail-forward"></i> Redirect URIs</label>
+                    <input type="text" id="node-config-input-mcpRedirectUris" placeholder="https://claude.ai/api/mcp/auth_callback" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Allowed MCP-client callback URL(s), space/comma-separated (add more for other clients). Defaults to Claude.ai. These must also be whitelisted on the identity provider's client.</small>
+                </div>
+                <div class="form-row">
                     <label for="node-config-input-mcpScopes" style="width:150px"><i class="fa fa-list"></i> OIDC scopes</label>
                     <input type="text" id="node-config-input-mcpScopes" placeholder="openid profile email" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Space-separated list. Add e.g. <code>groups</code> to include group membership in the JWT — requires PocketID to be configured to send that claim for the scope.</small>
+                    <small>Space-separated list. Add e.g. <code>groups</code> to include group membership in the JWT — requires your identity provider to be configured to send that claim for the scope.</small>
                 </div>
 
                 <hr style="margin:12px 0">
@@ -232,6 +242,7 @@
             mcpServerUrl:      { value: '' },
             httpPathPrefix:    { value: '' },
             pocketidUrl:       { value: '' },
+            mcpRedirectUris:   { value: 'https://claude.ai/api/mcp/auth_callback' },
             mcpScopes:         { value: 'openid profile email' },
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },

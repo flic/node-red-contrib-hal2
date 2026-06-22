@@ -45,7 +45,7 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 
 ### MCP server
 
-The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is OAuth-protected (via [PocketID](https://pocket-id.org)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental - only tested with Claude.AI and PocketID.
+The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental.
 
 It ships with a catalog of built-in tools:
 
@@ -55,6 +55,28 @@ It ships with a catalog of built-in tools:
 - **Admin** (opt-in) — `get_flow`, `deploy_flow`
 
 Tools are exposed only when matching hardware is configured at that location — a server with no covers won't advertise `control_cover`. Things and Items can carry free-text **notes** and **tags**, and devices report derived **categories** (light, fan, cover, climate, spa, scene), all of which help the assistant pick the right device. Full parameters and examples are in **[docs/API.md](docs/API.md)**.
+
+### Authentication & reverse proxy
+
+The MCP server implements the MCP OAuth flow itself: it advertises itself as a **protected resource**, proxies the **authorization-server metadata** to your identity provider (IdP), and hands the MCP client a fixed, pre-registered client via a small dynamic-client-registration shim. It does **not** run its own login — your IdP does.
+
+**Endpoints to expose through your reverse proxy** (on the public *MCP server URL*, under the optional path prefix). All four must be reachable from the MCP client:
+
+| Method & path | Purpose |
+|---|---|
+| `GET /.well-known/oauth-protected-resource` | Resource metadata (RFC 9728) — points the client at the auth server |
+| `GET /.well-known/oauth-authorization-server` | Auth-server metadata (RFC 8414) — issuer is hal2, endpoints point at your IdP |
+| `POST /oauth/register` | Dynamic client registration shim — returns your pre-registered client |
+| `POST /mcp` | The JSON-RPC MCP endpoint (bearer-token protected) |
+
+**What hal2 expects of the identity provider:**
+
+- An **OIDC provider with discovery** — hal2 reads `‹issuer›/.well-known/openid-configuration` and uses the advertised `authorization_endpoint`, `token_endpoint`, `userinfo_endpoint` and `jwks_uri`. If discovery is unavailable it falls back to PocketID's path layout, so no extra config is needed for either.
+- It must issue **JWT access tokens** signed with a key published on its **JWKS** (hal2 verifies tokens locally). Providers that issue *opaque* access tokens are not supported (no introspection path yet).
+- A **confidential client** (client ID + secret) configured with: the **redirect URI(s)** from the *Redirect URIs* setting (default `https://claude.ai/api/mcp/auth_callback`; add more for other MCP clients), grant types `authorization_code` + `refresh_token`, **PKCE (S256)**, and `client_secret_post` auth.
+- Optionally, a claim (default `groups`) carrying the configured admin value, used to gate the admin tools.
+
+> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** (MCP client). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the four paths above, should work the same way.
 
 ### Custom MCP tools (hal2MCPIn / hal2MCPOut)
 
