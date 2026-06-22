@@ -198,6 +198,35 @@
     </div>
 </script>
 
+<script type="text/x-red" data-help-name="hal2EventHandler">
+    <p>The central config node of hal2 — a shared event bus that <code>hal2Thing</code>,
+    <code>hal2Value</code>, <code>hal2Gate</code>, <code>hal2Action</code> and <code>hal2Event</code>
+    nodes attach to. Use the <em>same</em> Event handler for every node that needs to talk to each
+    other. It also hosts several optional services, configured on its tabs:</p>
+
+    <li><strong>Shared functions</strong>: reusable ingress/egress message-transform functions that
+    ThingTypes can reference by id, so logic is defined once instead of copied per type. Each has an
+    info button showing which ThingTypes use it.</li>
+    <li><strong>Groups</strong>: group items across Things by HAType (e.g. all "light" items) so they
+    can be controlled together; referenced by <code>hal2Action</code> / <code>hal2Event</code>.</li>
+    <li><strong>History</strong>: optional SQLite logging of item state changes with a retention
+    window. Powers the <code>get_history</code> (incl. server-side bucketed downsampling) and
+    <code>analyze_patterns</code> tools.</li>
+    <li><strong>MCP server</strong>: an embedded, OAuth-protected <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a>
+    server that exposes the device tool catalog to AI assistants such as Claude. Works with any
+    standard OIDC identity provider (endpoints auto-discovered), carries a per-location identifier,
+    and supports a local debug token. Admin tools (<code>get_flow</code>/<code>deploy_flow</code>) are
+    opt-in.</li>
+    <li><strong>Heartbeat</strong>: per-thing liveness tracking surfaced as the <code>alive</code>
+    flag in <code>get_all_states</code>.</li>
+
+    <p>Full configuration, the reverse-proxy paths the MCP server needs, and identity-provider
+    requirements are documented in the
+    <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README on GitHub</a>.
+    The complete tool catalog is in
+    <a href="https://github.com/flic/node-red-contrib-hal2/blob/main/docs/API.md" target="_blank">docs/API.md</a>.</p>
+</script>
+
 <script type="text/javascript">
     var hal2ehEditors = {};
 
