@@ -138,8 +138,10 @@ module.exports = function(RED) {
 
         if (this.heartbeat) {
             node.debug("Heartbeat check interval set to " + node.heartbeat);
-            setTimeout(checkHeartbeat, 5000);
-            setInterval(checkHeartbeat, this.heartbeat * 1000);
+            // Keep refs so both timers can be cleared on close — otherwise every redeploy
+            // leaks a live interval that keeps running against stale nodes.
+            node.hbTimeout  = setTimeout(checkHeartbeat, 5000);
+            node.hbInterval = setInterval(checkHeartbeat, this.heartbeat * 1000);
         }
 
         node.registerHeartbeat = function (id, ttl) {
@@ -433,6 +435,10 @@ module.exports = function(RED) {
 
             node.log('MCP init: serverUrl=' + mcpServerUrl + ', issuer=' + issuerUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
+            // Optional audience enforcement. When set, the token's `aud` must match. Left empty
+            // by default so existing IdP setups that don't scope `aud` keep working — issuer is
+            // always enforced regardless (see validateToken).
+            const tokenAudience = (config.mcpAudience || '').trim();
             const adminEnabled  = config.adminToolsEnabled === true;
             const adminPort     = Number(config.adminPort || 1880);
             const mcpScopesStr  = (config.mcpScopes || 'openid profile email').trim();
@@ -451,6 +457,31 @@ module.exports = function(RED) {
             }
 
             let tokenCache = {};
+            const TOKEN_CACHE_MAX = 1000;
+
+            // Constant-time secret comparison that does not leak length. Both inputs are hashed
+            // to a fixed-width digest before timingSafeEqual, so mismatched lengths compare safely.
+            function secretEqual(a, b) {
+                const ha = crypto.createHash('sha256').update(String(a)).digest();
+                const hb = crypto.createHash('sha256').update(String(b)).digest();
+                return crypto.timingSafeEqual(ha, hb);
+            }
+
+            // Insert into the token cache with a hard size cap: drop expired entries first, then
+            // evict the soonest-to-expire until back under the cap. Prevents unbounded growth
+            // (and OOM) from a flood of unique tokens on an internet-exposed endpoint.
+            function cacheToken(key, entry) {
+                tokenCache[key] = entry;
+                const keys = Object.keys(tokenCache);
+                if (keys.length <= TOKEN_CACHE_MAX) return;
+                const now = Date.now();
+                for (const k of keys) { if (tokenCache[k].exp < now) delete tokenCache[k]; }
+                let remaining = Object.keys(tokenCache);
+                if (remaining.length > TOKEN_CACHE_MAX) {
+                    remaining.sort((x, y) => tokenCache[x].exp - tokenCache[y].exp);
+                    for (let i = 0; i < remaining.length - TOKEN_CACHE_MAX; i++) delete tokenCache[remaining[i]];
+                }
+            }
 
             // ── Admin API helper ───────────────────────────────────────────────
 
@@ -515,23 +546,31 @@ module.exports = function(RED) {
             }
 
             async function validateToken(token) {
-                // Local debug token bypass — skips PocketID entirely
-                if (localDebugToken && token === localDebugToken) {
+                // Local debug token bypass — skips the IdP entirely. Constant-time compare so the
+                // token can't be recovered by timing the response.
+                if (localDebugToken && secretEqual(token, localDebugToken)) {
                     return { sub: 'debug', name: 'Local debug user', groups: ['admin'] };
                 }
 
                 const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
-                if (tokenCache[cacheKey] && tokenCache[cacheKey].exp >= Date.now()) {
+                if (Object.prototype.hasOwnProperty.call(tokenCache, cacheKey)
+                    && tokenCache[cacheKey].exp >= Date.now()) {
                     return tokenCache[cacheKey].claims;
                 }
                 try {
-                    const { payload } = await jose.jwtVerify(token, await getJwks());
+                    const oidc = await getOidcConfig();
+                    // Always pin the issuer to the discovered IdP; enforce audience only when
+                    // configured. Without these, any signature-valid token from a provider that
+                    // shares the JWKS would be accepted.
+                    const verifyOpts = {};
+                    if (oidc.issuer) verifyOpts.issuer = oidc.issuer;
+                    if (tokenAudience) verifyOpts.audience = tokenAudience;
+                    const { payload } = await jose.jwtVerify(token, await getJwks(), verifyOpts);
                     // Enrich with userinfo — access tokens are minimal by OIDC convention,
                     // rich claims (email, name, groups) live in the userinfo response.
                     // JWT payload wins on collisions so verified fields stay authoritative.
                     let claims = payload;
                     try {
-                        const oidc = await getOidcConfig();
                         const r = await httpGet(oidc.userinfo_endpoint,
                             { 'Authorization': 'Bearer ' + token });
                         if (r.status === 200 && r.body && typeof r.body === 'object') {
@@ -544,7 +583,7 @@ module.exports = function(RED) {
                     }
                     const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
                     const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
-                    tokenCache[cacheKey] = { claims, exp: cacheExp };
+                    cacheToken(cacheKey, { claims, exp: cacheExp });
                     return claims;
                 } catch (e) {
                     node.warn('MCP token verify failed: ' + e.message);
@@ -1252,9 +1291,19 @@ module.exports = function(RED) {
                     // Admin tools — handled internally
                     if (MCP_ADMIN_TOOL_NAMES.has(toolName)) {
                         if (!opts.adminEnabled) return rpcErr(-32601, 'Unknown tool: ' + toolName);
-                        if (claims && !isAdmin(claims)) {
+                        // Admin tools require a verified admin claim. Callers with no claims at all
+                        // (e.g. hal2Api invoked without msg.claims) are rejected — the adminEnabled
+                        // flag alone must never be sufficient to reach get_flow/deploy_flow. To use
+                        // admin tools via hal2Api, the flow must set an explicit admin claim on the
+                        // message (e.g. msg.claims = { groups: ['admin'] }).
+                        if (!claims || !isAdmin(claims)) {
                             node.status({ fill: 'red', shape: 'ring', text: 'forbidden' });
                             return rpcErr(-32000, 'Forbidden: admin role required');
+                        }
+                        // Flow IDs go straight into the admin HTTP path; constrain to the
+                        // Node-RED id charset so a crafted id can't traverse or inject into it.
+                        if (args.id !== undefined && !/^[A-Za-z0-9._-]+$/.test(String(args.id))) {
+                            return rpcErr(-32602, 'Invalid flow id');
                         }
                         try {
                             if (toolName === 'get_flow') {
@@ -1572,10 +1621,46 @@ module.exports = function(RED) {
 
             if (config.mcpEnabled) {
 
+            // ── HTTP hardening middleware ──────────────────────────────────────
+            // The MCP routes live on RED.httpNode, exposed to the internet behind a proxy.
+            // Per-IP rate limiting (sliding 60s window) and a Content-Length cap blunt
+            // brute-force, DCR spam and oversized-payload (deploy_flow) abuse. Node-RED's own
+            // body parser also applies; this is a cheap early guard.
+            const rlStore = {};
+            function rateLimit(bucket, perMinute) {
+                return (req, res, next) => {
+                    const ip  = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
+                    const key = bucket + '|' + ip;
+                    const now = Date.now();
+                    const win = now - 60000;
+                    const hits = (rlStore[key] || []).filter(t => t > win);
+                    if (hits.length >= perMinute) {
+                        res.set('Retry-After', '60');
+                        return res.status(429).json({ error: 'rate_limited' });
+                    }
+                    hits.push(now);
+                    rlStore[key] = hits;
+                    if (Object.keys(rlStore).length > 5000) {          // bound memory
+                        for (const k of Object.keys(rlStore)) {
+                            if (!rlStore[k].some(t => t > win)) delete rlStore[k];
+                        }
+                    }
+                    next();
+                };
+            }
+            function maxBody(bytes) {
+                return (req, res, next) => {
+                    if (Number(req.headers['content-length'] || 0) > bytes) {
+                        return res.status(413).json({ error: 'payload_too_large' });
+                    }
+                    next();
+                };
+            }
+
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
             node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-protected-resource');
-            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-protected-resource', (_req, res) => {
+            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-protected-resource', rateLimit('wk', 120), (_req, res) => {
                 res.status(200).json({
                     resource                 : mcpServerUrl,
                     authorization_servers    : [mcpServerUrl],
@@ -1587,7 +1672,7 @@ module.exports = function(RED) {
             // ── OAuth: /.well-known/oauth-authorization-server ────────────────
 
             node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-authorization-server');
-            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-authorization-server', async (_req, res) => {
+            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-authorization-server', rateLimit('wk', 120), async (_req, res) => {
                 const oidc = await getOidcConfig();
                 res.status(200).json({
                     issuer                                : mcpServerUrl,
@@ -1607,13 +1692,22 @@ module.exports = function(RED) {
             // ── DCR: /oauth/register ──────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
-            RED.httpNode.post(mcpPrefix + '/oauth/register', (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/oauth/register', rateLimit('register', 20), (req, res) => {
                 const clientId     = (node.credentials && node.credentials.pocketidClientId)     || '';
                 const clientSecret = (node.credentials && node.credentials.pocketidClientSecret) || '';
                 const requested       = req.body || {};
-                // Echo the client's requested redirect_uris if given, else the configured set.
-                const clientRedirects = (Array.isArray(requested.redirect_uris) && requested.redirect_uris.length)
-                    ? requested.redirect_uris : redirectUris;
+                // Never echo attacker-controlled redirect_uris. Constrain any requested URIs to the
+                // configured allowlist so this endpoint can't be used to poison the OAuth callback;
+                // fall back to the full configured set when none (valid) were requested.
+                const requestedUris = Array.isArray(requested.redirect_uris) ? requested.redirect_uris : [];
+                const allowed = requestedUris.filter(u => redirectUris.includes(u));
+                if (requestedUris.length && !allowed.length) {
+                    return res.status(400).json({
+                        error: 'invalid_redirect_uri',
+                        error_description: 'requested redirect_uris are not allowed'
+                    });
+                }
+                const clientRedirects = allowed.length ? allowed : redirectUris;
                 res.status(201).json({
                     client_id                  : clientId,
                     client_secret              : clientSecret,
@@ -1629,7 +1723,7 @@ module.exports = function(RED) {
             // ── MCP: /mcp ─────────────────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/mcp');
-            RED.httpNode.post(mcpPrefix + '/mcp', async (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/mcp', rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
                 // Bearer token validation
                 const claims = await requireBearer(req, res);
                 if (!claims) return;
@@ -1700,6 +1794,10 @@ module.exports = function(RED) {
         // ── Close ─────────────────────────────────────────────────────────────
 
         node.on('close', function () {
+            // Stop the heartbeat timers so a redeploy doesn't leave them running.
+            if (node.hbTimeout)  { clearTimeout(node.hbTimeout);   node.hbTimeout  = null; }
+            if (node.hbInterval) { clearInterval(node.hbInterval); node.hbInterval = null; }
+
             // Reject any pending dynamic tool calls
             for (const [, pending] of Object.entries(node.mcpPendingCalls)) {
                 clearTimeout(pending.timer);

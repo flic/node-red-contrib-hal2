@@ -125,6 +125,13 @@
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
                     <small>Space-separated list. Add e.g. <code>groups</code> to include group membership in the JWT — requires your identity provider to be configured to send that claim for the scope.</small>
                 </div>
+                <div class="form-row">
+                    <label for="node-config-input-mcpAudience" style="width:150px"><i class="fa fa-id-badge"></i> Token audience</label>
+                    <input type="text" id="node-config-input-mcpAudience" placeholder="(optional) enforce aud claim" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>When set, incoming tokens must carry this value in their <code>aud</code> claim. Leave empty to skip audience checks. The issuer is always verified against the discovered identity provider.</small>
+                </div>
 
                 <hr style="margin:12px 0">
 
@@ -273,6 +280,7 @@
             pocketidUrl:       { value: '' },
             mcpRedirectUris:   { value: 'https://claude.ai/api/mcp/auth_callback' },
             mcpScopes:         { value: 'openid profile email' },
+            mcpAudience:       { value: '' },
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },
             adminPort:         { value: 1880 },
