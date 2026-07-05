@@ -1,9 +1,9 @@
 const http            = require('http');
 const https           = require('https');
 const crypto          = require('crypto');
-const jose            = require('jose');
 const analyzePatterns = require('./analyzePatterns');
 const common          = require('../lib/common');
+const { createMcpAuth } = require('./mcp-auth');
 
 console.log('[hal2EventHandler] module loaded, version check: ' + new Date().toISOString());
 
@@ -456,33 +456,6 @@ module.exports = function(RED) {
                 return v === adminValue;
             }
 
-            let tokenCache = {};
-            const TOKEN_CACHE_MAX = 1000;
-
-            // Constant-time secret comparison that does not leak length. Both inputs are hashed
-            // to a fixed-width digest before timingSafeEqual, so mismatched lengths compare safely.
-            function secretEqual(a, b) {
-                const ha = crypto.createHash('sha256').update(String(a)).digest();
-                const hb = crypto.createHash('sha256').update(String(b)).digest();
-                return crypto.timingSafeEqual(ha, hb);
-            }
-
-            // Insert into the token cache with a hard size cap: drop expired entries first, then
-            // evict the soonest-to-expire until back under the cap. Prevents unbounded growth
-            // (and OOM) from a flood of unique tokens on an internet-exposed endpoint.
-            function cacheToken(key, entry) {
-                tokenCache[key] = entry;
-                const keys = Object.keys(tokenCache);
-                if (keys.length <= TOKEN_CACHE_MAX) return;
-                const now = Date.now();
-                for (const k of keys) { if (tokenCache[k].exp < now) delete tokenCache[k]; }
-                let remaining = Object.keys(tokenCache);
-                if (remaining.length > TOKEN_CACHE_MAX) {
-                    remaining.sort((x, y) => tokenCache[x].exp - tokenCache[y].exp);
-                    for (let i = 0; i < remaining.length - TOKEN_CACHE_MAX; i++) delete tokenCache[remaining[i]];
-                }
-            }
-
             // ── Admin API helper ───────────────────────────────────────────────
 
             function adminApi(method, path, body) {
@@ -491,105 +464,17 @@ module.exports = function(RED) {
                 return httpRequest(method, 'localhost', adminPort, path, hdrs, body);
             }
 
-            // ── Token validation ───────────────────────────────────────────────
-
-            const localDebugToken = (node.credentials && node.credentials.localDebugToken) || '';
-
-            // ── OIDC discovery (with PocketID-style fallback paths) ────────────
-            // Discover the IdP's real endpoints from /.well-known/openid-configuration so any
-            // spec-compliant OIDC provider works. If discovery is unavailable, fall back to the
-            // path layout PocketID uses — preserving existing behaviour.
-            let oidcConfig = null, oidcConfigPromise = null;
-            function fallbackEndpoints() {
-                return {
-                    issuer                 : issuerUrl,
-                    authorization_endpoint : issuerUrl + '/authorize',
-                    token_endpoint         : issuerUrl + '/api/oidc/token',
-                    userinfo_endpoint      : issuerUrl + '/api/oidc/userinfo',
-                    jwks_uri               : issuerUrl + '/.well-known/jwks.json'
-                };
-            }
-            function getOidcConfig() {
-                if (oidcConfig) return Promise.resolve(oidcConfig);
-                if (!oidcConfigPromise) {
-                    oidcConfigPromise = (async () => {
-                        const fb = fallbackEndpoints();
-                        if (!issuerUrl) { oidcConfig = fb; return fb; }
-                        try {
-                            const r = await httpGet(issuerUrl + '/.well-known/openid-configuration', {});
-                            if (r.status === 200 && r.body && typeof r.body === 'object' && r.body.jwks_uri) {
-                                oidcConfig = Object.assign(fb, r.body);   // discovered values win, per-field fallback
-                                node.log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer);
-                            } else {
-                                node.warn('MCP OIDC discovery returned ' + r.status + ' — using fallback endpoint paths');
-                                oidcConfig = fb;
-                            }
-                        } catch (e) {
-                            node.warn('MCP OIDC discovery failed: ' + e.message + ' — using fallback endpoint paths');
-                            oidcConfig = fb;
-                        }
-                        return oidcConfig;
-                    })();
-                }
-                return oidcConfigPromise;
-            }
+            // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
+            // See core/mcp-auth.js. External deps injected so the module stays testable.
+            const auth = createMcpAuth({
+                issuerUrl, tokenTTL, tokenAudience, mcpServerUrl,
+                localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
+                httpGet,
+                log:  msg => node.log(msg),
+                warn: msg => node.warn(msg)
+            });
+            const { requireBearer, getOidcConfig } = auth;
             if (issuerUrl) { getOidcConfig().catch(() => {}); }   // warm the cache (non-blocking)
-
-            // Lazy JWKS — built from the discovered jwks_uri on first real token validation.
-            let jwks = null;
-            async function getJwks() {
-                if (!jwks) {
-                    const oidc = await getOidcConfig();
-                    jwks = jose.createRemoteJWKSet(new URL(oidc.jwks_uri));
-                }
-                return jwks;
-            }
-
-            async function validateToken(token) {
-                // Local debug token bypass — skips the IdP entirely. Constant-time compare so the
-                // token can't be recovered by timing the response.
-                if (localDebugToken && secretEqual(token, localDebugToken)) {
-                    return { sub: 'debug', name: 'Local debug user', groups: ['admin'] };
-                }
-
-                const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
-                if (Object.prototype.hasOwnProperty.call(tokenCache, cacheKey)
-                    && tokenCache[cacheKey].exp >= Date.now()) {
-                    return tokenCache[cacheKey].claims;
-                }
-                try {
-                    const oidc = await getOidcConfig();
-                    // Always pin the issuer to the discovered IdP; enforce audience only when
-                    // configured. Without these, any signature-valid token from a provider that
-                    // shares the JWKS would be accepted.
-                    const verifyOpts = {};
-                    if (oidc.issuer) verifyOpts.issuer = oidc.issuer;
-                    if (tokenAudience) verifyOpts.audience = tokenAudience;
-                    const { payload } = await jose.jwtVerify(token, await getJwks(), verifyOpts);
-                    // Enrich with userinfo — access tokens are minimal by OIDC convention,
-                    // rich claims (email, name, groups) live in the userinfo response.
-                    // JWT payload wins on collisions so verified fields stay authoritative.
-                    let claims = payload;
-                    try {
-                        const r = await httpGet(oidc.userinfo_endpoint,
-                            { 'Authorization': 'Bearer ' + token });
-                        if (r.status === 200 && r.body && typeof r.body === 'object') {
-                            claims = Object.assign({}, r.body, payload);
-                        } else {
-                            node.warn('MCP userinfo returned ' + r.status + ' — using JWT claims only');
-                        }
-                    } catch (e) {
-                        node.warn('MCP userinfo fetch failed: ' + e.message + ' — using JWT claims only');
-                    }
-                    const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
-                    const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
-                    cacheToken(cacheKey, { claims, exp: cacheExp });
-                    return claims;
-                } catch (e) {
-                    node.warn('MCP token verify failed: ' + e.message);
-                    return null;
-                }
-            }
 
             // ── Device state helpers ───────────────────────────────────────────
 
@@ -744,26 +629,6 @@ module.exports = function(RED) {
             }
 
             // ── Auth middleware helper ─────────────────────────────────────────
-
-            async function requireBearer(req, res) {
-                const authHeader = req.headers['authorization'] || '';
-                if (!authHeader.startsWith('Bearer ')) {
-                    res.set('WWW-Authenticate',
-                        `Bearer resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`);
-                    res.status(401).json({ error: 'unauthorized' });
-                    return null;
-                }
-                const token  = authHeader.slice(7);
-                const claims = await validateToken(token);
-                if (!claims) {
-                    res.set('WWW-Authenticate',
-                        `Bearer error="invalid_token", resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`);
-                    res.status(401).json({ error: 'invalid_token' });
-                    return null;
-                }
-                return claims;
-            }
-
             node.requireBearer = requireBearer;
 
         // ── Shared tool dispatcher (used by the /mcp route and the hal2Api node) ──
@@ -1298,7 +1163,8 @@ module.exports = function(RED) {
                         // message (e.g. msg.claims = { groups: ['admin'] }).
                         if (!claims || !isAdmin(claims)) {
                             node.status({ fill: 'red', shape: 'ring', text: 'forbidden' });
-                            return rpcErr(-32000, 'Forbidden: admin role required');
+                            return rpcErr(-32000, 'Access denied: the "' + toolName + '" tool requires admin privileges, '
+                                + 'which your token does not have. This is a permission restriction, not a tool error.');
                         }
                         // Flow IDs go straight into the admin HTTP path; constrain to the
                         // Node-RED id charset so a crafted id can't traverse or inject into it.
@@ -1782,7 +1648,10 @@ module.exports = function(RED) {
                     node.status({ fill: out.ok ? 'green' : 'red', shape: 'dot', text: out.ok ? 'ready' : 'error' });
                     if (out.ok && out.content) return respond({ content: out.content });
                     if (out.ok)                return toolOk(out.text);
-                    return rpcErr(out.code, out.message);
+                    // Tool-level failures (permission denied, bad args, unknown tool) are surfaced as
+                    // an isError tool result so the message reaches the model. A JSON-RPC error here
+                    // gets swallowed by MCP clients into a generic "tool execution failed".
+                    return respond({ content: [{ type: 'text', text: out.message || 'Tool call failed' }], isError: true });
                 }
 
                 return rpcErr(-32601, 'Unknown method: ' + (method || 'null'));
@@ -1807,7 +1676,7 @@ module.exports = function(RED) {
 
             node.log('MCP close: mcpEnabled=' + !!config.mcpEnabled);
             if (config.mcpEnabled) {
-                tokenCache = {};
+                auth.clearCache();
                 node.log('MCP removing routes with prefix: "' + mcpPrefix + '"');
                 removeRoute(RED, 'get',  mcpPrefix + '/.well-known/oauth-protected-resource');
                 removeRoute(RED, 'get',  mcpPrefix + '/.well-known/oauth-authorization-server');
