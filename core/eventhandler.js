@@ -633,19 +633,15 @@ module.exports = function(RED) {
 
         // ── Shared tool dispatcher (used by the /mcp route and the hal2Api node) ──
         // Returns a uniform shape: { ok:true, text } | { ok:true, content } | { ok:false, code, message }
-        node.callTool = async function (toolName, args, claims, opts) {
-            args = args || {};
-            opts = opts || {};
-            const toolOk  = function (text)   { return { ok: true, text: text }; };
-            const respond = function (result) { return { ok: true, content: result.content }; };
-            const rpcErr  = function (code, message) { return { ok: false, code: code, message: message }; };
+        // Tool-result shims — pure, shared by every dispatcher below.
+        const toolOk  = function (text)   { return { ok: true, text: text }; };
+        const respond = function (result) { return { ok: true, content: result.content }; };
+        const rpcErr  = function (code, message) { return { ok: false, code: code, message: message }; };
 
-                    const notConfigured = getNotConfiguredError(toolName);
-                    if (notConfigured) {
-                        console.log('[hal2EventHandler] tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
-                        return toolOk(JSON.stringify(notConfigured));
-                    }
-
+        // Built-in tool handlers, grouped by concern. Each returns a tool result when it handles
+        // the named tool, or undefined to let the next dispatcher try. node.callTool (below) is a
+        // thin coordinator over these.
+        async function dispatchReadTools(toolName, args, claims, opts) {
                     // get_all_states
                     if (toolName === 'get_all_states') {
                         let devices = getAllStates();
@@ -799,7 +795,10 @@ module.exports = function(RED) {
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ summary, people }));
                     }
+                    return undefined;
+        }
 
+        async function dispatchControlTools(toolName, args, claims, opts) {
                     // control_fan
                     if (toolName === 'control_fan') {
                         const allStates = getAllStates();
@@ -1152,7 +1151,10 @@ module.exports = function(RED) {
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ success: true, results }));
                     }
+                    return undefined;
+        }
 
+        async function dispatchAdminTools(toolName, args, claims, opts) {
                     // Admin tools — handled internally
                     if (MCP_ADMIN_TOOL_NAMES.has(toolName)) {
                         if (!opts.adminEnabled) return rpcErr(-32601, 'Unknown tool: ' + toolName);
@@ -1214,7 +1216,10 @@ module.exports = function(RED) {
                             return toolOk('Admin call error: ' + e.message);
                         }
                     }
+                    return undefined;
+        }
 
+        async function dispatchHistoryTools(toolName, args, claims, opts) {
                     // get_history
                     if (toolName === 'get_history') {
                         if (!historyDb) {
@@ -1458,31 +1463,49 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'Pattern analysis failed: ' + e.message }));
                         }
                     }
+                    return undefined;
+        }
 
-                    // Dynamically registered tools (hal2MCPIn/Out)
-                    if (node.mcpRegisteredTools[toolName]) {
-                        try {
-                            const callId     = crypto.randomBytes(16).toString('hex');
-                            const timeoutMs  = node.mcpRegisteredTools[toolName].timeoutMs || 30000;
-                            const result = await new Promise((resolve, reject) => {
-                                const timer = setTimeout(() => {
-                                    delete node.mcpPendingCalls[callId];
-                                    reject(new Error('timeout'));
-                                }, timeoutMs);
-                                node.mcpPendingCalls[callId] = { resolve, reject, timer };
-                                node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId, _mcpClaims: claims });
-                            });
-                            node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                            return Array.isArray(result)
-                                ? respond({ content: result })
-                                : toolOk(result);
-                        } catch (e) {
-                            node.status({ fill: 'red', shape: 'dot', text: 'timeout' });
-                            return toolOk(JSON.stringify({ error: e.message === 'timeout' ? 'Tool timed out: ' + toolName : e.message }));
-                        }
-                    }
+        node.callTool = async function (toolName, args, claims, opts) {
+            args = args || {};
+            opts = opts || {};
 
-                    return rpcErr(-32601, 'Unknown tool: ' + toolName);
+            const notConfigured = getNotConfiguredError(toolName);
+            if (notConfigured) {
+                console.log('[hal2EventHandler] tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
+                return toolOk(JSON.stringify(notConfigured));
+            }
+
+            let r;
+            r = await dispatchReadTools(toolName, args, claims, opts);    if (r !== undefined) return r;
+            r = await dispatchControlTools(toolName, args, claims, opts); if (r !== undefined) return r;
+            r = await dispatchAdminTools(toolName, args, claims, opts);   if (r !== undefined) return r;
+            r = await dispatchHistoryTools(toolName, args, claims, opts); if (r !== undefined) return r;
+
+            // Dynamically registered tools (hal2MCPIn/Out)
+            if (node.mcpRegisteredTools[toolName]) {
+                try {
+                    const callId     = crypto.randomBytes(16).toString('hex');
+                    const timeoutMs  = node.mcpRegisteredTools[toolName].timeoutMs || 30000;
+                    const result = await new Promise((resolve, reject) => {
+                        const timer = setTimeout(() => {
+                            delete node.mcpPendingCalls[callId];
+                            reject(new Error('timeout'));
+                        }, timeoutMs);
+                        node.mcpPendingCalls[callId] = { resolve, reject, timer };
+                        node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId, _mcpClaims: claims });
+                    });
+                    node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                    return Array.isArray(result)
+                        ? respond({ content: result })
+                        : toolOk(result);
+                } catch (e) {
+                    node.status({ fill: 'red', shape: 'dot', text: 'timeout' });
+                    return toolOk(JSON.stringify({ error: e.message === 'timeout' ? 'Tool timed out: ' + toolName : e.message }));
+                }
+            }
+
+            return rpcErr(-32601, 'Unknown tool: ' + toolName);
         };
 
             if (config.mcpEnabled) {

@@ -1,42 +1,19 @@
 module.exports = function(RED) {
     var common = require("../lib/common");
+    var rules  = require("../lib/rules");
 
     function checkRules(node,msg) {
-        // Don't convert msg, flow, global. Assume same type.
-        var convertTo = {
-            'num':      function (value)    { return Number(value); },
-            'str':      function (value)    { return value+""; },
-            'bool':     function (value)    { return (value === 'true'); },
-            'json':     function (value)    { return JSON.parse(value); },
-            're':       function (value)    { return new RegExp(value) },
+        // Base converters (num/str/bool/json/re) are shared with hal2Event via lib/rules;
+        // the context-bound ones below need node/RED/msg so they stay local.
+        var convertTo = Object.assign({
             'flow':     function (value)    { return node.context().flow.get(value); },
             'global':   function (value)    { return node.context().global.get(value); },
             'env':      function (value)    { return process.env[value]; },
             'msg':      function (value,msg)    { return RED.util.getMessageProperty(msg,value); }
-        };
+        }, rules.CONVERTERS);
 
         //a=state, b=comparison value
-        var compare = {
-            'eq':       function (a, b)     { return a === b; },
-            'neq':      function (a, b)     { return a !== b; },
-            'lt':       function (a, b)     { return ((typeof a == 'number') && (a < b)); },
-            'lte':      function (a, b)     { return ((typeof a == 'number') && (a <= b)); },
-            'gt':       function (a, b)     { return ((typeof a == 'number') && (a > b)); },
-            'gte':      function (a, b)     { return ((typeof a == 'number') && (a >= b)); },
-            'cont':     function (a, b)     { return (a + "").indexOf(b) !== -1; },
-            'regex':    function (a, b)     { return b.test(a+""); },
-            'true':     function (a)        { return a === true; },
-            'false':    function (a)        { return a === false; }
-        };
-
-        //a=item value, b=comparison value
-        var time_since = {
-            'last_update_gte': function (a, b)     { return a === b; },
-            'last_update_lte': function (a, b)     { return a !== b; },
-            'last_change_gte': function (a, b)     { return ((typeof a == 'number') && (a < b)); },
-            'last_change_lte': function (a, b)     { return ((typeof a == 'number') && (a <= b)); }
-        };
-
+        var compare = rules.COMPARE;
 
         var ruleMatch = 0;
         for (var i = 0; i < node.rules.length; i += 1) {

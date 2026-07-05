@@ -1,4 +1,6 @@
 module.exports = function(RED) {
+    var rules = require("../lib/rules");
+
     function hal2Event(config) {
         RED.nodes.createNode(this,config);
         this.eventHandler   = RED.nodes.getNode(config.eventHandler);
@@ -37,30 +39,16 @@ module.exports = function(RED) {
             'day':      function(a) { return a*24*60*60*1000; }
         }
 
+        // Base comparison operators are shared with hal2Gate via lib/rules; the trigger-only
+        // operators below (always/change/otherwise) are specific to event evaluation.
         //a=state, b=compare value, c=oldState/ruleMatch
-        var compare = {
+        var compare = Object.assign({
             'always':   function ()         { return true; },
             'change':   function (a,b,c)    { return a !== c },
-            'otherwise':function (a,b,c)    { return c === 0 },
-            'eq':       function (a, b)     { return a === b; },
-            'neq':      function (a, b)     { return a !== b; },
-            'lt':       function (a, b)     { return ((typeof a == 'number') && (a < b)); },
-            'lte':      function (a, b)     { return ((typeof a == 'number') && (a <= b)); },
-            'gt':       function (a, b)     { return ((typeof a == 'number') && (a > b)); },
-            'gte':      function (a, b)     { return ((typeof a == 'number') && (a >= b)); },
-            'cont':     function (a, b)     { return (a + "").indexOf(b) !== -1; },
-            'regex':    function (a, b)     { return b.test(a+""); },
-            'true':     function (a)        { return a === true; },
-            'false':    function (a)        { return a === false; }
-        };
+            'otherwise':function (a,b,c)    { return c === 0 }
+        }, rules.COMPARE);
 
-        var convertTo = {
-            'num':      function (value)    { return Number(value); },
-            'str':      function (value)    { return value+""; },
-            'bool':     function (value)    { return (value === 'true'); },
-            'json':     function (value)    { return JSON.parse(value); },
-            're':       function (value)    { return new RegExp(value) }
-        };
+        var convertTo = rules.CONVERTERS;
 
         function showState() {
             var now = Date.now();

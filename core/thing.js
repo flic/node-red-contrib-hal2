@@ -1,4 +1,12 @@
 module.exports = function(RED) {
+    var topics = require('../lib/topics');
+    // Topic/prefix helpers live in lib/topics (pure, unit-tested). fixTopic is used directly;
+    // applyFilters is wrapped to inject Node-RED's message-property getter.
+    var fixTopic = topics.fixTopic;
+    function applyFilters(msg, filters, mode, topicPrefix) {
+        return topics.applyFilters(msg, filters, mode, topicPrefix, RED.util.getMessageProperty);
+    }
+
     // Hybrid function lookup — local ThingType.{type} first, then EventHandler.{type}Library
     function resolveFn(thing, type, id) {
         const local = (thing.thingType && thing.thingType[type]) || [];
@@ -12,64 +20,6 @@ module.exports = function(RED) {
             }
         }
         return null;
-    }
-
-    function matchTopic(ts,t) {
-        if (ts == "#") {
-            return true;
-        }
-        /* The following allows shared subscriptions (as in MQTT v5)
-           http://docs.oasis-open.org/mqtt/mqtt/v5.0/cs02/mqtt-v5.0-cs02.html#_Toc514345522
-           4.8.2 describes shares like:
-           $share/{ShareName}/{filter}
-           $share is a literal string that marks the Topic Filter as being a Shared Subscription Topic Filter.
-           {ShareName} is a character string that does not include "/", "+" or "#"
-           {filter} The remainder of the string has the same syntax and semantics as a Topic Filter in a non-shared subscription. Refer to section 4.7.
-        */
-        else if(ts.startsWith("$share")){
-            ts = ts.replace(/^\$share\/[^#+/]+\/(.*)/g,"$1");
-
-        }
-        var re = new RegExp("^"+ts.replace(/([\[\]\?\(\)\\\\$\^\*\.|])/g,"\\$1").replace(/\+/g,"[^/]+").replace(/\/#$/,"(\/.*)?")+"$");
-        return re.test(t);
-    }
-
-    function fixTopic(topicstring,configuredTopic) {
-        var topic = topicstring;
-        if (topic.startsWith('.')) {
-            topic = topic.replace('.',configuredTopic);
-        }
-        if (topic.startsWith('/')) {
-            topic = configuredTopic + topic;
-        }
-        return topic;
-    }
-
-    //a=msg value, b=filter pattern
-    var topicFilter = {
-        'str':       function (a, b) { return a === b; },
-        're':        function (a, b) { return (new RegExp(b)).test(a+""); },
-        'mqtt':      function (a, b) { return matchTopic(b, a); },
-        'StrStart':  function (a, b) { return (a+"").startsWith(b); },
-        'StrEnd':    function (a, b) { return (a+"").endsWith(b); },
-        'StrContain':function (a, b) { return (a+"").includes(b); }
-    };
-
-    function applyFilters(msg, filters, mode, topicPrefix) {
-        if (!filters || filters.length === 0) return true;
-        for (var i = 0; i < filters.length; i++) {
-            var f = filters[i];
-            var val = RED.util.getMessageProperty(msg, f.field);
-            var filterVal = f.value;
-            if (f.field === 'topic' && f.matchType === 'str' && topicPrefix) {
-                filterVal = fixTopic(filterVal, topicPrefix);
-            }
-            var fn = topicFilter[f.matchType];
-            var matched = fn ? fn(val, filterVal) : false;
-            if (mode === 'or') { if (matched) return true; }
-            else               { if (!matched) return false; }
-        }
-        return mode !== 'or';
     }
 
     function hal2Thing(config) {
