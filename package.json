@@ -18,7 +18,7 @@
     "test": "mocha \"test/**/*.test.js\""
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.19.0"
   },
   "bugs": {
     "url": "https://github.com/flic/node-red-contrib-hal2/issues"
