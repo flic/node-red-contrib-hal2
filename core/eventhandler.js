@@ -433,6 +433,13 @@ module.exports = function(RED) {
             const wellKnownPaths = name => mcpPrefix
                 ? [mcpPrefix + '/.well-known/' + name, '/.well-known/' + name + mcpPrefix]
                 : ['/.well-known/' + name];
+            // The protected resource is the MCP endpoint itself (<publicBase>/mcp). RFC 9728
+            // clients derive its metadata URL by inserting /.well-known/... before the resource's
+            // full path — including the /mcp segment — so that form must be served as well.
+            const resourceMetadataPaths = [
+                ...wellKnownPaths('oauth-protected-resource'),
+                '/.well-known/oauth-protected-resource' + mcpPrefix + '/mcp'
+            ];
             // Identity provider (OIDC issuer) base URL. Stored under the legacy key `pocketidUrl`
             // for backward compatibility, but it can point at any OIDC provider — its real
             // endpoints are auto-discovered (see getOidcConfig below).
@@ -1566,13 +1573,15 @@ module.exports = function(RED) {
 
             const protectedResourceHandler = (_req, res) => {
                 res.status(200).json({
-                    resource                 : publicBase,
+                    // RFC 9728: must equal the resource identifier the client connects to —
+                    // the MCP endpoint URL, not the bare server base.
+                    resource                 : publicBase + '/mcp',
                     authorization_servers    : [publicBase],
                     bearer_methods_supported : ['header'],
                     scopes_supported         : mcpScopesArr
                 });
             };
-            for (const p of wellKnownPaths('oauth-protected-resource')) {
+            for (const p of resourceMetadataPaths) {
                 node.log('MCP registering route: GET ' + p);
                 RED.httpNode.get(p, rateLimit('wk', 120), protectedResourceHandler);
             }
@@ -1722,7 +1731,7 @@ module.exports = function(RED) {
             if (config.mcpEnabled) {
                 auth.clearCache();
                 node.log('MCP removing routes with prefix: "' + mcpPrefix + '"');
-                for (const p of wellKnownPaths('oauth-protected-resource'))   { removeRoute(RED, 'get', p); }
+                for (const p of resourceMetadataPaths)                        { removeRoute(RED, 'get', p); }
                 for (const p of wellKnownPaths('oauth-authorization-server')) { removeRoute(RED, 'get', p); }
                 removeRoute(RED, 'post', mcpPrefix + '/oauth/register');
                 removeRoute(RED, 'post', mcpPrefix + '/mcp');
