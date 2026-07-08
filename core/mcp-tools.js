@@ -266,8 +266,6 @@ const MCP_TOOLS = [
     }
 ];
 
-console.log('[hal2EventHandler] MCP_TOOLS catalog (static, pre-filter): ' + MCP_TOOLS.map(t => t.name).join(', '));
-
 // Single source of truth for which item ha_types define each device category.
 // Used both for tool exposure (TOOL_HARDWARE_REQUIREMENTS below) and for ha_type
 // filter expansion + categories derivation in get_all_states.

@@ -57,3 +57,48 @@ describe('lib/common queueSend', function () {
         assert.deepStrictEqual(published, ['x']);
     });
 });
+
+describe('lib/common createThrottledQueue', function () {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    it('sends the first item immediately and paces the rest', async function () {
+        const sent = [];
+        const q = common.createThrottledQueue(30, m => sent.push([m, Date.now()]));
+        q.push(['a', 'b', 'c']);
+        assert.strictEqual(sent.length, 1);           // first goes out at once
+        await sleep(100);
+        assert.deepStrictEqual(sent.map(s => s[0]), ['a', 'b', 'c']);
+        assert.ok(sent[1][1] - sent[0][1] >= 25, 'second send must respect the rate limit');
+        assert.ok(sent[2][1] - sent[1][1] >= 25, 'third send must respect the rate limit');
+    });
+
+    it('holds the pace across bursts (persistent last-send timestamp)', async function () {
+        const sent = [];
+        const q = common.createThrottledQueue(50, m => sent.push(Date.now()));
+        q.push(['a']);                                // burst 1 — sent immediately
+        await sleep(10);
+        q.push(['b']);                                // burst 2 — must wait for the window
+        assert.strictEqual(sent.length, 1, 'burst 2 must not send inside the window');
+        await sleep(80);
+        assert.strictEqual(sent.length, 2);
+        assert.ok(sent[1] - sent[0] >= 45, 'rate limit must hold across bursts');
+    });
+
+    it('drains everything without delay when ratelimit is 0', async function () {
+        const sent = [];
+        const q = common.createThrottledQueue(0, m => sent.push(m));
+        q.push(['a', 'b', 'c']);
+        await sleep(20);
+        assert.deepStrictEqual(sent, ['a', 'b', 'c']);
+    });
+
+    it('clear() drops queued items and cancels the timer', async function () {
+        const sent = [];
+        const q = common.createThrottledQueue(30, m => sent.push(m));
+        q.push(['a', 'b', 'c']);
+        q.clear();
+        assert.strictEqual(q.size(), 0);
+        await sleep(80);
+        assert.deepStrictEqual(sent, ['a'], 'only the immediate send happens');
+    });
+});

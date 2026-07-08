@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { createHttpGuards } = require('../lib/httpGuards');
 
 function removeRoute(RED, path) {
     if (!RED.httpNode || !RED.httpNode._router) return;
@@ -85,7 +86,10 @@ module.exports = function (RED) {
 
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 
-        RED.httpNode.post(mcpPath, async (req, res) => {
+        // Same hardening as the EventHandler's /mcp route (see lib/httpGuards.js).
+        const { rateLimit, maxBody } = createHttpGuards({ warn: msg => node.warn(msg) });
+
+        RED.httpNode.post(mcpPath, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
             const claims = await eventHandler.requireBearer(req, res);
             if (!claims) return;
 

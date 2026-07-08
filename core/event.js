@@ -48,7 +48,8 @@ module.exports = function(RED) {
             'otherwise':function (a,b,c)    { return c === 0 }
         }, rules.COMPARE);
 
-        var convertTo = rules.CONVERTERS;
+        // Copy so per-node use can never mutate the shared converter table.
+        var convertTo = Object.assign({}, rules.CONVERTERS);
 
         function showState() {
             var now = Date.now();

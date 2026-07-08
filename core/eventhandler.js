@@ -4,8 +4,7 @@ const crypto          = require('crypto');
 const analyzePatterns = require('./analyzePatterns');
 const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
-
-console.log('[hal2EventHandler] module loaded, version check: ' + new Date().toISOString());
+const { createHttpGuards } = require('../lib/httpGuards');
 
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES,
@@ -71,7 +70,6 @@ module.exports = function(RED) {
 
     function hal2EventHandler(config) {
         RED.nodes.createNode(this, config);
-        console.log('[hal2EventHandler] constructor called, id=' + config.id + ', mcpEnabled=' + !!config.mcpEnabled);
 
         this.host           = config.name;
         this.contextStore   = config.contextStore;
@@ -127,6 +125,8 @@ module.exports = function(RED) {
             const date = Date.now();
             for (const n in hbList) {
                 const thing  = RED.nodes.getNode(hbList[n].id);
+                // Stale entry (thing removed mid-flight) — skip rather than crash the interval.
+                if (!thing || !thing.thingType) { continue; }
                 const online = (thing.id in thing.heartbeat) &&
                                (date < (Number(thing.thingType.hbTTL) * 1000) + thing.heartbeat[thing.id]);
                 if (online !== thing.state['1']) {
@@ -221,8 +221,7 @@ module.exports = function(RED) {
             // Normalise string on/off/true/false to boolean
             if (payload === 'on'  || payload === 'true')  payload = true;
             if (payload === 'off' || payload === 'false') payload = false;
-            const listenerCount = this.listenerCount("command_" + id);
-            console.log('[hal2EventHandler] publishCommand: thing=' + id + ', item=' + itemid + ', payload=' + JSON.stringify(payload) + ', listeners=' + listenerCount);
+            node.debug('publishCommand: thing=' + id + ', item=' + itemid + ', payload=' + JSON.stringify(payload) + ', listeners=' + this.listenerCount("command_" + id));
 
             // Mark this (thing, item) as hal2-driven so the incoming HA confirmation
             // can be attributed to us. Lazy-cleanup expired markers while we're here.
@@ -354,6 +353,7 @@ module.exports = function(RED) {
         function unwireGroups() {
             for (const w of node.groupWirings) {
                 node.unsubscribe(w.event, w.id, w.listener);
+                if (w.throttle) { w.throttle.clear(); }
             }
             node.groupWirings = [];
         }
@@ -368,9 +368,11 @@ module.exports = function(RED) {
                 const ratelimit    = def.ratelimit;
                 if (def.legacy) legacyCount += 1;
 
-                // Command: broadcast to all command-capable members, rate limited.
-                // Reuses queueSend with a per-group context (it only reads
-                // ratelimit / eventHandler / status), so each group keeps its own pace.
+                // Command: broadcast to all command-capable members, rate limited. The
+                // throttle queue is persistent per group, so the pace holds across bursts —
+                // two rapid group commands share one rate limit instead of racing.
+                const throttle = common.createThrottledQueue(ratelimit,
+                    m => node.publishCommand(m.thing, m.item, m.payload));
                 const commandListener = function (itemid, payload) {
                     const queue = [];
                     for (const m of groupMembers) {
@@ -381,10 +383,10 @@ module.exports = function(RED) {
                         queue.push({ thing: m.thing, item: m.item, payload: payload });
                     }
                     if (queue.length === 0) return;
-                    common.queueSend({ ratelimit: ratelimit, eventHandler: node, status: function () {} }, queue);
+                    throttle.push(queue);
                 };
                 node.subscribe('command', groupId, commandListener);
-                node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener });
+                node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener, throttle: throttle });
 
                 // Update: re-emit member changes under the group id, keeping the real
                 // member thing/item so event nodes can show which member changed.
@@ -607,7 +609,7 @@ module.exports = function(RED) {
             // so all hal2Thing nodes have registered and hasAnyHaType can see them.
             RED.events.once('flows:started', () => {
                 const exposed = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name)).map(t => t.name);
-                console.log('[hal2EventHandler] MCP_TOOLS exposed @ ' + (config.locationName || 'unnamed') + ': ' + exposed.join(', '));
+                node.log('MCP tools exposed @ ' + (config.locationName || 'unnamed') + ': ' + exposed.join(', '));
             });
 
             // Shared: compact item list for self-describing "available_items" in error responses,
@@ -628,14 +630,12 @@ module.exports = function(RED) {
             }
 
             function controlDevice(thingId, itemId, value) {
-                console.log('[hal2EventHandler] controlDevice: thingId=' + thingId + ', itemId=' + itemId + ', value=' + JSON.stringify(value));
+                node.debug('controlDevice: thingId=' + thingId + ', itemId=' + itemId + ', value=' + JSON.stringify(value));
                 const thing = RED.nodes.getNode(thingId);
                 if (!thing || thing.type !== 'hal2Thing') {
-                    console.log('[hal2EventHandler] controlDevice: thing not found or wrong type, type=' + (thing && thing.type));
                     return { error: 'Thing not found: ' + thingId };
                 }
                 if (!thing.eventHandler || thing.eventHandler.id !== node.id) {
-                    console.log('[hal2EventHandler] controlDevice: eventHandler mismatch, thing.eh=' + (thing.eventHandler && thing.eventHandler.id) + ', node.id=' + node.id);
                     return { error: 'Thing not connected to this event handler' };
                 }
                 const item = (thing.thingType.items || []).find(i => i.id === itemId);
@@ -1102,7 +1102,7 @@ module.exports = function(RED) {
 
                     // set_light / control_light
                     if (toolName === 'set_light' || toolName === 'control_light') {
-                        console.log('[hal2EventHandler] set_light called, args=' + JSON.stringify(args));
+                        node.debug('set_light called, args=' + JSON.stringify(args));
 
                         // Use getAllStates() so search is consistent with what Claude sees
                         const allStates = getAllStates();
@@ -1112,7 +1112,6 @@ module.exports = function(RED) {
                         if (args.thing_id) {
                             const device = allStates.find(d => d.thing_id === args.thing_id);
                             if (device) matched = [{ device, items: device.items }];
-                            console.log('[hal2EventHandler] set_light by id "' + args.thing_id + '": matched=' + matched.length);
                         } else if (args.thing_name) {
                             const needle = args.thing_name.toLowerCase();
                             // First try matching thing_name
@@ -1128,7 +1127,6 @@ module.exports = function(RED) {
                                     if (labelItems.length > 0) matched.push({ device, items: labelItems });
                                 }
                             }
-                            console.log('[hal2EventHandler] set_light by name "' + args.thing_name + '": matched=' + matched.length);
                         }
 
                         if (matched.length === 0) {
@@ -1145,7 +1143,6 @@ module.exports = function(RED) {
                             const sent = [];
                             for (const itm of items) {
                                 const ht = (itm.ha_type || '').toLowerCase();
-                                console.log('[hal2EventHandler] set_light item: "' + itm.item_name + '" label="' + (itm.label || '') + '" ha_type="' + ht + '"');
                                 if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.on);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.on });
@@ -1222,7 +1219,7 @@ module.exports = function(RED) {
                             }
 
                             if (toolName === 'deploy_flow') {
-                                const tabId    = args.id || crypto.randomBytes(8).toString('hex').slice(0, 16);
+                                const tabId    = args.id || crypto.randomBytes(8).toString('hex');
                                 const nodes    = (args.nodes || []).map(n => Object.assign({}, n, { z: n.z || tabId }));
                                 const flowBody = { id: tabId, label: args.label, nodes };
                                 const r = args.id
@@ -1495,7 +1492,7 @@ module.exports = function(RED) {
 
             const notConfigured = getNotConfiguredError(toolName);
             if (notConfigured) {
-                console.log('[hal2EventHandler] tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
+                node.debug('tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
                 return toolOk(JSON.stringify(notConfigured));
             }
 
@@ -1535,39 +1532,10 @@ module.exports = function(RED) {
 
             // ── HTTP hardening middleware ──────────────────────────────────────
             // The MCP routes live on RED.httpNode, exposed to the internet behind a proxy.
-            // Per-IP rate limiting (sliding 60s window) and a Content-Length cap blunt
-            // brute-force, DCR spam and oversized-payload (deploy_flow) abuse. Node-RED's own
-            // body parser also applies; this is a cheap early guard.
-            const rlStore = {};
-            function rateLimit(bucket, perMinute) {
-                return (req, res, next) => {
-                    const ip  = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
-                    const key = bucket + '|' + ip;
-                    const now = Date.now();
-                    const win = now - 60000;
-                    const hits = (rlStore[key] || []).filter(t => t > win);
-                    if (hits.length >= perMinute) {
-                        res.set('Retry-After', '60');
-                        return res.status(429).json({ error: 'rate_limited' });
-                    }
-                    hits.push(now);
-                    rlStore[key] = hits;
-                    if (Object.keys(rlStore).length > 5000) {          // bound memory
-                        for (const k of Object.keys(rlStore)) {
-                            if (!rlStore[k].some(t => t > win)) delete rlStore[k];
-                        }
-                    }
-                    next();
-                };
-            }
-            function maxBody(bytes) {
-                return (req, res, next) => {
-                    if (Number(req.headers['content-length'] || 0) > bytes) {
-                        return res.status(413).json({ error: 'payload_too_large' });
-                    }
-                    next();
-                };
-            }
+            // Per-IP rate limiting and a Content-Length cap blunt brute-force, DCR spam and
+            // oversized-payload (deploy_flow) abuse. See lib/httpGuards.js — shared with
+            // hal2MCPServer; warns once if the proxy's client IPs aren't trusted.
+            const { rateLimit, maxBody } = createHttpGuards({ warn: msg => node.warn(msg) });
 
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
