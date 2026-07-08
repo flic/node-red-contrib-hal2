@@ -109,7 +109,10 @@
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
-                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="Client secret" style="width:calc(100% - 185px)" autocomplete="off">
+                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="(empty = public client, recommended)" style="width:calc(100% - 185px)" autocomplete="off">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Leave empty to run as a <b>public client</b> (recommended): configure the identity provider's client as public/PKCE and no secret is ever disclosed. When set, the secret is handed out to any caller of the client-registration endpoint — the redirect-URI allowlist is then the only thing keeping authorization codes away from attackers.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpRedirectUris" style="width:150px"><i class="fa fa-mail-forward"></i> Redirect URIs</label>
@@ -127,10 +130,10 @@
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpAudience" style="width:150px"><i class="fa fa-id-badge"></i> Token audience</label>
-                    <input type="text" id="node-config-input-mcpAudience" placeholder="(optional) enforce aud claim" style="width:calc(100% - 185px)">
+                    <input type="text" id="node-config-input-mcpAudience" placeholder="(defaults to Client ID)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>When set, incoming tokens must carry this value in their <code>aud</code> claim. Leave empty to skip audience checks. The issuer is always verified against the discovered identity provider.</small>
+                    <small>Incoming tokens must carry this value in their <code>aud</code> claim. Defaults to the <b>Client ID</b> when left empty, so tokens issued to other apps at the same identity provider are rejected. Set it explicitly if your provider uses a different audience; the check is skipped only when both fields are empty. The issuer is always verified against the discovered identity provider.</small>
                 </div>
 
                 <hr style="margin:12px 0">

@@ -95,6 +95,54 @@ describe('core/mcp-auth validateToken', function () {
     });
 });
 
+describe('core/mcp-auth OIDC discovery retry', function () {
+    function buildFlaky(discoveryRetryMs) {
+        const state = { discoveryCalls: 0, fail: true };
+        const httpGet = async (url) => {
+            if (url.includes('openid-configuration')) {
+                state.discoveryCalls += 1;
+                if (state.fail) throw new Error('ECONNREFUSED');
+                return DISCOVERY;
+            }
+            return { status: 404, body: {} };
+        };
+        const auth = createMcpAuth({
+            issuerUrl: 'https://idp.example.com',
+            httpGet,
+            discoveryRetryMs,
+            createRemoteJWKSet: () => ({}),
+            jwtVerify: async () => ({ payload: { sub: 'abc' } })
+        });
+        return { auth, state };
+    }
+
+    it('does not cache a failed discovery — retries once the window has passed', async function () {
+        const { auth, state } = buildFlaky(0);
+        const first = await auth.getOidcConfig();
+        assert.strictEqual(first.jwks_uri, 'https://idp.example.com/.well-known/jwks.json'); // fallback paths
+        state.fail = false;
+        const second = await auth.getOidcConfig();
+        assert.strictEqual(second.jwks_uri, 'https://idp.example.com/jwks'); // discovered
+        assert.strictEqual(state.discoveryCalls, 2);
+    });
+
+    it('serves the fallback without re-probing inside the retry window', async function () {
+        const { auth, state } = buildFlaky(60000);
+        await auth.getOidcConfig();
+        const cfg = await auth.getOidcConfig();
+        assert.strictEqual(state.discoveryCalls, 1); // no second probe
+        assert.strictEqual(cfg.jwks_uri, 'https://idp.example.com/.well-known/jwks.json');
+    });
+
+    it('caches a successful discovery permanently', async function () {
+        const { auth, state } = buildFlaky(0);
+        state.fail = false;
+        await auth.getOidcConfig();
+        await auth.getOidcConfig();
+        assert.strictEqual(state.discoveryCalls, 1);
+    });
+});
+
 describe('core/mcp-auth requireBearer', function () {
     function mockRes() {
         return {

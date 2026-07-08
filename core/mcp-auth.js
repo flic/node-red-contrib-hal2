@@ -24,6 +24,7 @@ function createMcpAuth(opts) {
         tokenAudience      = '',
         localDebugToken    = '',
         mcpServerUrl       = '',
+        discoveryRetryMs   = 30000,
         httpGet,
         log                = () => {},
         warn               = () => {},
@@ -37,8 +38,8 @@ function createMcpAuth(opts) {
     }
 
     let tokenCache = {};
-    let oidcConfig = null, oidcConfigPromise = null;
-    let jwks = null;
+    let oidcConfig = null, oidcConfigPromise = null, oidcRetryAt = 0;
+    let jwks = null, jwksUri = null;
 
     // OIDC discovery with PocketID-style fallback paths. Discover the IdP's real endpoints
     // from /.well-known/openid-configuration so any spec-compliant OIDC provider works; fall
@@ -55,6 +56,13 @@ function createMcpAuth(opts) {
 
     function getOidcConfig() {
         if (oidcConfig) return Promise.resolve(oidcConfig);
+        // Only successful discovery is cached. After a failure the fallback is served
+        // without re-probing until the retry window has passed, so a transient IdP
+        // outage (e.g. during deploy) neither pins the fallback forever nor turns every
+        // request into a discovery attempt against a dead IdP.
+        if (!oidcConfigPromise && Date.now() < oidcRetryAt) {
+            return Promise.resolve(fallbackEndpoints());
+        }
         if (!oidcConfigPromise) {
             oidcConfigPromise = (async () => {
                 const fb = fallbackEndpoints();
@@ -64,25 +72,27 @@ function createMcpAuth(opts) {
                     if (r.status === 200 && r.body && typeof r.body === 'object' && r.body.jwks_uri) {
                         oidcConfig = Object.assign(fb, r.body);   // discovered values win, per-field fallback
                         log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer);
-                    } else {
-                        warn('MCP OIDC discovery returned ' + r.status + ' — using fallback endpoint paths');
-                        oidcConfig = fb;
+                        return oidcConfig;
                     }
+                    warn('MCP OIDC discovery returned ' + r.status + ' — using fallback endpoint paths');
                 } catch (e) {
                     warn('MCP OIDC discovery failed: ' + e.message + ' — using fallback endpoint paths');
-                    oidcConfig = fb;
                 }
-                return oidcConfig;
+                oidcConfigPromise = null;
+                oidcRetryAt = Date.now() + discoveryRetryMs;
+                return fb;
             })();
         }
         return oidcConfigPromise;
     }
 
-    // Lazy JWKS — built from the discovered jwks_uri on first real token validation.
+    // Lazy JWKS — built from the discovered jwks_uri on first real token validation, and
+    // rebuilt if a later re-discovery changes the jwks_uri (fallback → discovered).
     async function getJwks() {
-        if (!jwks) {
-            const oidc = await getOidcConfig();
-            jwks = createRemoteJWKSet(new URL(oidc.jwks_uri));
+        const oidc = await getOidcConfig();
+        if (!jwks || jwksUri !== oidc.jwks_uri) {
+            jwksUri = oidc.jwks_uri;
+            jwks = createRemoteJWKSet(new URL(jwksUri));
         }
         return jwks;
     }

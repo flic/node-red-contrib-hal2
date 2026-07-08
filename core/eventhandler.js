@@ -422,7 +422,17 @@ module.exports = function(RED) {
 
         node.log('MCP enabled: ' + !!config.mcpEnabled + ', prefix: "' + mcpPrefix + '", location: "' + (config.locationName || '') + '"');
 
-            const mcpServerUrl  = config.mcpServerUrl  || '';
+            const mcpServerUrl  = (config.mcpServerUrl || '').replace(/\/$/, '');
+            // Public base URL for everything this node serves. The routes are registered
+            // under mcpPrefix, so every advertised discovery URL must include it too —
+            // otherwise clients get 404 on the well-known documents when a prefix is set.
+            const publicBase    = mcpServerUrl + mcpPrefix;
+            // Each well-known document is reachable both at the concatenated path
+            // (<prefix>/.well-known/<name>, what most MCP clients request) and at the
+            // RFC 8414 form (/.well-known/<name><prefix>). No prefix → one route.
+            const wellKnownPaths = name => mcpPrefix
+                ? [mcpPrefix + '/.well-known/' + name, '/.well-known/' + name + mcpPrefix]
+                : ['/.well-known/' + name];
             // Identity provider (OIDC issuer) base URL. Stored under the legacy key `pocketidUrl`
             // for backward compatibility, but it can point at any OIDC provider — its real
             // endpoints are auto-discovered (see getOidcConfig below).
@@ -435,10 +445,16 @@ module.exports = function(RED) {
 
             node.log('MCP init: serverUrl=' + mcpServerUrl + ', issuer=' + issuerUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
-            // Optional audience enforcement. When set, the token's `aud` must match. Left empty
-            // by default so existing IdP setups that don't scope `aud` keep working — issuer is
-            // always enforced regardless (see validateToken).
-            const tokenAudience = (config.mcpAudience || '').trim();
+            const clientId      = ((node.credentials && node.credentials.pocketidClientId)     || '').trim();
+            // With no client secret configured the IdP client is treated as a public client:
+            // PKCE-only, and the DCR endpoint has no secret to disclose. With a secret set the
+            // legacy confidential-client behavior is kept (the secret is handed out via DCR).
+            const clientSecret  = ((node.credentials && node.credentials.pocketidClientSecret) || '').trim();
+            // Audience enforcement: explicit mcpAudience wins, otherwise tokens must carry the
+            // client id in `aud` (OIDC providers set aud to the client the token was issued for).
+            // Only when both are empty is the audience check skipped — issuer is always enforced
+            // regardless (see validateToken).
+            const tokenAudience = (config.mcpAudience || '').trim() || clientId;
             const adminEnabled  = config.adminToolsEnabled === true;
             const adminPort     = Number(config.adminPort || 1880);
             const mcpScopesStr  = (config.mcpScopes || 'openid profile email').trim();
@@ -467,7 +483,7 @@ module.exports = function(RED) {
             // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
             // See core/mcp-auth.js. External deps injected so the module stays testable.
             const auth = createMcpAuth({
-                issuerUrl, tokenTTL, tokenAudience, mcpServerUrl,
+                issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 httpGet,
                 log:  msg => node.log(msg),
@@ -1548,42 +1564,46 @@ module.exports = function(RED) {
 
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
-            node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-protected-resource');
-            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-protected-resource', rateLimit('wk', 120), (_req, res) => {
+            const protectedResourceHandler = (_req, res) => {
                 res.status(200).json({
-                    resource                 : mcpServerUrl,
-                    authorization_servers    : [mcpServerUrl],
+                    resource                 : publicBase,
+                    authorization_servers    : [publicBase],
                     bearer_methods_supported : ['header'],
                     scopes_supported         : mcpScopesArr
                 });
-            });
+            };
+            for (const p of wellKnownPaths('oauth-protected-resource')) {
+                node.log('MCP registering route: GET ' + p);
+                RED.httpNode.get(p, rateLimit('wk', 120), protectedResourceHandler);
+            }
 
             // ── OAuth: /.well-known/oauth-authorization-server ────────────────
 
-            node.log('MCP registering route: GET ' + mcpPrefix + '/.well-known/oauth-authorization-server');
-            RED.httpNode.get(mcpPrefix + '/.well-known/oauth-authorization-server', rateLimit('wk', 120), async (_req, res) => {
+            const authServerHandler = async (_req, res) => {
                 const oidc = await getOidcConfig();
                 res.status(200).json({
-                    issuer                                : mcpServerUrl,
+                    issuer                                : publicBase,
                     authorization_endpoint                : oidc.authorization_endpoint,
                     token_endpoint                        : oidc.token_endpoint,
                     userinfo_endpoint                     : oidc.userinfo_endpoint,
-                    registration_endpoint                 : mcpServerUrl + mcpPrefix + '/oauth/register',
+                    registration_endpoint                 : publicBase + '/oauth/register',
                     jwks_uri                              : oidc.jwks_uri,
                     scopes_supported                      : mcpScopesArr,
                     response_types_supported              : ['code'],
                     grant_types_supported                 : ['authorization_code', 'refresh_token'],
                     code_challenge_methods_supported      : ['S256'],
-                    token_endpoint_auth_methods_supported : ['client_secret_post', 'none']
+                    token_endpoint_auth_methods_supported : clientSecret ? ['client_secret_post', 'none'] : ['none']
                 });
-            });
+            };
+            for (const p of wellKnownPaths('oauth-authorization-server')) {
+                node.log('MCP registering route: GET ' + p);
+                RED.httpNode.get(p, rateLimit('wk', 120), authServerHandler);
+            }
 
             // ── DCR: /oauth/register ──────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
             RED.httpNode.post(mcpPrefix + '/oauth/register', rateLimit('register', 20), (req, res) => {
-                const clientId     = (node.credentials && node.credentials.pocketidClientId)     || '';
-                const clientSecret = (node.credentials && node.credentials.pocketidClientSecret) || '';
                 const requested       = req.body || {};
                 // Never echo attacker-controlled redirect_uris. Constrain any requested URIs to the
                 // configured allowlist so this endpoint can't be used to poison the OAuth callback;
@@ -1597,16 +1617,17 @@ module.exports = function(RED) {
                     });
                 }
                 const clientRedirects = allowed.length ? allowed : redirectUris;
-                res.status(201).json({
+                const registration = {
                     client_id                  : clientId,
-                    client_secret              : clientSecret,
                     client_id_issued_at        : Math.floor(Date.now() / 1000),
                     redirect_uris              : clientRedirects,
                     grant_types                : ['authorization_code', 'refresh_token'],
                     response_types             : ['code'],
-                    token_endpoint_auth_method : 'client_secret_post',
+                    token_endpoint_auth_method : clientSecret ? 'client_secret_post' : 'none',
                     scope                      : mcpScopesStr
-                });
+                };
+                if (clientSecret) registration.client_secret = clientSecret;
+                res.status(201).json(registration);
             });
 
             // ── MCP: /mcp ─────────────────────────────────────────────────────
@@ -1701,8 +1722,8 @@ module.exports = function(RED) {
             if (config.mcpEnabled) {
                 auth.clearCache();
                 node.log('MCP removing routes with prefix: "' + mcpPrefix + '"');
-                removeRoute(RED, 'get',  mcpPrefix + '/.well-known/oauth-protected-resource');
-                removeRoute(RED, 'get',  mcpPrefix + '/.well-known/oauth-authorization-server');
+                for (const p of wellKnownPaths('oauth-protected-resource'))   { removeRoute(RED, 'get', p); }
+                for (const p of wellKnownPaths('oauth-authorization-server')) { removeRoute(RED, 'get', p); }
                 removeRoute(RED, 'post', mcpPrefix + '/oauth/register');
                 removeRoute(RED, 'post', mcpPrefix + '/mcp');
             }
