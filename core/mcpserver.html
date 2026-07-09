@@ -23,6 +23,17 @@
         <label for="node-config-input-instructions" style="vertical-align:top; margin-top:4px"><i class="fa fa-comment"></i> Instructions</label>
         <textarea id="node-config-input-instructions" rows="3" style="width:calc(100% - 105px);" placeholder="Optional instructions for Claude about this server."></textarea>
     </div>
+    <div class="form-row" id="row-required-claim">
+        <label for="node-config-input-requiredClaim"><i class="fa fa-user-secret"></i> Required claim</label>
+        <input type="text" id="node-config-input-requiredClaim" placeholder="groups" style="width:calc(100% - 105px)">
+    </div>
+    <div class="form-row" id="row-required-value">
+        <label for="node-config-input-requiredValue"><i class="fa fa-check"></i> Required value</label>
+        <input type="text" id="node-config-input-requiredValue" placeholder="(empty = any authenticated user)" style="width:calc(100% - 105px)">
+    </div>
+    <div class="form-tips" id="row-required-tip" style="margin-left:105px; margin-bottom:8px;">
+        <small>The JWT claim (default <code>groups</code>) must contain the value for this server's tools to be callable. Leave the value empty to allow all authenticated users.</small>
+    </div>
 </script>
 
 <script type="text/javascript">
@@ -31,9 +42,11 @@
         defaults : {
             name         : { value: '' },
             eventHandler : { value: '', type: 'hal2EventHandler', required: true },
-            mode         : { value: 'embedded' },
-            path         : { value: '' },
-            instructions : { value: '' }
+            mode          : { value: 'embedded' },
+            path          : { value: '' },
+            instructions  : { value: '' },
+            requiredClaim : { value: 'groups' },
+            requiredValue : { value: '' }
         },
         label : function () {
             if (this.mode === 'standalone') return this.name || '/mcp/' + (this.path || '?');
@@ -41,9 +54,12 @@
         },
         oneditprepare: function () {
             function updateVisibility() {
-                var mode = $('#node-config-input-mode').val();
-                $('#row-path').toggle(mode === 'standalone');
-                $('#row-instructions').toggle(mode === 'standalone');
+                var standalone = $('#node-config-input-mode').val() === 'standalone';
+                $('#row-path').toggle(standalone);
+                $('#row-instructions').toggle(standalone);
+                $('#row-required-claim').toggle(standalone);
+                $('#row-required-value').toggle(standalone);
+                $('#row-required-tip').toggle(standalone);
             }
             $('#node-config-input-mode').on('change', updateVisibility);
             updateVisibility();

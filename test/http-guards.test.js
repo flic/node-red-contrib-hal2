@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { createHttpGuards } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
 
 function mockRes() {
     return {
@@ -78,6 +78,44 @@ describe('lib/httpGuards rateLimit', function () {
         run(mw, mockReq({ headers: { 'x-forwarded-for': '192.0.2.1' } }));   // trust proxy on
         run(mw, mockReq());                                                  // no XFF header
         assert.strictEqual(warnings.length, 0);
+    });
+});
+
+describe('lib/httpGuards hostFilter', function () {
+    // Captures what the middleware passed to next(): undefined = handle this route,
+    // 'route' = skip to the next matching route.
+    function runHost(mw, req) {
+        let nextArg = 'NOT_CALLED';
+        mw(req, mockRes(), (arg) => { nextArg = arg; });
+        return nextArg;
+    }
+
+    it('passes everything through when no expected host is set', function () {
+        const mw = hostFilter('');
+        assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'anything.example.com' } })), undefined);
+        assert.strictEqual(runHost(mw, mockReq()), undefined);   // no host header at all
+    });
+
+    it('runs the route when the Host header matches', function () {
+        const mw = hostFilter('mcp.furtenbach.se');
+        assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'mcp.furtenbach.se' } })), undefined);
+    });
+
+    it('skips to the next route when the Host header does not match', function () {
+        const mw = hostFilter('mcp.furtenbach.se');
+        assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'other.furtenbach.se' } })), 'route');
+        assert.strictEqual(runHost(mw, mockReq({ headers: {} })), 'route');   // missing host
+    });
+
+    it('matches host case-insensitively', function () {
+        const mw = hostFilter('MCP.Furtenbach.SE');
+        assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'mcp.furtenbach.se' } })), undefined);
+    });
+
+    it('treats the port as part of the host', function () {
+        const mw = hostFilter('mcp.furtenbach.se:8443');
+        assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'mcp.furtenbach.se:8443' } })), undefined);
+        assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'mcp.furtenbach.se' } })), 'route');
     });
 });
 

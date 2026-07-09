@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { createHttpGuards } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
 
 function removeRoute(RED, path) {
     if (!RED.httpNode || !RED.httpNode._router) return;
@@ -84,14 +84,37 @@ module.exports = function (RED) {
         const serverName  = config.name || ('hal2-mcp-' + config.path);
         const instructions = config.instructions || '';
 
+        // Optional claim/value gate — same shape as the EventHandler's admin-tools gate.
+        // Empty requiredValue → any authenticated user may use this server's tools (the
+        // default, and the pre-existing behaviour). Set a value to restrict the whole server
+        // to callers whose validated token carries that claim; others connect but see no
+        // tools and cannot call any.
+        const requiredClaim = (config.requiredClaim || 'groups').trim();
+        // Default '' (allow all) only when never set. Empty string stays "any authenticated user".
+        const requiredValue = (config.requiredValue === undefined ? '' : config.requiredValue).trim();
+
+        function hasAccess(claims) {
+            if (!requiredValue) return true;
+            if (!claims) return false;
+            const v = claims[requiredClaim];
+            if (Array.isArray(v)) return v.includes(requiredValue);
+            return v === requiredValue;
+        }
+
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 
         // Same hardening as the EventHandler's /mcp route (see lib/httpGuards.js).
         const { rateLimit, maxBody } = createHttpGuards({ warn: msg => node.warn(msg) });
 
-        RED.httpNode.post(mcpPath, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
+        // Inherit the EventHandler's optional Host-header filtering so a standalone server
+        // shares its hostname split. Empty (feature off, or single-host) → matches on path only.
+        const expectedHost = eventHandler.mcpExpectedHost || '';
+
+        RED.httpNode.post(mcpPath, hostFilter(expectedHost), rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
             const claims = await eventHandler.requireBearer(req, res);
             if (!claims) return;
+
+            const allowed = hasAccess(claims);
 
             const body   = req.body || {};
             const id     = body.id     !== undefined ? body.id : null;
@@ -105,7 +128,8 @@ module.exports = function (RED) {
             if (method === 'initialize') {
                 node.status({ fill: 'green', shape: 'dot', text: 'connected' });
                 res.set('Cache-Control', 'no-store');
-                const toolNames = Object.keys(node.mcpRegisteredTools).join(', ');
+                // Don't leak tool names to callers who lack the required claim.
+                const toolNames = allowed ? Object.keys(node.mcpRegisteredTools).join(', ') : '';
                 return respond({
                     protocolVersion : '2024-11-05',
                     capabilities    : { tools: {} },
@@ -120,6 +144,7 @@ module.exports = function (RED) {
             }
 
             if (method === 'tools/list') {
+                if (!allowed) return respond({ tools: [] });
                 const tools = [];
                 for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
                     const s = t.schema;
@@ -130,6 +155,7 @@ module.exports = function (RED) {
             }
 
             if (method === 'tools/call') {
+                if (!allowed) return rpcErr(-32000, 'Access denied');
                 const toolName = params.name;
                 const args     = params.arguments || {};
                 node.status({ fill: 'blue', shape: 'dot', text: toolName });

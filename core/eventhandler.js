@@ -4,7 +4,7 @@ const crypto          = require('crypto');
 const analyzePatterns = require('./analyzePatterns');
 const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
-const { createHttpGuards } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
 
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES,
@@ -429,6 +429,21 @@ module.exports = function(RED) {
             // under mcpPrefix, so every advertised discovery URL must include it too —
             // otherwise clients get 404 on the well-known documents when a prefix is set.
             const publicBase    = mcpServerUrl + mcpPrefix;
+            // Optional Host-header filtering. Lets several EventHandlers share the same paths
+            // (e.g. /mcp) on one Node-RED instance, split by the hostname in each node's MCP
+            // server URL. Off by default so single-server setups — and anyone behind a proxy
+            // that rewrites Host — keep matching on path alone. Fails open (filtering disabled,
+            // with a warning) if enabled without a parseable URL, so a typo can't 404 everyone.
+            let expectedHost = '';
+            if (config.mcpFilterHost) {
+                try {
+                    expectedHost = new URL(mcpServerUrl).host;
+                } catch (e) {
+                    node.warn('MCP hostname filtering enabled but MCP server URL "' + mcpServerUrl +
+                              '" is not a valid URL — filtering disabled, matching on path only');
+                }
+            }
+            node.mcpExpectedHost = expectedHost;   // read by standalone hal2MCPServer nodes
             // Each well-known document is reachable both at the concatenated path
             // (<prefix>/.well-known/<name>, what most MCP clients request) and at the
             // RFC 8414 form (/.well-known/<name><prefix>). No prefix → one route.
@@ -1551,7 +1566,7 @@ module.exports = function(RED) {
             };
             for (const p of resourceMetadataPaths) {
                 node.log('MCP registering route: GET ' + p);
-                RED.httpNode.get(p, rateLimit('wk', 120), protectedResourceHandler);
+                RED.httpNode.get(p, hostFilter(expectedHost), rateLimit('wk', 120), protectedResourceHandler);
             }
 
             // ── OAuth: /.well-known/oauth-authorization-server ────────────────
@@ -1574,13 +1589,13 @@ module.exports = function(RED) {
             };
             for (const p of wellKnownPaths('oauth-authorization-server')) {
                 node.log('MCP registering route: GET ' + p);
-                RED.httpNode.get(p, rateLimit('wk', 120), authServerHandler);
+                RED.httpNode.get(p, hostFilter(expectedHost), rateLimit('wk', 120), authServerHandler);
             }
 
             // ── DCR: /oauth/register ──────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
-            RED.httpNode.post(mcpPrefix + '/oauth/register', rateLimit('register', 20), (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/oauth/register', hostFilter(expectedHost), rateLimit('register', 20), (req, res) => {
                 const requested       = req.body || {};
                 // Never echo attacker-controlled redirect_uris. Constrain any requested URIs to the
                 // configured allowlist so this endpoint can't be used to poison the OAuth callback;
@@ -1610,7 +1625,7 @@ module.exports = function(RED) {
             // ── MCP: /mcp ─────────────────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/mcp');
-            RED.httpNode.post(mcpPrefix + '/mcp', rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/mcp', hostFilter(expectedHost), rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
                 // Bearer token validation
                 const claims = await requireBearer(req, res);
                 if (!claims) return;
