@@ -155,7 +155,13 @@ module.exports = function (RED) {
             }
 
             if (method === 'tools/call') {
-                if (!allowed) return rpcErr(-32000, 'Access denied');
+                // Return the denial as a tool result (isError) rather than a JSON-RPC protocol
+                // error — clients surface a result's text to the model, but collapse a protocol
+                // error into a generic "tool execution failed" with no reason.
+                if (!allowed) return respond({
+                    content: [{ type: 'text', text: 'Access denied: your account lacks the required permission to use this server.' }],
+                    isError: true
+                });
                 const toolName = params.name;
                 const args     = params.arguments || {};
                 node.status({ fill: 'blue', shape: 'dot', text: toolName });
