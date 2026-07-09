@@ -13,6 +13,27 @@
     </div>
 </script>
 
+<script type="text/html" data-help-name="hal2MCPOut">
+    <p>Resolves a pending tool call started by a <code>hal2MCPIn</code> node, sending the
+    result back to the waiting MCP client. This is a terminal node — it has no output.</p>
+    <p>The input message must carry <code>msg._mcpCallId</code> unchanged from the
+    <code>hal2MCPIn</code> node that started the call, and this node's <b>MCP Server</b> must be
+    the <em>same</em> config node as that <code>hal2MCPIn</code>'s. If either doesn't match, the
+    call can never be found and resolved — the caller eventually sees a timeout, and this node
+    logs an error if <code>_mcpCallId</code> is missing entirely.</p>
+    <p><code>msg.payload</code> is converted to the tool result based on its shape:</p>
+    <ul>
+        <li>empty (<code>null</code>/<code>undefined</code>/<code>''</code>/<code>[]</code>) — replaced with
+        <b>Empty response</b> below (or <code>msg.emptyMessage</code>, if set, as a per-message override).</li>
+        <li>array — passed through as-is as the MCP <code>content</code> array, e.g. for image/media results.</li>
+        <li>string — sent as-is.</li>
+        <li>object — sent as a JSON string.</li>
+    </ul>
+    <p>No timeout handling is needed here — if this node never receives the matching message,
+    the <code>hal2MCPIn</code> node's own <b>Timeout</b> setting eventually fails the call on the
+    client's behalf.</p>
+</script>
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2MCPOut', {
         category: 'Home Automation',

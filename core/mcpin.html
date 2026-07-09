@@ -37,6 +37,35 @@
     </div>
 </script>
 
+<script type="text/html" data-help-name="hal2MCPIn">
+    <p>Defines one MCP tool. When Claude (or another MCP client) calls it, this node fires a
+    message out of its single output — there's nothing to wire into it, it's a call trigger,
+    not a regular flow step.</p>
+    <p>The output message carries:</p>
+    <ul>
+        <li><code>msg.payload</code> — the tool call arguments, shaped by <b>Parameters</b> below.</li>
+        <li><code>msg._mcpCallId</code> — an opaque id identifying this specific call.</li>
+        <li><code>msg.topic</code> — set to the <b>msg.topic</b> field below, or the tool name if left blank.</li>
+        <li><code>msg.jwtClaims</code> — the caller's verified JWT claims, only when <b>Expose JWT claims</b> is on.</li>
+    </ul>
+    <p>Wire the rest of the flow to do the actual work, then finish with a <code>hal2MCPOut</code>
+    node pointed at the <em>same</em> MCP Server. <code>msg._mcpCallId</code> must reach that
+    <code>hal2MCPOut</code> unchanged — if a function node rebuilds <code>msg</code> from scratch
+    instead of mutating/returning the original, carry this property over explicitly, or the
+    call can never be resolved and the caller sees a timeout.</p>
+    <p>Only wire one <code>hal2MCPOut</code> to eventually receive each call — the first message
+    that arrives with a given <code>_mcpCallId</code> resolves the call; any later one for the
+    same id is silently dropped.</p>
+    <p><b>Tool name</b> must be unique among the tools on the same MCP Server; it's the literal
+    name Claude calls. <b>Description</b> is shown to Claude and is the main signal it uses to
+    decide when to invoke this tool — be specific about what it does and when to use it.
+    <b>Parameters</b> is a JSON-Schema object describing the call arguments (becomes
+    <code>msg.payload</code>'s shape). <b>Timeout</b> is how long the flow has to reach a
+    <code>hal2MCPOut</code> before the client is told the call timed out.</p>
+    <p>See the <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README</a>
+    for a worked example (<code>examples/jellyfin-mcp.json</code>).</p>
+</script>
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2MCPIn', {
         category: 'Home Automation',

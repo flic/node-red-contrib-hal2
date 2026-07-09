@@ -36,6 +36,30 @@
     </div>
 </script>
 
+<script type="text/html" data-help-name="hal2MCPServer">
+    <p>Config node that exposes custom MCP tools (defined by <code>hal2MCPIn</code>/<code>hal2MCPOut</code>
+    pairs wired to it) to MCP clients such as Claude. Always delegates authentication to the
+    linked <b>Event handler</b> — MCP must be enabled on that node's <em>MCP</em> tab (identity
+    provider, redirect URIs, admin gate, etc. all live there, not here).</p>
+    <p><b>Embedded</b> mode (default): tools appear on the Event handler's own shared
+    <code>/mcp</code> endpoint, alongside its built-in device tool catalog. Simplest option when
+    you just want a couple of extra tools bolted onto the existing home-automation server.</p>
+    <p><b>Standalone</b> mode: registers its own <code>POST /mcp/&lt;path&gt;</code> endpoint,
+    separate from the Event handler's <code>/mcp</code>. Still authenticated against the same
+    Event handler (same identity provider, same OAuth client) — this node has no auth
+    configuration of its own — but isolated as its own MCP server, so a client can be pointed
+    at just one integration's tools (e.g. all of Jellyfin's) instead of the whole shared
+    endpoint. Multiple standalone <code>hal2MCPServer</code> nodes can share one Event handler,
+    each with a different path.</p>
+    <p>Standalone mode also exposes an optional <b>Required claim</b>/<b>Required value</b> gate:
+    when a value is set, only callers whose token carries that claim/value can see or call this
+    server's tools — everyone else connects but sees none. This is separate from (and layered on
+    top of) the Event handler's own admin-tools gate, and only affects this one standalone
+    server, not the shared embedded endpoint.</p>
+    <p>See the <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README</a>
+    for a worked example (<code>examples/jellyfin-mcp.json</code>).</p>
+</script>
+
 <script type="text/javascript">
     RED.nodes.registerType('hal2MCPServer', {
         category : 'config',
