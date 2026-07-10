@@ -488,13 +488,7 @@ module.exports = function(RED) {
             // as "allow any authenticated user" per the UI help text.
             const adminValue    = (config.adminRequiredValue === undefined ? 'admin' : config.adminRequiredValue).trim();
 
-            function isAdmin(claims) {
-                if (!adminValue) return true;
-                if (!claims) return false;
-                const v = claims[adminClaim];
-                if (Array.isArray(v)) return v.includes(adminValue);
-                return v === adminValue;
-            }
+            const isAdmin = claims => common.claimSatisfied(claims, adminClaim, adminValue);
 
             // ── Admin API helper ───────────────────────────────────────────────
 

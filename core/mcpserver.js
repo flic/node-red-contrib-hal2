@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
+const { claimSatisfied } = require('../lib/common');
 
 function removeRoute(RED, path) {
     if (!RED.httpNode || !RED.httpNode._router) return;
@@ -93,13 +94,7 @@ module.exports = function (RED) {
         // Default '' (allow all) only when never set. Empty string stays "any authenticated user".
         const requiredValue = (config.requiredValue === undefined ? '' : config.requiredValue).trim();
 
-        function hasAccess(claims) {
-            if (!requiredValue) return true;
-            if (!claims) return false;
-            const v = claims[requiredClaim];
-            if (Array.isArray(v)) return v.includes(requiredValue);
-            return v === requiredValue;
-        }
+        const hasAccess = claims => claimSatisfied(claims, requiredClaim, requiredValue);
 
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 

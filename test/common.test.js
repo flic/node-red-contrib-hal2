@@ -102,3 +102,30 @@ describe('lib/common createThrottledQueue', function () {
         assert.deepStrictEqual(sent, ['a'], 'only the immediate send happens');
     });
 });
+
+describe('lib/common claimSatisfied', function () {
+    it('opens the gate when no value is required', function () {
+        // Empty value = any authenticated caller; claims are irrelevant, even when absent.
+        assert.strictEqual(common.claimSatisfied({ groups: [] }, 'groups', ''), true);
+        assert.strictEqual(common.claimSatisfied(null, 'groups', ''), true);
+    });
+
+    it('rejects when a value is required but no claims are present', function () {
+        assert.strictEqual(common.claimSatisfied(null, 'groups', 'admin'), false);
+        assert.strictEqual(common.claimSatisfied(undefined, 'groups', 'admin'), false);
+    });
+
+    it('matches a value inside an array claim', function () {
+        assert.strictEqual(common.claimSatisfied({ groups: ['user', 'admin'] }, 'groups', 'admin'), true);
+        assert.strictEqual(common.claimSatisfied({ groups: ['user'] }, 'groups', 'admin'), false);
+    });
+
+    it('matches a scalar claim by strict equality', function () {
+        assert.strictEqual(common.claimSatisfied({ role: 'admin' }, 'role', 'admin'), true);
+        assert.strictEqual(common.claimSatisfied({ role: 'editor' }, 'role', 'admin'), false);
+    });
+
+    it('rejects when the claim is missing from an otherwise valid token', function () {
+        assert.strictEqual(common.claimSatisfied({ sub: 'u1' }, 'groups', 'admin'), false);
+    });
+});

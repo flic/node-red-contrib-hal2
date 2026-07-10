@@ -56,27 +56,59 @@ It ships with a catalog of built-in tools:
 
 Tools are exposed only when matching hardware is configured at that location — a server with no covers won't advertise `control_cover`. Things and Items can carry free-text **notes** and **tags**, and devices report derived **categories** (light, fan, cover, climate, spa, scene), all of which help the assistant pick the right device. Full parameters and examples are in **[docs/API.md](docs/API.md)**.
 
+### Access control
+
+Two independent, optional gates. Each is a **claim** + **value** pair: an array claim must *contain* the value, a scalar claim must *equal* it, and an empty value leaves the gate open to any authenticated caller.
+
+- **Admin-tools gate** (Event handler → *MCP* tab, `Required claim`/`Required value`): gates only the admin tools (`get_flow`, `deploy_flow`). Ordinary read/control tools stay available to any authenticated caller. Defaults to claim `groups`, value `admin`.
+- **Standalone-server gate** (a `hal2MCPServer` node in *Standalone* mode, `Required claim`/`Required value`): gates a whole standalone MCP server. Callers who fail the check still connect (`initialize` succeeds) but see no tools, and any `tools/call` is refused. Defaults to empty — all authenticated users allowed.
+
+Both denials come back as an MCP tool result with `isError: true` and a human-readable reason, so the calling model is told *why* instead of getting a generic "tool execution failed".
+
+### Hostname filtering
+
+Off by default. When **Only serve requests for this hostname** is enabled on the Event handler, its MCP routes only answer requests whose `Host` header matches the hostname in the *MCP server URL*. This lets several Event handlers share the *same* paths (e.g. `/mcp`) on one Node-RED instance, each answering only its own virtual host — useful when one backend fronts several homes on different hostnames. Standalone `hal2MCPServer` nodes inherit the setting from their Event handler. Leave it off for a single server, or when a reverse proxy rewrites the `Host` header.
+
 ### Authentication & reverse proxy
 
 The MCP server implements the MCP OAuth flow itself: it advertises itself as a **protected resource**, proxies the **authorization-server metadata** to your identity provider (IdP), and hands the MCP client a fixed, pre-registered client via a small dynamic-client-registration shim. It does **not** run its own login — your IdP does.
 
-**Endpoints to expose through your reverse proxy** (on the public *MCP server URL*, under the optional path prefix). All four must be reachable from the MCP client:
+**Routes to expose through your reverse proxy.** With the default (empty) *HTTP path prefix*, the Event handler registers these on the public *MCP server URL* — all must be reachable from the MCP client:
 
 | Method & path | Purpose |
 |---|---|
+| `POST /mcp` | The JSON-RPC MCP endpoint (bearer-token protected) |
 | `GET /.well-known/oauth-protected-resource` | Resource metadata (RFC 9728) — points the client at the auth server |
+| `GET /.well-known/oauth-protected-resource/mcp` | Same metadata, path-inserted form some clients probe |
 | `GET /.well-known/oauth-authorization-server` | Auth-server metadata (RFC 8414) — issuer is hal2, endpoints point at your IdP |
 | `POST /oauth/register` | Dynamic client registration shim — returns your pre-registered client |
-| `POST /mcp` | The JSON-RPC MCP endpoint (bearer-token protected) |
+
+Each **standalone** `hal2MCPServer` node adds one more endpoint, `POST /mcp/<path>` (e.g. `/mcp/jellyfin`), sharing the same auth. Setting an *HTTP path prefix* shifts every route under it (`/prefix/mcp`, `/prefix/.well-known/…`), so update the proxy to match.
+
+> **Allowlist these paths — don't blanket-proxy everything to Node-RED.** hal2's MCP routes live on Node-RED's shared HTTP server, alongside the flow editor, admin API and any other `http in` endpoints. A catch-all proxy would put *all* of those on the public hostname; hal2 forwards anything it doesn't own to Node-RED, so you can't know what else would be exposed. Route only the specific paths below.
+
+Example with **[Caddy](https://caddyserver.com/)** via [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy) labels (default prefix; drop the `/mcp/*` line if you run no standalone servers):
+
+```yaml
+labels:
+  caddy_1: mcp.example.com
+  caddy_1.reverse_proxy_0: /mcp "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_1: /mcp/* "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_2: /.well-known/oauth-protected-resource "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_3: /.well-known/oauth-protected-resource/mcp "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_4: /.well-known/oauth-authorization-server "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_5: /oauth/register "{{upstreams 1880}}"
+```
+
+`/mcp` (exact) and `/mcp/*` are deliberately **separate** matchers — in Caddy `/mcp/*` does *not* match the bare `/mcp`. To serve several MCP servers on different hostnames from one backend, give each its own `caddy_N` site block and enable [hostname filtering](#hostname-filtering).
 
 **What hal2 expects of the identity provider:**
 
 - An **OIDC provider with discovery** — hal2 reads `‹issuer›/.well-known/openid-configuration` and uses the advertised `authorization_endpoint`, `token_endpoint`, `userinfo_endpoint` and `jwks_uri`. If discovery is unavailable it falls back to PocketID's path layout, so no extra config is needed for either.
 - It must issue **JWT access tokens** signed with a key published on its **JWKS** (hal2 verifies tokens locally). Providers that issue *opaque* access tokens are not supported (no introspection path yet).
-- A **confidential client** (client ID + secret) configured with: the **redirect URI(s)** from the *Redirect URIs* setting (default `https://claude.ai/api/mcp/auth_callback`; add more for other MCP clients), grant types `authorization_code` + `refresh_token`, **PKCE (S256)**, and `client_secret_post` auth.
-- Optionally, a claim (default `groups`) carrying the configured admin value, used to gate the admin tools.
+- A client configured with the **redirect URI(s)** from the *Redirect URIs* setting (default `https://claude.ai/api/mcp/auth_callback`; add more for other MCP clients), grant types `authorization_code` + `refresh_token`, **PKCE (S256)**, and — if a client secret is set — `client_secret_post` auth. Leave the secret empty to run as a **public/PKCE client (recommended)**.
 
-> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** (MCP client). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the four paths above, should work the same way.
+> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** (MCP client). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
 
 ### Custom MCP tools (hal2MCPIn / hal2MCPOut)
 
