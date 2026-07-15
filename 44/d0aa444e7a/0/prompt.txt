@@ -1,0 +1,1 @@
+Gör en code review på projektet med särskilt fokus på arkitektur och säkerhet. Ta fram en plan för förbättringar.
