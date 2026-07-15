@@ -1,0 +1,1 @@
+Ja, skissa på koden. Jag tror även att vi bör ha en checkbox i eventhandler-konfigurationen som låter slutanvändaren enabla/disabla filter on hostname (default off) så vi inte slår undan benen för någon med bara en server bakom nginx.
