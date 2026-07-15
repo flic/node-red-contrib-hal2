@@ -1,0 +1,10 @@
+På docker01 så har vi lämnat MCP path prefix tomt, vilket gör att det defaultar till /mcp, korrekt? Vi har iallafall registerat https:/mcp.furtenbach.se/mcp i Claude.AI.
+
+PÅ den servern så har vi konfigurerat Caddy såhär:
+      caddy_3.reverse_proxy_0: /mcp "{{upstreams 1880}}"
+      caddy_3.reverse_proxy_1: /.well-known/oauth-protected-resource "{{upstreams 1880}}"
+      caddy_3.reverse_proxy_2: /.well-known/oauth-protected-resource/mcp "{{upstreams 1880}}"
+      caddy_3.reverse_proxy_3: /.well-known/oauth-authorization-server "{{upstreams 1880}}"
+      caddy_3.reverse_proxy_4: /oauth/register "{{upstreams 1880}}"
+
+Jag saknar path prefix på alla .well-known. Borde dom inte heta /mcp/.well-known om våra antaganden är korrekta?
