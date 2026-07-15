@@ -1,0 +1,1 @@
+problemet med att proxya allt är att hal2 släpper igenom allt som den inte tar hand om själv till node-red så vi vet inte vad annat (om något) som skulle exponeras utan autentisering
