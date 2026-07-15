@@ -1,0 +1,7 @@
+Om jag vill sätta upp reverse proxy regler i caddy som täcker in alla paths för mcp, fungerar det här?
+
+      caddy_1: mcp.furtenbach.cloud
+      caddy_1.reverse_proxy_0: /mcp/* "{{upstreams 1880}}"
+      caddy_1.reverse_proxy_1: /*/.well-known/oauth-protected-resource "{{upstreams 1880}}"
+      caddy_1.reverse_proxy_2: /*/.well-known/oauth-authorization-server "{{upstreams 1880}}"
+      caddy_1.reverse_proxy_3: /*/oauth/register "{{upstreams 1880}}"
