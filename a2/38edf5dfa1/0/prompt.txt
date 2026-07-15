@@ -1,0 +1,3 @@
+URLen är mcp.furtenbach.se/mcp
+
+verifierat, b8492bf körs i produktion och node-red är omstartad
