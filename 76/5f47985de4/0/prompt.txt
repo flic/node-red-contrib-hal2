@@ -1,0 +1,33 @@
+Jag får varningar från GitHub:
+
+
+ 
+GitHub
+[flic/node-red-contrib-hal2] test workflow run
+ 
+
+ 
+test: Some jobs were not successful
+ 
+ 
+Status	Job	Annotations
+test (20)	
+test / test (20)
+Cancelled
+ annotations for test / test (20) 3
+test (18)	
+test / test (18)
+Failed in 9 seconds
+ annotations for test / test (18) 2
+test (22)	
+test / test (22)
+Succeeded in 9 seconds
+ annotations for test / test (22) 1
+ 
+ 
+—
+You are receiving this because you are subscribed to this thread.
+Manage your GitHub Actions notifications
+
+ 
+GitHub, Inc. ・88 Colin P Kelly Jr Street ・San Francisco, CA 94107
