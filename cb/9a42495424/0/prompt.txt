@@ -1,0 +1,1 @@
+Börja med att fixa oauth-buggarna så pratar vi igenom övriga designval därefter
