@@ -1,0 +1,1 @@
+Det är dags att publicera det här på npm. Är det något du ser vi borde göra innan vi släpper en release av node-red-contrib-mcp-server?
