@@ -1,0 +1,205 @@
+<task-notification>
+<task-id>ac0de9a8f3aa09cb4</task-id>
+<tool-use-id>REDACTED</tool-use-id>
+<output-file>/private/tmp/claude-501/-Users-fredrikfurtenbach-repos-private-node-red-contrib-hal2/4b958e2b-c0c5-43b8-a15d-725cb66999ee/tasks/ac0de9a8f3aa09cb4.output</output-file>
+<status>completed</status>
+<summary>Agent "Granska säkerhet i hal2" finished</summary>
+<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>
+<result>## Security Review: node-red-contrib-hal2
+
+### 1. Token Validation Path
+
+**File**: `/core/eventhandler.js` lines 517–553
+
+**Findings:**
+
+- **JWT Verification**: Uses `jose.jwtVerify()` with remote JWKS (line 528), correct approach
+- **JWKS Source**: Fetched dynamically from OIDC discovery (line 512), with fallback to PocketID path layout (lines 472–479)
+- **Issuer/Audience**: NOT validated. No `jose.jwtVerify()` options passed to enforce `iss` or `aud` claims — the JWKS fetch alone does not verify the issuer identity
+- **Local Debug Token Bypass** (line 519): Timing-unsafe comparison `token === localDebugToken` — vulnerable to timing side-channel if localDebugToken is secrets.
+- **Token Cache** (lines 523–526):
+  - Cache key = `sha256(token).slice(0, 20)` (20-character hash) — leaks raw token entropy; collision risk
+  - Cache lookup uses `tokenCache[cacheKey]`, vulnerable to prototype pollution if cacheKey is poisoned
+  - TTL: `Math.min(Date.now() + tokenTTL, tokenExpMs)` — respects token expiry but allows 5-min stale tokens (default `tokenCacheTTL=300`)
+  - **Unbounded growth**: no cache size limit, no LRU eviction; long-running instance can OOM with many unique tokens
+  - Expired tokens still in cache at next lookup would return cached claims — but code checks `exp &gt;= Date.now()` so this is mitigated
+
+### 2. Dynamic Client Registration Proxy (/oauth/register)
+
+**File**: `/core/eventhandler.js` lines 1609–1627
+
+**Findings:**
+
+- **Unauthenticated**: POST /oauth/register has NO Bearer token check; anyone can call it
+- **Rate Limiting**: NONE
+- **Input Validation**: Accepts arbitrary `redirect_uris` array from request body; echoes back to response (lines 1615–1616)
+- **SSRF/Injection**: redirect_uris are echoed without validation — could be used to poison the OAuth callback or inject malicious client configs
+- **Credentials Exposure**: Returns static `clientId` and `clientSecret` from config (lines 1611–1612) — same for all requests; attackers learn the credentials
+- **Impact**: Unauthenticated DCR allows an attacker to register a fake OAuth client and phish for tokens sent to attacker-controlled redirect URIs
+
+### 3. Admin Gate (get_flow / deploy_flow)
+
+**File**: `/core/eventhandler.js` lines 1253–1301
+
+**Critical Gateway Bypass in api.js**: 
+- `/core/api.js` line 39: `msg.claims || null` — passes claims from message property
+- `/core/api.js` line 5: `allowAdminTools` is a checkbox, independent of auth
+- **Gate Logic** (eventhandler.js lines 1253–1260):
+  ```javascript
+  if (!opts.adminEnabled) return rpcErr(...); // gate 1: checkbox
+  if (claims &amp;&amp; !isAdmin(claims)) return rpcErr(...); // gate 2: if claims exist, must be admin
+  ```
+  - If `claims === null` (no auth), the second check is skipped — tool executes
+  - `api.js` passes `null` when `msg.claims` is undefined
+  - **Consequence**: hal2Api node with `allowAdminTools=true` can call admin tools (get_flow, deploy_flow) without any authentication
+
+**deploy_flow RCE**:
+- Line 1290: `await adminApi('PUT', '/flow/' + args.id, flowBody)` — args.id used in path without sanitization
+- args.id derived from user input (line 1285), passed directly to HTTP path
+- args.nodes array (line 1286) contains user-defined nodes — sent as-is to Node-RED's /flow API
+- Node-RED flow nodes can contain arbitrary function nodes with malicious code
+- **Impact**: Authenticated (or unauthenticated via api.js bypass) user can deploy arbitrary Node-RED flows with code execution in Node-RED's context
+
+### 4. Code Execution Surfaces
+
+**Files**: `/core/thing.js` lines 185–240, 438–443, 498–507
+
+**Multiple `new Function()` injection points**:
+1. **Line 185** (ingress filter): `new Function('msg','attribute','item', fn)` where `fn = resolveFn(node, 'ingress', node.thingType.filterFunction)`
+2. **Line 235** (item ingress): `new Function('msg','attribute','item', fn)` where `fn = resolveFn(node, 'ingress', node.thingType.items[i].ingress)`
+3. **Line 441** (status egress): `new Function('item','attribute', node.thingType.statusFn)`
+4. **Line 498** (egress): `new Function('msg','attribute','item', fn)` where `fn = resolveFn(node, 'egress', item.egress)`
+
+**Threat**:
+- Functions are stored in node config (thingType, item) — user-authored at design time via Node-RED editor
+- No runtime injection into these paths (they're config-based, not API-driven)
+- **But**: If an attacker can modify ThingType config via Node-RED admin API (which requires authentication), they can inject arbitrary code into any ingress/egress function
+- Combined with admin tool bypass above: unauthenticated user can deploy new ThingType nodes with malicious functions
+
+### 5. Input Validation on MCP Tool Arguments
+
+**File**: `/core/eventhandler.js` tool handlers (lines 746–1570)
+
+**Findings**:
+- **thing_id**: Used to look up nodes via `RED.nodes.getNode(args.thing_id)` — no path traversal (it's an internal node ID)
+- **item_id**: String comparison against config — safe
+- **args.offset, args.limit**: Parsed as int (line 764), then used in `.slice()` — safe
+- **args.id in deploy_flow** (line 1290): Passed directly to HTTP path `/flow/' + args.id` without URL encoding
+  - If args.id contains `/`, `..`, `%`, it could traverse paths or bypass intent
+  - Example: `args.id = "../../sensitive"` → `/flow/../../sensitive`
+  - Node-RED's routing should normalize this, but no explicit validation here
+- **args.nodes in deploy_flow** (line 1286): User-controlled node definitions, passed directly to Node-RED API — code execution when deployed
+- **args.bucket, args.bucket_mode** (lines 1404–1406): Whitelist validation present; safe
+- **thing_name, item_name**: Used in `.toLowerCase().includes()` for substring matching — no injection risk
+
+**NoSQL/Database Injection**: Not applicable; using better-sqlite3 with prepared statements (historyDb.js), no dynamic SQL construction.
+
+### 6. Secrets Handling
+
+**Files**: `/core/eventhandler.js`, `/core/api.js`
+
+**Findings**:
+- **adminToken, localDebugToken**: Stored in node.credentials (encrypted by Node-RED)
+- **Logged**: adminToken passed to httpRequest as `Authorization: Bearer` header (line 459) — transmitted in plain HTTP to localhost (safe in local context)
+- **Not exposed in responses**: Admin token/debug token not echoed in error messages or logs (node.log/warn checked — no token leaks found)
+- **Status display**: Could be vulnerable if tokens were put in node.status(); not observed in code
+- **JWT in cache**: Token hash (not raw token) stored in tokenCache — safe
+- **userinfo call** (line 536): Uses the Bearer token to fetch userinfo — correct
+
+### 7. HTTP Hardening
+
+**File**: `/core/eventhandler.js` routes (lines 1577–1695)
+
+**Findings**:
+- **CORS**: NO CORS headers set on MCP routes (GET /.well-known/*, POST /oauth/register, POST /mcp)
+  - Browser-based clients will be blocked by CORS; cross-origin requests from web frontends will fail unless reverse proxy adds CORS headers
+  - **But**: If reverse proxy adds `Access-Control-Allow-Origin: *`, any origin can call these endpoints
+- **Rate Limiting**: NONE
+- **Error Responses**: 
+  - Line 550: `node.warn('MCP token verify failed: ' + e.message)` — logs crypto errors (e.g., "invalid signature")
+  - Lines 697–702, 823, etc: Error responses include helpful debugging (e.g., available_items), but no stack traces leaked
+- **Request Size Limits**: None enforced — could accept huge payloads (e.g., massive args.nodes array in deploy_flow)
+- **HTTP Methods**: POST routes use Express `.post()` — no method confusion
+
+### 8. Randomness (ID Generation)
+
+**File**: `/resources/hal.js` line 1–2
+
+```javascript
+function halCreateId () {
+    return (1+Math.random()*4294967295).toString(16);
+}
+```
+
+**Findings**:
+- **Non-cryptographic**: Uses `Math.random()`, predictable
+- **Usage**: Document IDs, not security-sensitive (hal2 node IDs, thing IDs)
+- **But**: Line 1285 in eventhandler.js uses `crypto.randomBytes(8).toString('hex').slice(0, 16)` for flow tabId — cryptographically sound
+
+---
+
+## Ranked Vulnerabilities
+
+### **CRITICAL**
+
+1. **Unauthenticated Admin Tool Access via hal2Api Bypass** (api.js:39 + eventhandler.js:1255–1260)
+   - **Exploit**: Configure a hal2Api node with `allowAdminTools=true` in flow, call it via msg.tool without msg.claims, invoke `get_flow` or `deploy_flow` to read/modify Node-RED flows or deploy arbitrary code.
+   - **Impact**: RCE, flow modification, credential theft
+
+2. **Arbitrary Code Deployment via deploy_flow + RCE** (eventhandler.js:1290)
+   - **Exploit**: If authenticated (or via bypass above), call `deploy_flow` with malicious nodes array; Node-RED executes arbitrary code in node functions.
+   - **Impact**: RCE in Node-RED process
+
+### **HIGH**
+
+3. **Unauthenticated OAuth DCR Registration** (eventhandler.js:1610–1616)
+   - **Exploit**: POST /oauth/register with malicious `redirect_uris` to poison OAuth flow or phish tokens.
+   - **Impact**: Token theft, man-in-the-middle OAuth
+
+4. **Missing JWT Issuer/Audience Validation** (eventhandler.js:528)
+   - **Exploit**: If multiple OIDC providers share the same JWKS URI, attacker with valid token from sibling provider is accepted.
+   - **Impact**: Unauthorized access (depends on provider architecture)
+
+5. **Timing-Unsafe Local Debug Token Comparison** (eventhandler.js:519)
+   - **Exploit**: Brute-force localDebugToken via timing analysis (e.g., `token === debugToken` leaks length/character matches).
+   - **Impact**: Credential compromise (if debug token is weak or reused)
+
+### **MEDIUM**
+
+6. **Unbounded Token Cache Growth** (eventhandler.js:453–548)
+   - **Exploit**: Send unique tokens continuously; cache never evicted, eventually OOM.
+   - **Impact**: Denial of service
+
+7. **Path Traversal in deploy_flow Flow ID** (eventhandler.js:1290)
+   - **Exploit**: args.id containing `../` or URL-encoded chars could confuse HTTP path routing.
+   - **Impact**: Logic bypass (minor if Node-RED normalizes paths)
+
+8. **No Rate Limiting on OAuth Registration** (eventhandler.js:1610)
+   - **Exploit**: Spam POST /oauth/register to register thousands of fake clients.
+   - **Impact**: Resource exhaustion, audit log pollution
+
+### **LOW**
+
+9. **No CORS Headers on MCP Routes** (eventhandler.js:1577–1695)
+   - **Exploit**: Browser-based clients cannot call endpoints unless reverse proxy allows CORS.
+   - **Impact**: Inconvenience (likely intentional to prevent browser-based attacks)
+
+10. **Predictable Flow Tab IDs via halCreateId** (resources/hal.js:1–2)
+    - **Exploit**: Enumerate IDs to guess document/flow names.
+    - **Impact**: Information disclosure (low, as flow structure is not confidential in home-automation context)
+
+---
+
+## Summary
+
+The system has **strong OAuth/JWT foundations** (jose library, JWKS validation, token caching) but critical gaps in **authorization logic** (admin bypass in api.js) and **authentication enforcement** (unprotected DCR endpoint). The **code execution surface** via deploy_flow is intentional and powerful but requires authentication — though that requirement can be bypassed. **Token validation lacks issuer checks**, and **local debug token uses timing-unsafe comparison**. The **token cache is unbounded**, risking OOM on a busy instance.
+
+**Recommended fixes** (in priority order):
+1. Fix admin gate: check `isAdmin(claims)` even when claims is null (require authentication for admin tools)
+2. Add JWT issuer/audience validation in jose.jwtVerify options
+3. Use `crypto.timingSafeEqual()` for debug token comparison
+4. Add cache eviction (LRU or size cap) to tokenCache
+5. Authenticate POST /oauth/register
+6. Add request size limits to prevent OOM from huge deploy_flow payloads</result>
+<usage><subagent_tokens>78943</subagent_tokens><tool_uses>34</tool_uses><duration_ms>76985</duration_ms></usage>
+</task-notification>
