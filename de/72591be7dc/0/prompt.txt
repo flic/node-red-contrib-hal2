@@ -1,0 +1,1 @@
+förtydligande: med minor så menade jag 1.23.0 -> 1.23.1
