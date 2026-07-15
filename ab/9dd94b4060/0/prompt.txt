@@ -1,0 +1,1 @@
+behöver jag ha kvar /.well-known/oauth-protected-resource i reverse proxyn eller ersätter /.well-known/oauth-protected-resource/mcp  den?
