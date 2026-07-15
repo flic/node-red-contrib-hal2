@@ -1,0 +1,1 @@
+Hur hanterar MCP-serverkomponenten inkommande HTTP-anrop? Svarar den bara på vissa specifika URL paths och skickar resten av anropen vidare till Node-RED?
