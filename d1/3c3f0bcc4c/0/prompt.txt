@@ -1,0 +1,6 @@
+Bra testresultat, men kräver lite finslipning:
+
+I eventhandler GUI: lägg checkboxen ovanför det beskrivande fältet istället för vänsterställt.
+
+I standalone mcp: claim/value fungerar men felmeddelandet ger ett generiskt error istället för ett mer korrekt meddelande om att behörighet saknas:
+{"error": "Error occurred during tool execution", "request_id": "req_011Ccr31zuT3z9G9yo2iqYWj"}
