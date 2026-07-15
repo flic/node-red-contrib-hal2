@@ -1,0 +1,1 @@
+Nu lyssnar den på alla inkommande anrop som matchar URL path, korrekt? Inklusive anrop direkt på IP? Skulle det gå att konfigurera den så den bara lyssnar på anrop för et specifikt hostname (det konfigurerat i MCP server URL-fältet) och på så vis köra två stycken MCP-servers parallellt på samma host?
