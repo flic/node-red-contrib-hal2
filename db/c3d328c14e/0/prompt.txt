@@ -1,0 +1,1 @@
+Jag har testat att styra enheter, läsa värden och läsa historik. Jag har testat Node-RED  admin tools. Jag har testat en autentisering. Är det något annat jag bör testa?
