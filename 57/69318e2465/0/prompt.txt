@@ -1,0 +1,1 @@
+Jag får ett fel när jag försöker addera paketet till node-red registret: @frtnbach/node-red-contrib-mcp-serverError: @frtnbach/node-red-contrib-mcp-server: no stable published version
