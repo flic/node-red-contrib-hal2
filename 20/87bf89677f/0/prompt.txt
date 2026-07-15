@@ -1,0 +1,3 @@
+Vi skrev en bra instruktion för reverse proxyn i readme för node-red-contrib-mcp-server, vi bör skriva en i samma stil för hal2. Dom överenstämmer med varandra i stort men med vissa mindre skillnader.
+
+Gör 1, 2 och 3
