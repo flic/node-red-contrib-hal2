@@ -1,0 +1,5 @@
+GitHub-URL: https://github.com/flic/node-red-contrib-mcp-server
+
+Tester bör inte följa med i paketet.
+
+Kör 1-4
