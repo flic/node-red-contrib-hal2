@@ -1,0 +1,1 @@
+bumpa minor-versionen. Det kan du alltid göra när vi gör buggfixar.
