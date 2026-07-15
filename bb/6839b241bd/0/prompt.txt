@@ -1,0 +1,1 @@
+Strålande. Innan jag testar så behöver vi göra en förändring på standalone MCP-servrarna. Precis som vi har gjort med admin tools så bör åtkomst för att få komma åt verktigen i en specifik standaone server vara styrbart med hjälp av claim/value.
