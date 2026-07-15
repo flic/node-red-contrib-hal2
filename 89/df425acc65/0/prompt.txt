@@ -1,0 +1,1 @@
+Testerna verkar fungera. Jag funderar på om felmeddelandet när man försöker anropa en admin-tool utan adminbehörigheter borde vara tydligare än "error occured during tool execution". Borde den säga något om behörighetsproblem istället?
