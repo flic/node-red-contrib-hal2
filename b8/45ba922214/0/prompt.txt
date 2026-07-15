@@ -1,0 +1,1 @@
+Det verkar som att det finns en bugg i get_state som gör att tags på things-nivå inte skickas med i svaret. Kan du verifiera att det stämmer? En enhet hemma med tags som du kan verifiera emot är Terrass Väderstation.
