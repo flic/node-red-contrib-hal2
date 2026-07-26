@@ -14,3 +14,7 @@ logs
 # Environment files
 .env
 .env.test
+
+# Publish-time announcement script — runs from source via the postpublish
+# hook on the publishing machine, so it must not ship inside the package.
+scripts/bsky-announce.js
