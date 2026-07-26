@@ -24,12 +24,21 @@ module.exports = function(RED) {
             }
 
             // Accept { tool, args } on msg.payload; allow msg.tool / msg.args to override.
-            const payload = (msg.payload && typeof msg.payload === 'object') ? msg.payload : {};
-            const tool    = msg.tool || payload.tool;
-            const args    = msg.args || payload.args || {};
+            // A JSON string payload is auto-parsed for convenience (e.g. an inject/http node
+            // that emitted a string rather than an object).
+            let payload = msg.payload;
+            if (typeof payload === 'string' && payload.trim().startsWith('{')) {
+                try { payload = JSON.parse(payload); } catch (e) { /* handled below */ }
+            }
+            if (!payload || typeof payload !== 'object') payload = {};
+            const tool = msg.tool || payload.tool;
+            const args = msg.args || payload.args || {};
 
             if (!tool || typeof tool !== 'string') {
-                return fail('Missing "tool" — provide msg.payload.tool (e.g. "get_state")', -32602);
+                const hint = (typeof msg.payload === 'string')
+                    ? ' — msg.payload is a string; set the inject node type to JSON (or add a json node before this) so it becomes an object'
+                    : '';
+                return fail('Missing "tool" — provide msg.payload.tool (e.g. "get_state")' + hint, -32602);
             }
 
             node.status({ fill: 'blue', shape: 'dot', text: tool });

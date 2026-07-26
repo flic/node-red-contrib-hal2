@@ -23,6 +23,9 @@
     <p><code>msg.payload</code> = <code>{ "tool": "&lt;name&gt;", "args": { ... } }</code>.
     <code>msg.tool</code> / <code>msg.args</code> override the payload fields if present.
     Optional <code>msg.claims</code> is passed through to the tool (used for admin role checks).</p>
+    <p><strong>The payload must be an object.</strong> In an <code>inject</code> node set the type to
+    <code>{} JSON</code>, not <code>string</code> — a JSON <em>string</em> is auto-parsed as a fallback, but
+    setting <code>msg.tool</code> directly always works regardless of payload type.</p>
 
     <h3>Output</h3>
     <p><code>msg.payload</code> = <code>{ "ok": true, "result": ... }</code> on success, or
