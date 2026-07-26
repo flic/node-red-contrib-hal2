@@ -16,7 +16,7 @@ const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
     max_tokens: 150,
     messages: [{
       role: 'user',
-      content: `Skriv en release-notis för npm-paketet "${pkg.name}" version ${pkg.version}.
+      content: `Skriv en engelsk release-notis för npm-paketet "${pkg.name}" version ${pkg.version}.
 Beskrivning: "${pkg.description ?? ''}"
 
 Stil: torr, teknisk, rakt på sak. Ingen marketing-jargong, en emoji,
