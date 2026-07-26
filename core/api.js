@@ -3,6 +3,8 @@ module.exports = function(RED) {
         RED.nodes.createNode(this, config);
         this.eventHandler    = RED.nodes.getNode(config.eventHandler);
         this.allowAdminTools = config.allowAdminTools === true;
+        this.field           = config.field || "payload";
+        this.fieldType       = config.fieldType || "msg";
         var node = this;
 
         node.status({});
@@ -12,11 +14,26 @@ module.exports = function(RED) {
             send = send || function() { node.send.apply(node, arguments); };
             done = done || function(err) { if (err) node.error(err, msg); };
 
+            // Write the response envelope to the configured output property — msg.<field>
+            // by default, or a flow/global context key — and forward the message.
+            const deliver = (value) => {
+                if (node.fieldType === 'msg') {
+                    RED.util.setMessageProperty(msg, node.field, value);
+                    send(msg);
+                    return done();
+                }
+                const ctx    = node.context()[node.fieldType];
+                const ctxKey = RED.util.parseContextStore(node.field);
+                ctx.set(ctxKey.key, value, ctxKey.store, (err) => {
+                    if (err) { return done(err); }
+                    send(msg);
+                    done();
+                });
+            };
+
             const fail = (message, code) => {
                 node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                msg.payload = { ok: false, error: { code: code || -32000, message: message } };
-                send(msg);
-                done();
+                deliver({ ok: false, error: { code: code || -32000, message: message } });
             };
 
             if (!node.eventHandler || typeof node.eventHandler.callTool !== 'function') {
@@ -63,9 +80,7 @@ module.exports = function(RED) {
                 }
 
                 node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                msg.payload = { ok: true, result: result };
-                send(msg);
-                done();
+                deliver({ ok: true, result: result });
             } catch (err) {
                 node.error('hal2Api callTool error: ' + err.message, msg);
                 return fail(err.message);

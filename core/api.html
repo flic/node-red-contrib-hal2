@@ -8,6 +8,11 @@
         <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
+        <label for="node-input-field" style="width:95px; padding-right:10px;"><i class="fa fa-arrow-right"></i> Output</label>
+        <input type="text" id="node-input-field" style="width:calc(100% - 125px)">
+        <input type="hidden" id="node-input-fieldType">
+    </div>
+    <div class="form-row">
         <label for="node-input-allowAdminTools" style="width:auto"><i class="fa fa-shield"></i> Allow admin tools</label>
         <input type="checkbox" id="node-input-allowAdminTools" style="display: inline-block; width: auto; vertical-align: top;">
     </div>
@@ -28,7 +33,10 @@
     setting <code>msg.tool</code> directly always works regardless of payload type.</p>
 
     <h3>Output</h3>
-    <p><code>msg.payload</code> = <code>{ "ok": true, "result": ... }</code> on success, or
+    <p>The response envelope is written to the property configured in <strong>Output</strong>
+    (<code>msg.payload</code> by default — can be any <code>msg</code> path, or a
+    <code>flow</code>/<code>global</code> context key):<br>
+    <code>{ "ok": true, "result": ... }</code> on success, or
     <code>{ "ok": false, "error": { "code", "message" } }</code> on failure.</p>
 
     <h3>Tools</h3>
@@ -40,6 +48,7 @@
     <code>activate_scene</code>) are always available. Admin tools require <strong>Allow admin tools</strong>.</p>
 
     <li><strong>Event handler</strong>: the hal2EventHandler whose devices this API serves.</li>
+    <li><strong>Output</strong>: message property or context key the response envelope is written to (default <code>msg.payload</code>).</li>
     <li><strong>Allow admin tools</strong>: expose <code>get_flow</code> / <code>deploy_flow</code> through this node.</li>
 </script>
 
@@ -54,7 +63,9 @@
                 required: true
             },
             name:            {},
-            allowAdminTools: { value: false }
+            allowAdminTools: { value: false },
+            field:           { value: "payload" },
+            fieldType:       { value: "msg" }
         },
         inputs: 1,
         outputs: 1,
@@ -62,6 +73,12 @@
         label: function() {
             return this.name || "api";
         },
-        paletteLabel: "api"
+        paletteLabel: "api",
+        oneditprepare: function() {
+            $("#node-input-field").typedInput({
+                types: ['msg', 'flow', 'global'],
+                typeField: $("#node-input-fieldType")
+            });
+        }
     });
 </script>
