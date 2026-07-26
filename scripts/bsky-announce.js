@@ -21,12 +21,18 @@ Beskrivning: "${pkg.description ?? ''}"
 
 Stil: torr, teknisk, rakt på sak. Ingen marketing-jargong, en emoji,
 inga utropstecken, inga ordlekar med "smart". Max 200 tecken.
-Skriv som en changelog-rad, inte som en tweet.`,
+Skriv som en changelog-rad, inte som en tweet.
+Svara med ren text, ingen markdown-formatering (inga kodblock,
+ingen **fetstil**, inga #-headers).`,
     }],
   }),
 });
 const { content } = await claudeRes.json();
-const text = content.find(b => b.type === 'text').text.trim();
+const text = content.find(b => b.type === 'text').text
+  .trim()
+  .replace(/^```[a-z]*\n?/i, '')   // ta bort ledande kodblock-fence
+  .replace(/```$/, '')              // ta bort avslutande fence
+  .trim();
 
 // Bygg post-texten
 const postText = `📦 ${pkg.name}@${pkg.version}\n\n${text}\n\nhttps://npmjs.com/package/${pkg.name}`;
@@ -46,5 +52,4 @@ const { uri } = await agent.post({
   facets: rt.facets,
   createdAt: new Date().toISOString(),
 });
-
 console.log('Postat till Bluesky:', uri);
