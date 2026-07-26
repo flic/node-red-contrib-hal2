@@ -75,6 +75,10 @@
         },
         paletteLabel: "api",
         oneditprepare: function() {
+            // Nodes deployed before the Output field existed have no saved
+            // field/fieldType — default them so typedInput doesn't init empty.
+            if (!$("#node-input-field").val())     { $("#node-input-field").val("payload"); }
+            if (!$("#node-input-fieldType").val()) { $("#node-input-fieldType").val("msg"); }
             $("#node-input-field").typedInput({
                 types: ['msg', 'flow', 'global'],
                 typeField: $("#node-input-fieldType")
