@@ -139,26 +139,51 @@ History powers two tools:
 
 ## Bayes node
 
-`hal2Bayes` estimates a hidden binary state (e.g. *"is this person home?"*) from noisy
-observations, inspired by Home Assistant's Bayesian binary sensor but extended with event
-evidence, time decay and sequence rules. One node instance estimates one hypothesis.
+`hal2Bayes` estimates something you cannot measure directly — typically *"is this person
+home?"* — by weighing up several unreliable sensors instead of trusting any single one. A phone
+presence sensor that already reports "home" from the street corner is not enough on its own;
+combined with the front door opening and movement in the hallway, it becomes convincing. One
+node estimates one thing, so use one node per person.
 
-- **Observations** — each row watches a Thing item with a condition and a likelihood ratio
-  `LR = P(obs|true) / P(obs|false)`. **State** rows contribute `ln(LR)` while the condition
-  holds; **event** rows add a one-shot contribution on the condition's rising edge that decays
-  toward the prior with a configurable half-life. LR < 1 is negative evidence.
-- **Sequences** — composite rules like *"door open→closed within 3 min, confirmed by hall
-  motion within 2 min ⇒ someone entered (LR 30)"*. Rules flagged *only as candidate* apply
-  only while the output is off and a designated candidate-trigger row (e.g. the person's phone
-  sensor) fired recently — evaluated when the sequence arms, so anonymous door events never
-  boost someone already home.
-- **Hysteresis** — the binary output turns on at P ≥ on-threshold and off first at
-  P ≤ off-threshold. State survives restarts via node context and decays by wall clock.
-- **Outputs** — output 1 emits on binary change, output 2 a full probability snapshot
-  (`p`, `logOdds`, active terms, sequence state) for tuning. Optionally the estimate is written
-  to items on a Thing, making it first-class for `get_presence`, history and groups — always
-  use a dedicated item, never an observation source (the node refuses feedback loops).
-- **Input** — `msg.topic` `reset` / `set` / `evidence` (`{ lr, halfLife? }`) as escape hatches.
+### Simple mode (default)
+
+- **Sensors** — each row reads as a sentence: *when [sensor] is [on/off], that indicates
+  [yes/no], [slight…decisive]*. Strength is how much the observation should move the estimate:
+  **slight** is a weak hint, **decisive** is near-proof. Pick *indicates no* for sensors whose
+  state argues against what you are estimating.
+- **Entry detection** — a ready-made rule for people arriving: pick a door sensor, a motion
+  sensor, and which sensor row identifies the person. When the door opens and closes again and
+  movement follows, the estimate gets a strong boost — but only for someone not already home,
+  and only if their own sensor was seen shortly before. A door cycle with no movement is
+  ignored, so *"opened the door, forgot something in the car, closed it"* does not count.
+- **Output** — optionally mirror the result onto a Thing item so `get_presence`,
+  `get_all_states`, history and groups can see it. Never pick an item that is also one of the
+  node's own sensors; that would feed the result back into itself (the node detects it and
+  switches the write off).
+
+### Advanced mode
+
+A checkbox on the General tab unlocks the full model; rows are kept either way.
+
+- **Likelihood ratios** instead of word strengths: `LR = P(obs|true) / P(obs|false)`. **State**
+  rows contribute `ln(LR)` while their condition holds; **event** rows add a one-shot
+  contribution on the rising edge that fades with a configurable half-life. LR < 1 is negative
+  evidence.
+- **Sequences** — custom composite rules like *"door open→closed within 3 min, confirmed by
+  hall motion within 2 min ⇒ someone entered (LR 30)"* (this is what the entry template
+  expands to). Rules flagged *only as candidate* apply only while the output is off and a
+  designated candidate-trigger row fired recently — evaluated when the sequence arms, so
+  anonymous door events never boost someone already home.
+- **Model parameters** — prior, the two hysteresis thresholds (on at P ≥ on-threshold, off
+  first at P ≤ off-threshold, so the output does not flap), default half-life, log-odds clamp
+  and tick interval.
+- Rows authored in advanced mode that have no simple equivalent show read-only in simple mode —
+  they are never modified or dropped.
+
+The estimate survives restarts via node context and keeps fading by wall clock while Node-RED
+is down. Output 1 emits on change of the binary result; output 2 emits a full snapshot
+(`p`, `logOdds`, active terms, sequence state) for tuning. `msg.topic` `reset` / `set` /
+`evidence` (`{ lr, halfLife? }`) are available as escape hatches.
 
 ## Other recent additions
 

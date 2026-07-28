@@ -1,6 +1,7 @@
 'use strict';
 const assert = require('node:assert');
 const { createBayes, logit, sigmoid } = require('../lib/bayes');
+const { expandEntryTemplate } = require('../lib/bayesEntry');
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -352,5 +353,84 @@ describe('inject / reset / force / pruning', function() {
         b.handleEvent(['e'], true, 0);
         b.tick(30 * MIN);                               // ln3 · 2^-30 ≈ 1e-9 — dead
         assert.strictEqual(b.evaluate(noState, 30 * MIN).terms.length, 0);
+    });
+});
+
+// ---- 11. entry template expander --------------------------------------------
+
+describe('expandEntryTemplate', function() {
+    function rawConfig(overrides) {
+        return Object.assign({
+            observations: [{ id: 'r1', name: 'radio', thing: 't1', item: 'i1', type: 'event',
+                operator: 'true', value: '', valueType: 'str', lr: 3, halfLife: '', onlyAsCandidate: false }],
+            composites: [],
+            candidateRow: '', candidateWindow: 300,
+            entry: { door: { thing: 'td', item: 'id' }, motion: { thing: 'tm', item: 'im' }, personRow: 'r1' }
+        }, overrides);
+    }
+
+    it('absent or incomplete template is a no-op', function() {
+        for (const entry of [undefined, null, {},
+                { door: { thing: 'td', item: 'id' } },                                        // no motion
+                { door: { thing: 'td' }, motion: { thing: 'tm', item: 'im' } }]) {            // door item missing
+            const input = rawConfig({ entry });
+            const { config, warnings } = expandEntryTemplate(input);
+            assert.strictEqual(config, input);            // same object — untouched
+            assert.deepStrictEqual(warnings, []);
+        }
+    });
+
+    it('full template expands to two lr-1 event rows and one composite with defaults', function() {
+        const input = rawConfig({});
+        const { config, warnings } = expandEntryTemplate(input);
+        assert.deepStrictEqual(warnings, []);
+
+        const added = config.observations.filter(r => r.id.startsWith('__entry'));
+        assert.strictEqual(added.length, 2);
+        for (const r of added) {
+            assert.strictEqual(r.type, 'event');
+            assert.strictEqual(r.operator, 'true');
+            assert.strictEqual(r.lr, 1);
+        }
+        assert.deepStrictEqual(added.map(r => [r.thing, r.item]), [['td', 'id'], ['tm', 'im']]);
+
+        assert.strictEqual(config.composites.length, 1);
+        const c = config.composites[0];
+        assert.deepStrictEqual(
+            [c.id, c.armRow, c.armPattern, c.cycleMax, c.confirmRow, c.confirmWindow, c.confirmDuringArm, c.lr, c.onlyAsCandidate],
+            ['__entry', '__entry_door', 'cycle', 180, '__entry_motion', 120, true, 30, true]);
+
+        assert.strictEqual(config.candidateRow, 'r1');
+        assert.strictEqual(config.candidateWindow, 300);
+    });
+
+    it('an explicit candidate trigger wins over the person row, with a warning', function() {
+        const { config, warnings } = expandEntryTemplate(rawConfig({ candidateRow: 'r9' }));
+        assert.strictEqual(config.candidateRow, 'r9');
+        assert.strictEqual(warnings.length, 1);
+    });
+
+    it('does not mutate its input', function() {
+        const input = rawConfig({});
+        const snapshot = JSON.parse(JSON.stringify(input));
+        expandEntryTemplate(input);
+        assert.deepStrictEqual(input, snapshot);
+    });
+
+    it('expanded config drives createBayes: door cycle + motion fires __entry', function() {
+        const { config } = expandEntryTemplate(rawConfig({}));
+        const b = createBayes({
+            prior: 0.2, pOn: 0.85, pOff: 0.30, clamp: 6, halfLifeMs: 20 * MIN,
+            observations: config.observations.map(r => Object.assign({}, r, { halfLifeMs: null })),
+            composites: config.composites.map(c => Object.assign({}, c, {
+                cycleMaxMs: c.cycleMax * 1000, confirmWindowMs: c.confirmWindow * 1000 })),
+            candidateRow: config.candidateRow, candidateWindowMs: config.candidateWindow * 1000
+        });
+        b.handleEvent(['r1'], true, 0);                       // person's sensor → candidate
+        b.handleEvent(['__entry_door'], true, MIN);
+        b.handleEvent(['__entry_door'], false, 2 * MIN);      // valid cycle
+        b.handleEvent(['__entry_motion'], true, 2.5 * MIN);   // confirm
+        const terms = b.evaluate(noState, 3 * MIN).terms;
+        assert.strictEqual(terms.filter(t => t.src === '__entry').length, 1);
     });
 });

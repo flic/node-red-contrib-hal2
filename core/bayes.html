@@ -15,43 +15,82 @@
                 <label for="node-input-name" style="width:130px;"><i class="fa fa-tag"></i> Name</label>
                 <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 160px)">
             </div>
-            <div class="form-row">
+            <div class="form-row hal2bayes-adv">
                 <label for="node-input-topic" style="width:130px;"><i class="fa fa-comment"></i> Topic</label>
                 <input type="text" id="node-input-topic" placeholder="bayes/<name>" style="width:calc(100% - 160px)">
             </div>
-            <div class="form-row">
+            <div class="form-row hal2bayes-adv">
                 <label for="node-input-prior" style="width:130px;"><i class="fa fa-balance-scale"></i> Prior</label>
                 <input type="number" id="node-input-prior" min="0.001" max="0.999" step="0.01" style="width:80px">
             </div>
-            <div class="form-row">
+            <div class="form-row hal2bayes-adv">
                 <label for="node-input-pOn" style="width:130px;"><i class="fa fa-toggle-on"></i> On threshold</label>
                 <input type="number" id="node-input-pOn" min="0" max="1" step="0.01" style="width:80px">
                 <label for="node-input-pOff" style="width:110px; margin-left:16px;"><i class="fa fa-toggle-off"></i> Off threshold</label>
                 <input type="number" id="node-input-pOff" min="0" max="1" step="0.01" style="width:80px">
             </div>
-            <div class="form-row">
+            <div class="form-row hal2bayes-adv">
                 <label for="node-input-halfLife" style="width:130px;"><i class="fa fa-hourglass-half"></i> Half-life (s)</label>
                 <input type="number" id="node-input-halfLife" min="1" style="width:80px">
             </div>
-            <div class="form-row">
+            <div class="form-row hal2bayes-adv">
                 <label for="node-input-clamp" style="width:130px;"><i class="fa fa-compress"></i> Log-odds clamp</label>
                 <input type="number" id="node-input-clamp" min="1" max="20" step="0.5" style="width:80px">
                 <label for="node-input-tickInterval" style="width:110px; margin-left:16px;"><i class="fa fa-clock-o"></i> Tick (s)</label>
                 <input type="number" id="node-input-tickInterval" min="5" style="width:80px">
             </div>
-            <div class="form-tips">The estimate starts at <b>Prior</b> and is pushed by evidence. Output turns
-            on at P &ge; <b>On threshold</b> and off first at P &le; <b>Off threshold</b> (hysteresis).
-            Event evidence decays toward the prior with <b>Half-life</b> unless a row overrides it.</div>
+            <div class="form-tips hal2bayes-adv">The estimate starts at <b>Prior</b> and is pushed by evidence. The output turns
+            on at P &ge; <b>On threshold</b> and off first at P &le; <b>Off threshold</b>, so it does not flap.
+            One-off evidence fades with <b>Half-life</b> unless a sensor overrides it.</div>
+
+            <div class="form-row" style="margin-top:18px; border-top:1px solid #ddd; padding-top:12px;">
+                <label for="node-input-advanced" style="width:auto"><i class="fa fa-sliders"></i> Advanced mode</label>
+                <input type="checkbox" id="node-input-advanced" style="display:inline-block; width:auto; vertical-align:top;">
+            </div>
+            <div class="form-tips hal2bayes-simple">Advanced mode exposes likelihood ratios, one-off evidence with
+            decay, custom sequence rules and the model parameters. Your sensors are kept either way.</div>
         </div>
 
         <div id="hal2bayes-tab-observations" style="display:none">
             <div class="form-row node-input-observation-container-row">
                 <ol id="node-input-observation-container"></ol>
             </div>
-            <div class="form-tips"><b>State</b> rows contribute their LR while the condition holds.
+            <div class="form-tips hal2bayes-simple">Each sensor nudges the estimate while it is in the chosen state.
+            <b>Slight</b> is a weak hint, <b>decisive</b> is near-proof. Pick <i>indicates no</i> for sensors whose
+            state argues <i>against</i> what you are estimating.</div>
+            <div class="form-tips hal2bayes-adv"><b>State</b> rows contribute their LR while the condition holds.
             <b>Event</b> rows add a one-shot contribution when the condition becomes true, which then
             decays with the half-life. LR &gt; 1 raises the probability, LR &lt; 1 lowers it, LR = 1 is
             a building block for sequences only.</div>
+        </div>
+
+        <div id="hal2bayes-tab-entry" style="display:none">
+            <div class="form-tips" style="margin-bottom:12px;">Detects someone actually coming in: the door opens and
+            closes again, and movement is seen in the hallway. A door cycle with no movement (opened the door, changed
+            your mind) does not count. This only ever <i>adds</i> confidence, and never for someone already home.</div>
+            <div class="form-row">
+                <label for="node-input-entryDoorThing" style="width:130px;"><i class="fa fa-microchip"></i> Door sensor</label>
+                <select id="node-input-entryDoorThing" style="width:calc(100% - 160px)"></select>
+            </div>
+            <div class="form-row">
+                <label for="node-input-entryDoorItem" style="width:130px;"><i class="fa fa-sitemap"></i> Door item</label>
+                <select id="node-input-entryDoorItem" style="width:calc(100% - 160px)"></select>
+            </div>
+            <div class="form-row" style="margin-top:14px;">
+                <label for="node-input-entryMotionThing" style="width:130px;"><i class="fa fa-microchip"></i> Motion sensor</label>
+                <select id="node-input-entryMotionThing" style="width:calc(100% - 160px)"></select>
+            </div>
+            <div class="form-row">
+                <label for="node-input-entryMotionItem" style="width:130px;"><i class="fa fa-sitemap"></i> Motion item</label>
+                <select id="node-input-entryMotionItem" style="width:calc(100% - 160px)"></select>
+            </div>
+            <div class="form-row" style="margin-top:14px;">
+                <label for="node-input-entryPersonRow" style="width:130px;"><i class="fa fa-user"></i> Person's sensor</label>
+                <select id="node-input-entryPersonRow" style="width:calc(100% - 160px)"></select>
+            </div>
+            <div class="form-tips">The <b>person's sensor</b> (from the Sensors tab, e.g. a phone) decides <i>who</i> came in:
+            the boost is only applied if that sensor was seen shortly before the door cycle. Leave the door or motion
+            sensor unset to switch entry detection off.</div>
         </div>
 
         <div id="hal2bayes-tab-sequences" style="display:none">
@@ -70,7 +109,7 @@
             the cycle limit) and applies its LR when the <b>confirm row</b> fires within the window.
             Rows flagged <i>only as candidate</i> apply only while the output is off and the
             <b>candidate trigger</b> row fired within the candidate window &mdash; evaluated when the
-            sequence arms.</div>
+            sequence arms. A candidate trigger set here overrides the entry template's person sensor.</div>
         </div>
 
         <div id="hal2bayes-tab-output" style="display:none">
@@ -86,185 +125,316 @@
                 <label for="node-input-outProbItem" style="width:130px;"><i class="fa fa-percent"></i> Probability item</label>
                 <select id="node-input-outProbItem" style="width:calc(100% - 160px)"></select>
             </div>
-            <div class="form-row">
+            <div class="form-row hal2bayes-adv">
                 <label for="node-input-snapshotOnTick" style="width:auto">
                     <i class="fa fa-camera"></i> Emit snapshot on every tick</label>
                 <input type="checkbox" id="node-input-snapshotOnTick" style="display:inline-block; width:auto; vertical-align:top;">
             </div>
-            <div class="form-tips"><b>Warning:</b> never write the estimate to an item that is also an
-            observation source &mdash; that creates a feedback loop (the node detects this and disables
-            write-back). Use a separate item, e.g. a dedicated <i>estimated presence</i> item.</div>
+            <div class="form-tips">Optional: mirror the result onto a thing so the rest of hal2 can see it.
+            <b>Never</b> pick an item that is also one of your sensors &mdash; that feeds the result back into
+            itself (the node detects this and switches the write off). Use a separate item.</div>
         </div>
 
     </div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Bayes">
-    <p>Probabilistic binary-state estimator (naive Bayes in log-odds), inspired by Home
-    Assistant's Bayesian binary sensor. Fuses noisy observations &mdash; e.g. a phone presence
-    sensor, a door contact and a hall motion sensor &mdash; into one probability with hysteresis.
-    One node estimates <i>one</i> hidden state (e.g. one person being home).</p>
+    <p>Estimates something you cannot measure directly &mdash; typically <i>"is this person home?"</i> &mdash;
+    by weighing up several unreliable sensors instead of trusting any single one. A phone presence
+    sensor that already reports "home" from the street corner is not enough on its own; combined with
+    the front door opening and movement in the hallway, it becomes convincing. One node estimates one
+    thing, so use one node per person.</p>
 
-    <h3>Model</h3>
-    <p>The log-odds start at <code>logit(prior)</code>. Each <b>state</b> observation adds
-    <code>ln(LR)</code> while its condition holds. Each <b>event</b> observation adds
-    <code>ln(LR)</code> when its condition becomes true; that contribution then halves every
-    half-life. <code>LR = P(observation | state true) / P(observation | state false)</code> &mdash;
-    e.g. LR 3 &asymp; 0.75/0.25. Use LR &lt; 1 for negative evidence. The binary output uses
-    hysteresis: on at P &ge; on-threshold, off first at P &le; off-threshold.</p>
+    <h3>Simple mode</h3>
+    <p>On the <b>Sensors</b> tab each row reads as a sentence: <i>when [sensor] is [on/off], that
+    indicates [yes/no], [slight&hellip;decisive]</i>. Strength is how much that observation should move
+    the estimate &mdash; <b>slight</b> is a weak hint, <b>decisive</b> is near-proof. Sensors keep
+    contributing for as long as they stay in that state.</p>
+    <p>The <b>Entry detection</b> tab is a ready-made rule for people arriving: pick a door sensor, a
+    motion sensor, and which of your sensor rows identifies the person. When the door opens and closes
+    again and movement follows, the estimate gets a strong boost &mdash; but only for someone who is not
+    already home, and only if their own sensor was seen shortly before. A door cycle with no movement
+    is ignored, so "opened the door, forgot something in the car, closed it" does not count as arriving.</p>
 
-    <h3>Sequences</h3>
-    <p>Sequence rules express things like "door cycle confirmed by hall motion &rArr; someone
-    entered (LR 30)". A <i>cycle</i> arm requires the arm condition to go true&rarr;false within the
-    cycle limit (door opened then closed); an <i>edge</i> arm fires on the rising edge alone. A hit on
-    the confirm row during the arm phase (if enabled) or within the confirm window applies the LR.
-    <i>Only as candidate</i> restricts the boost to when the output is off <b>and</b> the candidate
-    trigger row (e.g. the phone sensor) fired recently &mdash; frozen at arm time, so someone already
-    home is never boosted by an anonymous door event (exit protection).</p>
+    <h3>Advanced mode</h3>
+    <p>The checkbox at the bottom of <b>General</b> unlocks the full model: raw likelihood ratios
+    (<code>LR = P(observation | true) / P(observation | false)</code>) instead of word strengths,
+    <b>event</b> rows whose contribution fades with a half-life, all comparison operators, custom
+    sequence rules on the <b>Sequences</b> tab, and the model parameters (prior, thresholds, clamp).
+    Rows written in advanced mode that have no simple equivalent are shown read-only in simple mode &mdash;
+    they are never modified or dropped.</p>
+    <p>Internally the estimate is a log-odds sum: it starts at <code>logit(prior)</code>, each active
+    observation adds <code>ln(LR)</code>, and one-off evidence decays toward zero. The binary output
+    uses two thresholds so it does not flap around a single value.</p>
 
     <h3>Input</h3>
-    <p><code>msg.topic</code>: <code>reset</code> (back to prior), <code>set</code> (force binary
-    state, payload true/false), <code>evidence</code> (inject ad-hoc evidence, payload
+    <p><code>msg.topic</code>: <code>reset</code> (back to the prior), <code>set</code> (force the output,
+    payload true/false), <code>evidence</code> (inject ad-hoc evidence, payload
     <code>{ lr, halfLife? }</code>). Any other message emits a snapshot on output 2.</p>
 
     <h3>Outputs</h3>
-    <p><b>1:</b> on binary change &mdash; <code>payload</code> true/false, <code>probability</code>.
+    <p><b>1:</b> on change of the binary result &mdash; <code>payload</code> true/false, <code>probability</code>.
     <b>2:</b> snapshot <code>{ p, logOdds, binary, activeStateRows, terms, fsm }</code> on every
-    sensor evaluation (and every tick if enabled).</p>
+    sensor evaluation (and every tick if enabled). Use output 2 to watch the estimate while tuning.</p>
 
     <h3>Write-back</h3>
-    <p>Optionally writes the binary estimate (and rounded probability) to items on a thing, making
-    it visible to <code>get_presence</code>, <code>get_all_states</code>, history and groups. Point
-    it at a <i>dedicated</i> item &mdash; never at an observation source (feedback loop; the node
-    refuses). For person things: give the estimated item the <code>presence</code> ha_type and
-    retype the raw radio item as <code>binary_sensor</code>, since <code>get_presence</code> uses
-    the first presence item.</p>
+    <p>Optionally writes the result (and rounded probability) to items on a thing, making it visible to
+    <code>get_presence</code>, <code>get_all_states</code>, history and groups. Point it at a
+    <i>dedicated</i> item &mdash; never at one of its own sensors, which would feed the result back into
+    itself (the node refuses). For a person, give the estimated item the <code>presence</code> ha_type and
+    change the raw phone item to <code>binary_sensor</code>, since <code>get_presence</code> reads the
+    first presence item it finds.</p>
 
     <h3>Notes</h3>
-    <p>The estimator state is persisted in node context (the event handler's context store), so the
-    posterior survives restarts and decays by wall clock. The node subscribes once per distinct
-    thing; many observation things may require raising the event handler's max listeners.</p>
+    <p>The estimate is persisted in node context (the event handler's context store), so it survives
+    restarts and keeps fading by wall clock while Node-RED is down. The node subscribes once per distinct
+    thing; many sensors across many things may require raising the event handler's max listeners.</p>
 </script>
 
 <script type="text/javascript">
-    RED.nodes.registerType('hal2Bayes', {
-        category: 'Home Automation',
-        color: '#b3b3ff',
-        defaults: {
-            eventHandler:    { value: "Event handler", type: "hal2EventHandler", required: true },
-            name:            {},
-            topic:           { value: "" },
-            prior:           { value: 0.2 },
-            pOn:             { value: 0.85 },
-            pOff:            { value: 0.30, validate: function(v) {
-                                   return Number(v) < Number($("#node-input-pOn").val() || this.pOn); } },
-            clamp:           { value: 6 },
-            halfLife:        { value: 1200 },
-            tickInterval:    { value: 30 },
-            observations:    { value: [] },
-            composites:      { value: [] },
-            candidateRow:    { value: "" },
-            candidateWindow: { value: 300 },
-            outThing:        { value: "" },
-            outItem:         { value: "" },
-            outProbItem:     { value: "" },
-            snapshotOnTick:  { value: false }
-        },
-        inputs: 1,
-        outputs: 2,
-        outputLabels: ["state change", "snapshot"],
-        icon: "font-awesome/fa-pie-chart",
-        label: function() { return this.name || "bayes"; },
-        paletteLabel: "bayes",
+    (function() {
+        // Word strengths ⇄ likelihood ratios. The mapping is bijective, so a row's simple-mode
+        // representation is derived from its stored lr — no extra fields are persisted, and
+        // toggling modes can never leave a stale label behind.
+        var STRENGTHS = [
+            { v: 'slight',   t: 'slight',   lr: 1.5 },
+            { v: 'moderate', t: 'moderate', lr: 3 },
+            { v: 'strong',   t: 'strong',   lr: 10 },
+            { v: 'decisive', t: 'decisive', lr: 30 }
+        ];
 
-        oneditprepare: function() {
-            var node = this;
-            var thingsList = halGetThings(RED, 'status');
+        function lrFor(strength, direction) {
+            var s = STRENGTHS.filter(function(x) { return x.v === strength; })[0] || STRENGTHS[1];
+            return direction === 'false' ? String(Number((1 / s.lr).toFixed(4))) : String(s.lr);
+        }
 
-            // ── Tabs ─────────────────────────────────────────────────────────
-            var tabs = RED.tabs.create({
-                id: 'hal2bayes-tabs',
-                onchange: function(tab) {
-                    $('#hal2bayes-tabs-content').children().hide();
-                    $('#' + tab.id).show();
+        // → { strength, direction } when the row is expressible in simple mode, else null.
+        function simpleView(row) {
+            if (!row) { return null; }
+            if (row.type !== 'state') { return null; }
+            if (row.operator !== 'true' && row.operator !== 'false') { return null; }
+            if (row.halfLife !== '' && row.halfLife !== undefined && row.halfLife !== null) { return null; }
+            if (row.onlyAsCandidate === true) { return null; }
+            var lr = Number(row.lr);
+            if (!(lr > 0) || lr === 1) { return null; }
+            var direction = lr > 1 ? 'true' : 'false';
+            var mag = lr > 1 ? lr : 1 / lr;
+            for (var i = 0; i < STRENGTHS.length; i++) {
+                if (Math.abs(mag - STRENGTHS[i].lr) / STRENGTHS[i].lr < 0.01) {
+                    return { strength: STRENGTHS[i].v, direction: direction };
                 }
-            });
-            tabs.addTab({ id: 'hal2bayes-tab-general',      label: 'General' });
-            tabs.addTab({ id: 'hal2bayes-tab-observations', label: 'Observations' });
-            tabs.addTab({ id: 'hal2bayes-tab-sequences',    label: 'Sequences' });
-            tabs.addTab({ id: 'hal2bayes-tab-output',       label: 'Output' });
-
-            // ── helpers ──────────────────────────────────────────────────────
-            function fillThingSelect(sel, current, emptyLabel) {
-                sel.empty();
-                if (emptyLabel !== undefined) { sel.append($("<option></option>").val('').text(emptyLabel)); }
-                for (var t in thingsList) {
-                    sel.append($("<option></option>").val(thingsList[t].id).text(thingsList[t].name));
-                }
-                if (current) { sel.val(current); }
             }
+            return null;
+        }
 
-            function fillItemSelect(sel, thingId, current, emptyLabel) {
-                sel.empty();
-                if (emptyLabel !== undefined) { sel.append($("<option></option>").val('').text(emptyLabel)); }
-                var thing = null;
-                try { thing = RED.nodes.node(thingId); } catch (e) {}
-                var thingType = thing ? RED.nodes.node(thing.thingType) : null;
-                if (thingType) {
-                    for (var d in thingType.items) {
-                        if (halStatusItem(thingType.items[d])) {
-                            sel.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
-                        }
+        RED.nodes.registerType('hal2Bayes', {
+            category: 'Home Automation',
+            color: '#b3b3ff',
+            defaults: {
+                eventHandler:    { value: "Event handler", type: "hal2EventHandler", required: true },
+                name:            {},
+                advanced:        { value: false },
+                topic:           { value: "" },
+                prior:           { value: 0.2 },
+                pOn:             { value: 0.85 },
+                pOff:            { value: 0.30, validate: function(v) {
+                                       return Number(v) < Number($("#node-input-pOn").val() || this.pOn); } },
+                clamp:           { value: 6 },
+                halfLife:        { value: 1200 },
+                tickInterval:    { value: 30 },
+                observations:    { value: [] },
+                composites:      { value: [] },
+                candidateRow:    { value: "" },
+                candidateWindow: { value: 300 },
+                entry:           { value: null },
+                outThing:        { value: "" },
+                outItem:         { value: "" },
+                outProbItem:     { value: "" },
+                snapshotOnTick:  { value: false }
+            },
+            inputs: 1,
+            outputs: 2,
+            outputLabels: ["state change", "snapshot"],
+            icon: "font-awesome/fa-pie-chart",
+            label: function() { return this.name || "bayes"; },
+            paletteLabel: "bayes",
+
+            oneditprepare: function() {
+                var node = this;
+                var thingsList = halGetThings(RED, 'status');
+
+                // Nodes saved before simple mode existed: anything actually configured opens
+                // in advanced mode, so its rows are never shown as read-only cards.
+                var advanced = (node.advanced === undefined || node.advanced === null)
+                    ? ((node.observations || []).length > 0 || (node.composites || []).length > 0)
+                    : node.advanced === true;
+                $("#node-input-advanced").prop('checked', advanced);
+
+                var tabs = RED.tabs.create({
+                    id: 'hal2bayes-tabs',
+                    onchange: function(tab) {
+                        $('#hal2bayes-tabs-content').children().hide();
+                        $('#' + tab.id).show();
                     }
-                }
-                if (current) { sel.val(current); }
-            }
-
-            // Collect current observation rows (id + name) for reference dropdowns.
-            function observationOptions() {
-                var opts = [];
-                $("#node-input-observation-container").children().each(function() {
-                    var el = $(this);
-                    var id = el.data('rowId');
-                    if (!id) { return; }
-                    opts.push({ id: id, name: el.find('.bayes-obs-name').val() || id });
                 });
-                return opts;
-            }
+                tabs.addTab({ id: 'hal2bayes-tab-general',      label: 'General' });
+                tabs.addTab({ id: 'hal2bayes-tab-observations', label: 'Sensors' });
+                tabs.addTab({ id: 'hal2bayes-tab-entry',        label: 'Entry detection' });
+                tabs.addTab({ id: 'hal2bayes-tab-sequences',    label: 'Sequences' });
+                tabs.addTab({ id: 'hal2bayes-tab-output',       label: 'Output' });
 
-            // Rebuild a row-reference select on focus so it always reflects current rows.
-            function rowRefSelect(sel, getCurrent, emptyLabel) {
-                function fill() {
-                    var current = getCurrent();
+                // ── shared helpers ───────────────────────────────────────────
+                function fillThingSelect(sel, current, emptyLabel) {
                     sel.empty();
                     if (emptyLabel !== undefined) { sel.append($("<option></option>").val('').text(emptyLabel)); }
-                    observationOptions().forEach(function(o) {
-                        sel.append($("<option></option>").val(o.id).text(o.name));
-                    });
+                    for (var t in thingsList) {
+                        sel.append($("<option></option>").val(thingsList[t].id).text(thingsList[t].name));
+                    }
                     if (current) { sel.val(current); }
                 }
-                sel.on('focus', fill);
-                fill();
-            }
 
-            function lrHint(lr) {
-                var n = Number(lr);
-                if (!(n > 0)) { return ''; }
-                return 'P(obs|true)=' + (n / (1 + n)).toFixed(2) + ' / P(obs|false)=' + (1 / (1 + n)).toFixed(2);
-            }
+                function fillItemSelect(sel, thingId, current, emptyLabel) {
+                    sel.empty();
+                    if (emptyLabel !== undefined) { sel.append($("<option></option>").val('').text(emptyLabel)); }
+                    var thing = null;
+                    try { thing = RED.nodes.node(thingId); } catch (e) {}
+                    var thingType = thing ? RED.nodes.node(thing.thingType) : null;
+                    if (thingType) {
+                        for (var d in thingType.items) {
+                            if (halStatusItem(thingType.items[d])) {
+                                sel.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                            }
+                        }
+                    }
+                    if (current) { sel.val(current); }
+                }
 
-            var label = function(row, icon, text) {
-                return $('<div/>', { style: "display:inline-block;text-align:left; width:90px; padding-right:10px; box-sizing:border-box;", class: icon })
-                    .appendTo(row).append(' ' + text);
-            };
+                var label = function(row, icon, text, width) {
+                    return $('<div/>', { style: "display:inline-block;text-align:left; width:" + (width || 90) +
+                        "px; padding-right:10px; box-sizing:border-box;", class: icon })
+                        .appendTo(row).append(' ' + text);
+                };
 
-            // ── Observations list ────────────────────────────────────────────
-            $("#node-input-observation-container").editableList({
-                addItem: function(container, i, opt) {
-                    var row = opt.id ? opt : { id: halCreateId(), name: '', thing: '', item: '',
-                        type: 'event', operator: 'true', value: '', valueType: 'str',
-                        lr: 3, halfLife: '', onlyAsCandidate: false };
-                    container.data('rowId', row.id);
+                // ── observation rows ─────────────────────────────────────────
+                // Harvest is shared by oneditsave and the advanced toggle, so switching modes
+                // never loses in-progress edits. Read-only advanced rows return their original
+                // object verbatim — simple mode never rebuilds fields it did not render.
+                function harvestObservations() {
+                    var rows = [];
+                    $("#node-input-observation-container").children().each(function() {
+                        var el = $(this);
+                        var original = el.data('row');
+                        if (el.data('readonly')) { rows.push(original); return; }
+                        if (el.data('simple')) {
+                            rows.push($.extend({}, original, {
+                                name:      el.find('.bayes-obs-name').val(),
+                                thing:     el.find('.bayes-obs-thing option:selected').val(),
+                                item:      el.find('.bayes-obs-item option:selected').val(),
+                                type:      'state',
+                                operator:  el.find('.bayes-obs-when option:selected').val(),
+                                value:     '',
+                                valueType: 'str',
+                                lr:        lrFor(el.find('.bayes-obs-strength option:selected').val(),
+                                                 el.find('.bayes-obs-indicates option:selected').val()),
+                                halfLife:  '',
+                                onlyAsCandidate: false
+                            }));
+                            return;
+                        }
+                        rows.push({
+                            id:              original.id,
+                            name:            el.find('.bayes-obs-name').val(),
+                            thing:           el.find('.bayes-obs-thing option:selected').val(),
+                            item:            el.find('.bayes-obs-item option:selected').val(),
+                            type:            el.find('.bayes-obs-type option:selected').val(),
+                            operator:        el.find('.bayes-obs-operator option:selected').val(),
+                            value:           el.find('.bayes-obs-value').typedInput('value'),
+                            valueType:       el.find('.bayes-obs-value').typedInput('type'),
+                            lr:              el.find('.bayes-obs-lr').val(),
+                            halfLife:        el.find('.bayes-obs-halflife').val(),
+                            onlyAsCandidate: el.find('.bayes-obs-cand').is(':checked')
+                        });
+                    });
+                    return rows;
+                }
+
+                // Current rows (id + name) for the reference dropdowns.
+                function observationOptions() {
+                    return harvestObservations().map(function(r) {
+                        return { id: r.id, name: r.name || r.id };
+                    });
+                }
+
+                function rowRefSelect(sel, currentVal, emptyLabel) {
+                    function fill() {
+                        var current = sel.val() || currentVal;
+                        sel.empty();
+                        if (emptyLabel !== undefined) { sel.append($("<option></option>").val('').text(emptyLabel)); }
+                        observationOptions().forEach(function(o) {
+                            sel.append($("<option></option>").val(o.id).text(o.name));
+                        });
+                        if (current) { sel.val(current); }
+                    }
+                    sel.on('focus', fill);
+                    fill();
+                }
+
+                function addSimpleRow(container, row, view) {
+                    container.data({ row: row, simple: true, readonly: false });
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    var rowName = $('<div/>').appendTo(container);
+                    var rowThing = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                    var rowItem = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                    var rowRule = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+
+                    label(rowName, 'fa fa-tag', 'Name');
+                    $('<input/>', { class: "bayes-obs-name", type: "text", style: "width:calc(100% - 110px)" })
+                        .appendTo(rowName).val(row.name);
+
+                    label(rowThing, 'fa fa-microchip', 'Sensor');
+                    var thingField = $('<select/>', { class: "bayes-obs-thing", style: "width:calc(100% - 110px)" }).appendTo(rowThing);
+
+                    label(rowItem, 'fa fa-sitemap', 'Item');
+                    var itemField = $('<select/>', { class: "bayes-obs-item", style: "width:calc(100% - 110px)" }).appendTo(rowItem);
+
+                    label(rowRule, 'fa fa-question', 'When it is');
+                    var whenField = $('<select/>', { class: "bayes-obs-when", style: "width:70px" }).appendTo(rowRule);
+                    whenField.append($("<option></option>").val('true').text('on'));
+                    whenField.append($("<option></option>").val('false').text('off'));
+                    $('<span/>', { style: "margin:0 6px; color:#888;" }).appendTo(rowRule).text('indicates');
+                    var indField = $('<select/>', { class: "bayes-obs-indicates", style: "width:70px" }).appendTo(rowRule);
+                    indField.append($("<option></option>").val('true').text('yes'));
+                    indField.append($("<option></option>").val('false').text('no'));
+                    $('<span/>', { style: "margin:0 6px; color:#888;" }).appendTo(rowRule).text('&mdash;');
+                    var strField = $('<select/>', { class: "bayes-obs-strength", style: "width:100px" }).appendTo(rowRule);
+                    STRENGTHS.forEach(function(s) { strField.append($("<option></option>").val(s.v).text(s.t)); });
+
+                    thingField.change(function() {
+                        fillItemSelect(itemField, thingField.val(), (thingField.val() === row.thing) ? row.item : null);
+                    });
+                    fillThingSelect(thingField, row.thing);
+                    thingField.trigger('change');
+                    whenField.val(row.operator);
+                    indField.val(view.direction);
+                    strField.val(view.strength);
+                }
+
+                function addReadonlyRow(container, row) {
+                    container.data({ row: row, simple: false, readonly: true });
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap', opacity: 0.75 });
+                    var thing = null;
+                    try { thing = RED.nodes.node(row.thing); } catch (e) {}
+                    $('<div/>').appendTo(container)
+                        .append($('<span/>', { class: "fa fa-lock", style: "margin-right:8px; color:#888;" }))
+                        .append($('<b/>').text(row.name || '(unnamed)'))
+                        .append($('<span/>', { style: "color:#888;" }).text(' — ' + (thing ? thing.name : row.thing)));
+                    $('<div/>', { style: "margin-top:4px; color:#888; font-size:0.9em;" }).appendTo(container)
+                        .text('Advanced row (' + row.type + ', LR ' + row.lr + ') — enable advanced mode to edit');
+                }
+
+                function addAdvancedRow(container, row) {
+                    container.data({ row: row, simple: false, readonly: false });
                     container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
 
                     var rowName = $('<div/>').appendTo(container);
@@ -275,7 +445,7 @@
                     var rowEvent = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
 
                     label(rowName, 'fa fa-tag', 'Name');
-                    var nameField = $('<input/>', { class: "bayes-obs-name", type: "text", style: "width:calc(100% - 110px)" })
+                    $('<input/>', { class: "bayes-obs-name", type: "text", style: "width:calc(100% - 110px)" })
                         .appendTo(rowName).val(row.name);
 
                     label(rowThing, 'fa fa-microchip', 'Thing');
@@ -297,16 +467,21 @@
                     label(rowLr, 'fa fa-balance-scale', 'LR');
                     var lrField = $('<input/>', { class: "bayes-obs-lr", type: "number", min: "0.001", step: "0.1", style: "width:80px" })
                         .appendTo(rowLr).val(row.lr);
-                    var hintField = $('<span/>', { style: "margin-left:10px; color:#888; font-size:0.9em;" })
-                        .appendTo(rowLr).text(lrHint(row.lr));
-                    lrField.on('input', function() { hintField.text(lrHint(lrField.val())); });
+                    var hintField = $('<span/>', { style: "margin-left:10px; color:#888; font-size:0.9em;" }).appendTo(rowLr);
+                    function lrHint() {
+                        var n = Number(lrField.val());
+                        hintField.text(n > 0 ? 'P(obs|true)=' + (n / (1 + n)).toFixed(2) +
+                            ' / P(obs|false)=' + (1 / (1 + n)).toFixed(2) : '');
+                    }
+                    lrField.on('input', lrHint);
+                    lrHint();
 
                     label(rowEvent, 'fa fa-hourglass-half', 'Half-life');
-                    var hlField = $('<input/>', { class: "bayes-obs-halflife", type: "number", min: "1", placeholder: "default", style: "width:80px" })
+                    $('<input/>', { class: "bayes-obs-halflife", type: "number", min: "1", placeholder: "default", style: "width:80px" })
                         .appendTo(rowEvent).val(row.halfLife);
                     $('<span/>', { style: "margin-left:4px; color:#888;" }).appendTo(rowEvent).text('s');
                     var candLabel = $('<label/>', { style: "width:auto; margin-left:16px; display:inline-block;" }).appendTo(rowEvent);
-                    var candField = $('<input/>', { class: "bayes-obs-cand", type: "checkbox", style: "width:auto; vertical-align:middle;" })
+                    $('<input/>', { class: "bayes-obs-cand", type: "checkbox", style: "width:auto; vertical-align:middle;" })
                         .appendTo(candLabel).prop('checked', row.onlyAsCandidate === true);
                     candLabel.append(' only as candidate');
 
@@ -323,153 +498,235 @@
                     thingField.trigger('change');
                     typeField.val(row.type).trigger('change');
                     opField.val(row.operator).trigger('change');
-                },
-                removable: true,
-                sortable: true,
-                height: 'auto',
-                addButton: "Observation"
-            });
-            (node.observations || []).forEach(function(row) {
-                $("#node-input-observation-container").editableList('addItem', row);
-            });
-
-            // ── Sequences list ───────────────────────────────────────────────
-            $("#node-input-composite-container").editableList({
-                addItem: function(container, i, opt) {
-                    var comp = opt.id ? opt : { id: halCreateId(), name: '', armRow: '', armPattern: 'cycle',
-                        cycleMax: 180, confirmRow: '', confirmWindow: 120, confirmDuringArm: true,
-                        lr: 30, onlyAsCandidate: true };
-                    container.data('compId', comp.id);
-                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
-
-                    var rowName = $('<div/>').appendTo(container);
-                    var rowArm = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
-                    var rowPattern = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
-                    var rowConfirm = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
-                    var rowWindow = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
-                    var rowLr = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
-
-                    label(rowName, 'fa fa-tag', 'Name');
-                    var nameField = $('<input/>', { class: "bayes-comp-name", type: "text", style: "width:calc(100% - 110px)" })
-                        .appendTo(rowName).val(comp.name);
-
-                    label(rowArm, 'fa fa-play', 'Arm row');
-                    var armField = $('<select/>', { class: "bayes-comp-arm", style: "width:calc(100% - 110px)" }).appendTo(rowArm);
-                    rowRefSelect(armField, function() { return armField.val() || comp.armRow; });
-
-                    label(rowPattern, 'fa fa-retweet', 'Pattern');
-                    var patternField = $('<select/>', { class: "bayes-comp-pattern", style: "width:100px" }).appendTo(rowPattern);
-                    patternField.append($("<option></option>").val('cycle').text('cycle'));
-                    patternField.append($("<option></option>").val('edge').text('edge'));
-                    var cycleSpan = $('<span/>').appendTo(rowPattern);
-                    cycleSpan.append($('<span/>', { style: "margin-left:10px; color:#888;" }).text('max '));
-                    var cycleField = $('<input/>', { class: "bayes-comp-cyclemax", type: "number", min: "1", style: "width:70px" })
-                        .appendTo(cycleSpan).val(comp.cycleMax);
-                    cycleSpan.append($('<span/>', { style: "margin-left:4px; color:#888;" }).text('s'));
-
-                    label(rowConfirm, 'fa fa-check', 'Confirm row');
-                    var confirmField = $('<select/>', { class: "bayes-comp-confirm", style: "width:calc(100% - 110px)" }).appendTo(rowConfirm);
-                    rowRefSelect(confirmField, function() { return confirmField.val() || comp.confirmRow; });
-
-                    label(rowWindow, 'fa fa-hourglass', 'Window');
-                    var windowField = $('<input/>', { class: "bayes-comp-window", type: "number", min: "1", style: "width:70px" })
-                        .appendTo(rowWindow).val(comp.confirmWindow);
-                    rowWindow.append($('<span/>', { style: "margin-left:4px; color:#888;" }).text('s'));
-                    var duringLabel = $('<label/>', { style: "width:auto; margin-left:16px; display:inline-block;" }).appendTo(rowWindow);
-                    var duringField = $('<input/>', { class: "bayes-comp-during", type: "checkbox", style: "width:auto; vertical-align:middle;" })
-                        .appendTo(duringLabel).prop('checked', comp.confirmDuringArm !== false);
-                    duringLabel.append(' confirm during arm');
-
-                    label(rowLr, 'fa fa-balance-scale', 'LR');
-                    var lrField = $('<input/>', { class: "bayes-comp-lr", type: "number", min: "0.001", step: "1", style: "width:80px" })
-                        .appendTo(rowLr).val(comp.lr);
-                    var candLabel = $('<label/>', { style: "width:auto; margin-left:16px; display:inline-block;" }).appendTo(rowLr);
-                    var candField = $('<input/>', { class: "bayes-comp-cand", type: "checkbox", style: "width:auto; vertical-align:middle;" })
-                        .appendTo(candLabel).prop('checked', comp.onlyAsCandidate === true);
-                    candLabel.append(' only as candidate');
-
-                    patternField.change(function() { cycleSpan.toggle(patternField.val() === 'cycle'); });
-                    armField.val(comp.armRow);
-                    confirmField.val(comp.confirmRow);
-                    patternField.val(comp.armPattern).trigger('change');
-                },
-                removable: true,
-                sortable: true,
-                height: 'auto',
-                addButton: "Sequence"
-            });
-            (node.composites || []).forEach(function(comp) {
-                $("#node-input-composite-container").editableList('addItem', comp);
-            });
-
-            // ── Candidate trigger ────────────────────────────────────────────
-            rowRefSelect($("#node-input-candidateRow"),
-                function() { return $("#node-input-candidateRow").val() || node.candidateRow; }, 'none');
-            $("#node-input-candidateRow").val(node.candidateRow);
-
-            // ── Output tab ───────────────────────────────────────────────────
-            var outThingSel = $("#node-input-outThing");
-            fillThingSelect(outThingSel, node.outThing, 'none');
-            function refreshOutItems() {
-                fillItemSelect($("#node-input-outItem"), outThingSel.val(),
-                    (outThingSel.val() === node.outThing) ? node.outItem : null, 'none');
-                fillItemSelect($("#node-input-outProbItem"), outThingSel.val(),
-                    (outThingSel.val() === node.outThing) ? node.outProbItem : null, 'none');
-            }
-            outThingSel.change(refreshOutItems);
-            refreshOutItems();
-        },
-
-        oneditsave: function() {
-            var node = this;
-
-            node.observations = [];
-            $("#node-input-observation-container").children().each(function() {
-                var el = $(this);
-                node.observations.push({
-                    id:              el.data('rowId'),
-                    name:            el.find('.bayes-obs-name').val(),
-                    thing:           el.find('.bayes-obs-thing option:selected').val(),
-                    item:            el.find('.bayes-obs-item option:selected').val(),
-                    type:            el.find('.bayes-obs-type option:selected').val(),
-                    operator:        el.find('.bayes-obs-operator option:selected').val(),
-                    value:           el.find('.bayes-obs-value').typedInput('value'),
-                    valueType:       el.find('.bayes-obs-value').typedInput('type'),
-                    lr:              el.find('.bayes-obs-lr').val(),
-                    halfLife:        el.find('.bayes-obs-halflife').val(),
-                    onlyAsCandidate: el.find('.bayes-obs-cand').is(':checked')
-                });
-            });
-
-            var rowIds = {};
-            node.observations.forEach(function(r) { rowIds[r.id] = true; });
-
-            node.composites = [];
-            $("#node-input-composite-container").children().each(function() {
-                var el = $(this);
-                var comp = {
-                    id:               el.data('compId'),
-                    name:             el.find('.bayes-comp-name').val(),
-                    armRow:           el.find('.bayes-comp-arm option:selected').val(),
-                    armPattern:       el.find('.bayes-comp-pattern option:selected').val(),
-                    cycleMax:         el.find('.bayes-comp-cyclemax').val(),
-                    confirmRow:       el.find('.bayes-comp-confirm option:selected').val(),
-                    confirmWindow:    el.find('.bayes-comp-window').val(),
-                    confirmDuringArm: el.find('.bayes-comp-during').is(':checked'),
-                    lr:               el.find('.bayes-comp-lr').val(),
-                    onlyAsCandidate:  el.find('.bayes-comp-cand').is(':checked')
-                };
-                if (!rowIds[comp.armRow] || !rowIds[comp.confirmRow]) {
-                    RED.notify("hal2Bayes: sequence \"" + (comp.name || comp.id) + "\" dropped — it references a removed observation row", "warning");
-                    return;
                 }
-                node.composites.push(comp);
-            });
 
-            // Clear a stale candidate reference in the DOM — Node-RED harvests the select
-            // value after oneditsave, so assigning node.candidateRow here would be overwritten.
-            var candSel = $("#node-input-candidateRow");
-            if (candSel.val() && !rowIds[candSel.val()]) { candSel.val(''); }
-        }
-    });
+                $("#node-input-observation-container").editableList({
+                    addItem: function(container, i, opt) {
+                        var row = opt && opt.id ? opt : { id: halCreateId(), name: '', thing: '', item: '',
+                            type: 'state', operator: 'true', value: '', valueType: 'str',
+                            lr: '3', halfLife: '', onlyAsCandidate: false };
+                        var adv = $("#node-input-advanced").is(':checked');
+                        var view = simpleView(row);
+                        if (adv) { addAdvancedRow(container, row); }
+                        else if (view) { addSimpleRow(container, row, view); }
+                        else { addReadonlyRow(container, row); }
+                    },
+                    removable: true,
+                    sortable: true,
+                    height: 'auto',
+                    addButton: "Sensor"
+                });
+
+                function renderObservations(rows) {
+                    $("#node-input-observation-container").editableList('empty');
+                    (rows || []).forEach(function(row) {
+                        $("#node-input-observation-container").editableList('addItem', row);
+                    });
+                }
+                renderObservations(node.observations);
+
+                // ── sequences (advanced only) ────────────────────────────────
+                $("#node-input-composite-container").editableList({
+                    addItem: function(container, i, opt) {
+                        var comp = opt && opt.id ? opt : { id: halCreateId(), name: '', armRow: '', armPattern: 'cycle',
+                            cycleMax: 180, confirmRow: '', confirmWindow: 120, confirmDuringArm: true,
+                            lr: 30, onlyAsCandidate: true };
+                        container.data('compId', comp.id);
+                        container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                        var rowName = $('<div/>').appendTo(container);
+                        var rowArm = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                        var rowPattern = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                        var rowConfirm = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                        var rowWindow = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                        var rowLr = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+
+                        label(rowName, 'fa fa-tag', 'Name');
+                        $('<input/>', { class: "bayes-comp-name", type: "text", style: "width:calc(100% - 110px)" })
+                            .appendTo(rowName).val(comp.name);
+
+                        label(rowArm, 'fa fa-play', 'Arm row');
+                        var armField = $('<select/>', { class: "bayes-comp-arm", style: "width:calc(100% - 110px)" }).appendTo(rowArm);
+
+                        label(rowPattern, 'fa fa-retweet', 'Pattern');
+                        var patternField = $('<select/>', { class: "bayes-comp-pattern", style: "width:100px" }).appendTo(rowPattern);
+                        patternField.append($("<option></option>").val('cycle').text('cycle'));
+                        patternField.append($("<option></option>").val('edge').text('edge'));
+                        var cycleSpan = $('<span/>').appendTo(rowPattern);
+                        cycleSpan.append($('<span/>', { style: "margin-left:10px; color:#888;" }).text('max '));
+                        $('<input/>', { class: "bayes-comp-cyclemax", type: "number", min: "1", style: "width:70px" })
+                            .appendTo(cycleSpan).val(comp.cycleMax);
+                        cycleSpan.append($('<span/>', { style: "margin-left:4px; color:#888;" }).text('s'));
+
+                        label(rowConfirm, 'fa fa-check', 'Confirm row');
+                        var confirmField = $('<select/>', { class: "bayes-comp-confirm", style: "width:calc(100% - 110px)" }).appendTo(rowConfirm);
+
+                        label(rowWindow, 'fa fa-hourglass', 'Window');
+                        $('<input/>', { class: "bayes-comp-window", type: "number", min: "1", style: "width:70px" })
+                            .appendTo(rowWindow).val(comp.confirmWindow);
+                        rowWindow.append($('<span/>', { style: "margin-left:4px; color:#888;" }).text('s'));
+                        var duringLabel = $('<label/>', { style: "width:auto; margin-left:16px; display:inline-block;" }).appendTo(rowWindow);
+                        $('<input/>', { class: "bayes-comp-during", type: "checkbox", style: "width:auto; vertical-align:middle;" })
+                            .appendTo(duringLabel).prop('checked', comp.confirmDuringArm !== false);
+                        duringLabel.append(' confirm during arm');
+
+                        label(rowLr, 'fa fa-balance-scale', 'LR');
+                        $('<input/>', { class: "bayes-comp-lr", type: "number", min: "0.001", step: "1", style: "width:80px" })
+                            .appendTo(rowLr).val(comp.lr);
+                        var candLabel = $('<label/>', { style: "width:auto; margin-left:16px; display:inline-block;" }).appendTo(rowLr);
+                        $('<input/>', { class: "bayes-comp-cand", type: "checkbox", style: "width:auto; vertical-align:middle;" })
+                            .appendTo(candLabel).prop('checked', comp.onlyAsCandidate === true);
+                        candLabel.append(' only as candidate');
+
+                        patternField.change(function() { cycleSpan.toggle(patternField.val() === 'cycle'); });
+                        rowRefSelect(armField, comp.armRow);
+                        rowRefSelect(confirmField, comp.confirmRow);
+                        patternField.val(comp.armPattern).trigger('change');
+                    },
+                    removable: true,
+                    sortable: true,
+                    height: 'auto',
+                    addButton: "Sequence"
+                });
+                (node.composites || []).forEach(function(comp) {
+                    $("#node-input-composite-container").editableList('addItem', comp);
+                });
+
+                rowRefSelect($("#node-input-candidateRow"), node.candidateRow, 'none');
+
+                // ── entry template ───────────────────────────────────────────
+                var entry = node.entry || {};
+                var entryDoor = entry.door || {}, entryMotion = entry.motion || {};
+                fillThingSelect($("#node-input-entryDoorThing"), entryDoor.thing, 'none');
+                fillThingSelect($("#node-input-entryMotionThing"), entryMotion.thing, 'none');
+                function refreshEntryItems(thingSel, itemSel, saved, savedThing) {
+                    fillItemSelect(itemSel, thingSel.val(), (thingSel.val() === savedThing) ? saved : null, 'none');
+                }
+                $("#node-input-entryDoorThing").change(function() {
+                    refreshEntryItems($(this), $("#node-input-entryDoorItem"), entryDoor.item, entryDoor.thing);
+                });
+                $("#node-input-entryMotionThing").change(function() {
+                    refreshEntryItems($(this), $("#node-input-entryMotionItem"), entryMotion.item, entryMotion.thing);
+                });
+                $("#node-input-entryDoorThing").trigger('change');
+                $("#node-input-entryMotionThing").trigger('change');
+                rowRefSelect($("#node-input-entryPersonRow"), entry.personRow, 'none');
+
+                // ── output tab ───────────────────────────────────────────────
+                var outThingSel = $("#node-input-outThing");
+                fillThingSelect(outThingSel, node.outThing, 'none');
+                function refreshOutItems() {
+                    fillItemSelect($("#node-input-outItem"), outThingSel.val(),
+                        (outThingSel.val() === node.outThing) ? node.outItem : null, 'none');
+                    fillItemSelect($("#node-input-outProbItem"), outThingSel.val(),
+                        (outThingSel.val() === node.outThing) ? node.outProbItem : null, 'none');
+                }
+                outThingSel.change(refreshOutItems);
+                refreshOutItems();
+
+                // ── mode switching ───────────────────────────────────────────
+                function applyMode() {
+                    var adv = $("#node-input-advanced").is(':checked');
+                    $('.hal2bayes-adv').toggle(adv);
+                    $('.hal2bayes-simple').toggle(!adv);
+                    // RED.tabs names the <li> "red-ui-tab-<tab id>".
+                    $('#red-ui-tab-hal2bayes-tab-sequences').toggle(adv);
+                    if (!adv && $('#hal2bayes-tab-sequences').is(':visible')) { tabs.activateTab('hal2bayes-tab-general'); }
+                }
+                $("#node-input-advanced").change(function() {
+                    // Re-render rows in the other representation, keeping current edits.
+                    renderObservations(harvestObservations());
+                    applyMode();
+                });
+                applyMode();
+            },
+
+            oneditsave: function() {
+                var node = this;
+
+                // Same harvest logic as the editor uses when toggling modes.
+                node.observations = [];
+                $("#node-input-observation-container").children().each(function() {
+                    var el = $(this);
+                    var original = el.data('row') || {};
+                    if (el.data('readonly')) { node.observations.push(original); return; }
+                    if (el.data('simple')) {
+                        node.observations.push($.extend({}, original, {
+                            name:      el.find('.bayes-obs-name').val(),
+                            thing:     el.find('.bayes-obs-thing option:selected').val(),
+                            item:      el.find('.bayes-obs-item option:selected').val(),
+                            type:      'state',
+                            operator:  el.find('.bayes-obs-when option:selected').val(),
+                            value:     '',
+                            valueType: 'str',
+                            lr:        lrFor(el.find('.bayes-obs-strength option:selected').val(),
+                                             el.find('.bayes-obs-indicates option:selected').val()),
+                            halfLife:  '',
+                            onlyAsCandidate: false
+                        }));
+                        return;
+                    }
+                    node.observations.push({
+                        id:              original.id,
+                        name:            el.find('.bayes-obs-name').val(),
+                        thing:           el.find('.bayes-obs-thing option:selected').val(),
+                        item:            el.find('.bayes-obs-item option:selected').val(),
+                        type:            el.find('.bayes-obs-type option:selected').val(),
+                        operator:        el.find('.bayes-obs-operator option:selected').val(),
+                        value:           el.find('.bayes-obs-value').typedInput('value'),
+                        valueType:       el.find('.bayes-obs-value').typedInput('type'),
+                        lr:              el.find('.bayes-obs-lr').val(),
+                        halfLife:        el.find('.bayes-obs-halflife').val(),
+                        onlyAsCandidate: el.find('.bayes-obs-cand').is(':checked')
+                    });
+                });
+
+                var rowIds = {};
+                node.observations.forEach(function(r) { rowIds[r.id] = true; });
+
+                node.composites = [];
+                $("#node-input-composite-container").children().each(function() {
+                    var el = $(this);
+                    var comp = {
+                        id:               el.data('compId'),
+                        name:             el.find('.bayes-comp-name').val(),
+                        armRow:           el.find('.bayes-comp-arm option:selected').val(),
+                        armPattern:       el.find('.bayes-comp-pattern option:selected').val(),
+                        cycleMax:         el.find('.bayes-comp-cyclemax').val(),
+                        confirmRow:       el.find('.bayes-comp-confirm option:selected').val(),
+                        confirmWindow:    el.find('.bayes-comp-window').val(),
+                        confirmDuringArm: el.find('.bayes-comp-during').is(':checked'),
+                        lr:               el.find('.bayes-comp-lr').val(),
+                        onlyAsCandidate:  el.find('.bayes-comp-cand').is(':checked')
+                    };
+                    if (!rowIds[comp.armRow] || !rowIds[comp.confirmRow]) {
+                        RED.notify("hal2Bayes: sequence \"" + (comp.name || comp.id) + "\" dropped — it references a removed sensor", "warning");
+                        return;
+                    }
+                    node.composites.push(comp);
+                });
+
+                // Entry template: only stored when both sensors are picked.
+                var doorThing = $("#node-input-entryDoorThing").val();
+                var doorItem = $("#node-input-entryDoorItem").val();
+                var motionThing = $("#node-input-entryMotionThing").val();
+                var motionItem = $("#node-input-entryMotionItem").val();
+                var personRow = $("#node-input-entryPersonRow").val();
+                if (doorThing && doorItem && motionThing && motionItem) {
+                    node.entry = {
+                        door:   { thing: doorThing, item: doorItem },
+                        motion: { thing: motionThing, item: motionItem },
+                        personRow: rowIds[personRow] ? personRow : ''
+                    };
+                } else {
+                    node.entry = null;
+                }
+
+                // Drop a stale candidate reference in the DOM — Node-RED harvests the select
+                // value after oneditsave, so assigning node.candidateRow here would be overwritten.
+                var candSel = $("#node-input-candidateRow");
+                if (candSel.val() && !rowIds[candSel.val()]) { candSel.val(''); }
+            }
+        });
+    })();
 </script>

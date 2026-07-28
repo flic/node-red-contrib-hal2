@@ -1,10 +1,17 @@
 module.exports = function(RED) {
     const { createBayes } = require('../lib/bayes');
+    const { expandEntryTemplate } = require('../lib/bayesEntry');
 
-    function hal2Bayes(config) {
-        RED.nodes.createNode(this, config);
-        this.eventHandler = RED.nodes.getNode(config.eventHandler);
+    function hal2Bayes(rawConfig) {
+        RED.nodes.createNode(this, rawConfig);
+        this.eventHandler = RED.nodes.getNode(rawConfig.eventHandler);
         var node = this;
+
+        // Expand the simple-mode entry-detection template into ordinary rows + a composite
+        // before normalization, so the guard/subscription logic below sees them as regular config.
+        const expanded = expandEntryTemplate(rawConfig);
+        const config = expanded.config;
+        expanded.warnings.forEach(w => node.warn(w));
 
         const num = (v, dflt) => { const n = Number(v); return isNaN(n) ? dflt : n; };
         const sec = (v, dflt) => num(v, dflt) * 1000;
