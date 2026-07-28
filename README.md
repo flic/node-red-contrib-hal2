@@ -137,7 +137,32 @@ History powers two tools:
 - **`get_history`** — fetch logged values for an Item over a flexible time window: a rolling `hours` count, an explicit `from`/`to` range, or a point-in-time `at` lookup ("what was it at 08:00?"), with `offset`/`limit` paging.
 - **`analyze_patterns`** — scans the history to surface recurring routines, e.g. *"Living Room Light turns on around 07:30, 85% consistent"*, so you can spot automations worth creating.
 
+## Bayes node
+
+`hal2Bayes` estimates a hidden binary state (e.g. *"is this person home?"*) from noisy
+observations, inspired by Home Assistant's Bayesian binary sensor but extended with event
+evidence, time decay and sequence rules. One node instance estimates one hypothesis.
+
+- **Observations** — each row watches a Thing item with a condition and a likelihood ratio
+  `LR = P(obs|true) / P(obs|false)`. **State** rows contribute `ln(LR)` while the condition
+  holds; **event** rows add a one-shot contribution on the condition's rising edge that decays
+  toward the prior with a configurable half-life. LR < 1 is negative evidence.
+- **Sequences** — composite rules like *"door open→closed within 3 min, confirmed by hall
+  motion within 2 min ⇒ someone entered (LR 30)"*. Rules flagged *only as candidate* apply
+  only while the output is off and a designated candidate-trigger row (e.g. the person's phone
+  sensor) fired recently — evaluated when the sequence arms, so anonymous door events never
+  boost someone already home.
+- **Hysteresis** — the binary output turns on at P ≥ on-threshold and off first at
+  P ≤ off-threshold. State survives restarts via node context and decays by wall clock.
+- **Outputs** — output 1 emits on binary change, output 2 a full probability snapshot
+  (`p`, `logOdds`, active terms, sequence state) for tuning. Optionally the estimate is written
+  to items on a Thing, making it first-class for `get_presence`, history and groups — always
+  use a dedicated item, never an observation source (the node refuses feedback loops).
+- **Input** — `msg.topic` `reset` / `set` / `evidence` (`{ lr, halfLife? }`) as escape hatches.
+
 ## Other recent additions
+
+- **hal2Bayes — probabilistic binary-state estimation** (see [Bayes node](#bayes-node)).
 
 - **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, with automatic migration.
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.

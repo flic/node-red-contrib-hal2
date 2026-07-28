@@ -198,6 +198,9 @@ module.exports = function(RED) {
 
         node.updateState = function (msg,itemId, state, logtype) {
             var item = "";
+            // Own timestamp: the shared closure var `date` is only set on input/heartbeat,
+            // so external callers (e.g. hal2Bayes write-back) would get stale timestamps.
+            var date = Date.now();
             if (typeof msg.topic === 'undefined') { msg.topic = ""; }
 
             //if ((itemId == '1') && (node.thingType.hbType == 'ttl')) { return; }
