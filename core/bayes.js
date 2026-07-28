@@ -1,15 +1,15 @@
 module.exports = function(RED) {
     const { createBayes } = require('../lib/bayes');
-    const { expandEntryTemplate } = require('../lib/bayesEntry');
+    const { expandArrivalRows } = require('../lib/bayesArrival');
 
     function hal2Bayes(rawConfig) {
         RED.nodes.createNode(this, rawConfig);
         this.eventHandler = RED.nodes.getNode(rawConfig.eventHandler);
         var node = this;
 
-        // Expand the simple-mode entry-detection template into ordinary rows + a composite
-        // before normalization, so the guard/subscription logic below sees them as regular config.
-        const expanded = expandEntryTemplate(rawConfig);
+        // Arrival rows describe two sensors in time order; expand them into ordinary rows +
+        // a composite before normalization, so everything below sees regular config.
+        const expanded = expandArrivalRows(rawConfig);
         const config = expanded.config;
         expanded.warnings.forEach(w => node.warn(w));
 
@@ -27,7 +27,7 @@ module.exports = function(RED) {
             candidateRow:      config.candidateRow || '',
             candidateWindowMs: sec(config.candidateWindow, 300),
             observations: (config.observations || []).map(r => ({
-                id: r.id, name: r.name || r.id, thing: r.thing, item: r.item,
+                id: r.id, thing: r.thing, item: r.item,
                 type: r.type === 'state' ? 'state' : 'event',
                 operator: r.operator, value: r.value, valueType: r.valueType || 'str',
                 lr: num(r.lr, 1),
@@ -47,9 +47,6 @@ module.exports = function(RED) {
         const topic          = config.topic || ('bayes/' + (config.name || node.id));
         const tickMs         = Math.max(5, num(config.tickInterval, 30)) * 1000;
         const snapshotOnTick = config.snapshotOnTick === true;
-        const outThing       = config.outThing || '';
-        const outItem        = config.outItem || '';
-        const outProbItem    = config.outProbItem || '';
 
         // Drop composites whose row references no longer exist (defensive; editor validates too).
         const rowIds = new Set(cfg.observations.map(r => r.id));
@@ -62,13 +59,6 @@ module.exports = function(RED) {
         if (cfg.candidateRow && !rowIds.has(cfg.candidateRow)) {
             node.warn('Candidate trigger row no longer exists — candidacy degrades to "output off" only');
             cfg.candidateRow = '';
-        }
-
-        // Feedback-loop guard: never write the estimate onto one of its own inputs.
-        let writeBack = outThing !== '' && outItem !== '';
-        if (writeBack && cfg.observations.some(r => r.thing === outThing && (r.item === outItem || r.item === outProbItem))) {
-            node.warn('Output item is also an observation source — write-back disabled to avoid a feedback loop');
-            writeBack = false;
         }
 
         const est = createBayes(cfg);
@@ -91,30 +81,11 @@ module.exports = function(RED) {
             });
         }
 
-        let lastWritten = {};
-        function writeEstimate(result) {
-            if (!writeBack) { return; }
-            const out = RED.nodes.getNode(outThing);
-            if (!out || typeof out.updateState !== 'function') { return; }
-            if (lastWritten.binary !== result.binary) {
-                out.updateState({ topic: '' }, outItem, result.binary, 'ingress');
-                lastWritten.binary = result.binary;
-            }
-            if (outProbItem) {
-                const p = Number(result.p.toFixed(2));
-                if (lastWritten.p !== p) {
-                    out.updateState({ topic: '' }, outProbItem, p, 'ingress');
-                    lastWritten.p = p;
-                }
-            }
-        }
-
         // Evaluate + emit + persist. `emitSnapshot` controls output 2.
         function run(emitSnapshot) {
             const result = est.evaluate(resolveState, Date.now());
             persist();
             showStatus(result);
-            writeEstimate(result);
             const change = result.changed
                 ? { topic: topic, payload: result.binary, probability: Number(result.p.toFixed(4)) }
                 : null;

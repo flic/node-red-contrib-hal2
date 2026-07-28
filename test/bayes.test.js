@@ -1,7 +1,7 @@
 'use strict';
 const assert = require('node:assert');
 const { createBayes, logit, sigmoid } = require('../lib/bayes');
-const { expandEntryTemplate } = require('../lib/bayesEntry');
+const { expandArrivalRows } = require('../lib/bayesArrival');
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -356,69 +356,98 @@ describe('inject / reset / force / pruning', function() {
     });
 });
 
-// ---- 11. entry template expander --------------------------------------------
+// ---- 11. arrival row expander -----------------------------------------------
 
-describe('expandEntryTemplate', function() {
+describe('expandArrivalRows', function() {
+    const sensorRow = { id: 'r1', kind: 'sensor', thing: 't1', item: 'i1', type: 'event',
+        operator: 'true', value: '', valueType: 'str', lr: 3, halfLife: '', onlyAsCandidate: false };
+    const arrivalRow = { id: 'a1', kind: 'arrival', door: { thing: 'td', item: 'id' },
+        motion: { thing: 'tm', item: 'im' }, personRow: 'r1', lr: 30, cycleMax: 180, confirmWindow: 120 };
+
     function rawConfig(overrides) {
         return Object.assign({
-            observations: [{ id: 'r1', name: 'radio', thing: 't1', item: 'i1', type: 'event',
-                operator: 'true', value: '', valueType: 'str', lr: 3, halfLife: '', onlyAsCandidate: false }],
-            composites: [],
-            candidateRow: '', candidateWindow: 300,
-            entry: { door: { thing: 'td', item: 'id' }, motion: { thing: 'tm', item: 'im' }, personRow: 'r1' }
+            observations: [sensorRow, arrivalRow], composites: [],
+            candidateRow: '', candidateWindow: 300
         }, overrides);
     }
 
-    it('absent or incomplete template is a no-op', function() {
-        for (const entry of [undefined, null, {},
-                { door: { thing: 'td', item: 'id' } },                                        // no motion
-                { door: { thing: 'td' }, motion: { thing: 'tm', item: 'im' } }]) {            // door item missing
-            const input = rawConfig({ entry });
-            const { config, warnings } = expandEntryTemplate(input);
-            assert.strictEqual(config, input);            // same object — untouched
-            assert.deepStrictEqual(warnings, []);
-        }
+    it('config without arrival rows is returned untouched', function() {
+        const input = rawConfig({ observations: [sensorRow] });
+        const { config, warnings } = expandArrivalRows(input);
+        assert.strictEqual(config, input);                  // same object
+        assert.deepStrictEqual(warnings, []);
     });
 
-    it('full template expands to two lr-1 event rows and one composite with defaults', function() {
-        const input = rawConfig({});
-        const { config, warnings } = expandEntryTemplate(input);
+    it('an arrival row becomes two lr-1 event rows plus a composite', function() {
+        const { config, warnings } = expandArrivalRows(rawConfig({}));
         assert.deepStrictEqual(warnings, []);
 
-        const added = config.observations.filter(r => r.id.startsWith('__entry'));
-        assert.strictEqual(added.length, 2);
+        // The arrival row itself is replaced, not kept.
+        assert.ok(!config.observations.some(r => r.kind === 'arrival'));
+        assert.strictEqual(config.observations.length, 3);
+
+        const added = config.observations.filter(r => r.id.startsWith('a1__'));
+        assert.deepStrictEqual(added.map(r => r.id), ['a1__door', 'a1__motion']);
+        assert.deepStrictEqual(added.map(r => [r.thing, r.item]), [['td', 'id'], ['tm', 'im']]);
         for (const r of added) {
             assert.strictEqual(r.type, 'event');
-            assert.strictEqual(r.operator, 'true');
             assert.strictEqual(r.lr, 1);
         }
-        assert.deepStrictEqual(added.map(r => [r.thing, r.item]), [['td', 'id'], ['tm', 'im']]);
 
         assert.strictEqual(config.composites.length, 1);
         const c = config.composites[0];
         assert.deepStrictEqual(
             [c.id, c.armRow, c.armPattern, c.cycleMax, c.confirmRow, c.confirmWindow, c.confirmDuringArm, c.lr, c.onlyAsCandidate],
-            ['__entry', '__entry_door', 'cycle', 180, '__entry_motion', 120, true, 30, true]);
+            ['a1__seq', 'a1__door', 'cycle', 180, 'a1__motion', 120, true, 30, true]);
 
         assert.strictEqual(config.candidateRow, 'r1');
         assert.strictEqual(config.candidateWindow, 300);
     });
 
-    it('an explicit candidate trigger wins over the person row, with a warning', function() {
-        const { config, warnings } = expandEntryTemplate(rawConfig({ candidateRow: 'r9' }));
+    it('an incomplete arrival row is skipped with a warning', function() {
+        const { config, warnings } = expandArrivalRows(rawConfig({
+            observations: [sensorRow, Object.assign({}, arrivalRow, { motion: { thing: 'tm' } })]
+        }));
+        assert.strictEqual(warnings.length, 1);
+        assert.strictEqual(config.composites.length, 0);
+        assert.strictEqual(config.observations.length, 1);
+    });
+
+    it('an explicit candidate trigger wins over the person sensor, with a warning', function() {
+        const { config, warnings } = expandArrivalRows(rawConfig({ candidateRow: 'r9' }));
         assert.strictEqual(config.candidateRow, 'r9');
         assert.strictEqual(warnings.length, 1);
+    });
+
+    it('two arrival rows both expand; the first person sensor wins', function() {
+        const second = Object.assign({}, arrivalRow, { id: 'a2', personRow: 'rX' });
+        const { config, warnings } = expandArrivalRows(rawConfig({
+            observations: [sensorRow, arrivalRow, second]
+        }));
+        assert.strictEqual(config.composites.length, 2);
+        assert.strictEqual(config.candidateRow, 'r1');
+        assert.strictEqual(warnings.length, 1);
+    });
+
+    it('migrates a legacy entry template into an arrival row', function() {
+        const { config } = expandArrivalRows({
+            observations: [sensorRow], composites: [], candidateRow: '', candidateWindow: 300,
+            entry: { door: { thing: 'td', item: 'id' }, motion: { thing: 'tm', item: 'im' }, personRow: 'r1' }
+        });
+        assert.strictEqual(config.composites.length, 1);
+        assert.strictEqual(config.composites[0].id, '__entry__seq');
+        assert.strictEqual(config.candidateRow, 'r1');
     });
 
     it('does not mutate its input', function() {
         const input = rawConfig({});
         const snapshot = JSON.parse(JSON.stringify(input));
-        expandEntryTemplate(input);
+        expandArrivalRows(input);
         assert.deepStrictEqual(input, snapshot);
     });
 
-    it('expanded config drives createBayes: door cycle + motion fires __entry', function() {
-        const { config } = expandEntryTemplate(rawConfig({}));
+    it('expanded config drives createBayes: door cycle + motion fires the arrival term', function() {
+        const { config } = expandArrivalRows(rawConfig({}));
         const b = createBayes({
             prior: 0.2, pOn: 0.85, pOff: 0.30, clamp: 6, halfLifeMs: 20 * MIN,
             observations: config.observations.map(r => Object.assign({}, r, { halfLifeMs: null })),
@@ -426,11 +455,11 @@ describe('expandEntryTemplate', function() {
                 cycleMaxMs: c.cycleMax * 1000, confirmWindowMs: c.confirmWindow * 1000 })),
             candidateRow: config.candidateRow, candidateWindowMs: config.candidateWindow * 1000
         });
-        b.handleEvent(['r1'], true, 0);                       // person's sensor → candidate
-        b.handleEvent(['__entry_door'], true, MIN);
-        b.handleEvent(['__entry_door'], false, 2 * MIN);      // valid cycle
-        b.handleEvent(['__entry_motion'], true, 2.5 * MIN);   // confirm
+        b.handleEvent(['r1'], true, 0);                     // person's sensor → candidate
+        b.handleEvent(['a1__door'], true, MIN);
+        b.handleEvent(['a1__door'], false, 2 * MIN);        // valid cycle
+        b.handleEvent(['a1__motion'], true, 2.5 * MIN);     // confirm
         const terms = b.evaluate(noState, 3 * MIN).terms;
-        assert.strictEqual(terms.filter(t => t.src === '__entry').length, 1);
+        assert.strictEqual(terms.filter(t => t.src === 'a1__seq').length, 1);
     });
 });

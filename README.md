@@ -147,19 +147,18 @@ node estimates one thing, so use one node per person.
 
 ### Simple mode (default)
 
-- **Sensors** — each row reads as a sentence: *when [sensor] is [on/off], that indicates
-  [yes/no], [slight…decisive]*. Strength is how much the observation should move the estimate:
-  **slight** is a weak hint, **decisive** is near-proof. Pick *indicates no* for sensors whose
-  state argues against what you are estimating.
-- **Entry detection** — a ready-made rule for people arriving: pick a door sensor, a motion
-  sensor, and which sensor row identifies the person. When the door opens and closes again and
-  movement follows, the estimate gets a strong boost — but only for someone not already home,
-  and only if their own sensor was seen shortly before. A door cycle with no movement is
-  ignored, so *"opened the door, forgot something in the car, closed it"* does not count.
-- **Output** — optionally mirror the result onto a Thing item so `get_presence`,
-  `get_all_states`, history and groups can see it. Never pick an item that is also one of the
-  node's own sensors; that would feed the result back into itself (the node detects it and
-  switches the write off).
+Every row on the **Sensors** tab is a piece of evidence, of one of two kinds.
+
+- **Sensor** rows are a single observation and read as a sentence: *when [sensor] [is true /
+  > 20 / …], that indicates [true/false], [slight…decisive]*. Strength is how much the
+  observation should move the estimate: **slight** is a weak hint, **decisive** is near-proof.
+  The row keeps contributing for as long as the condition holds.
+- **Arrival** rows are two sensors in a time order, which no single observation can express:
+  a door opens and closes again, and movement follows. Pick the door sensor, the motion sensor,
+  and which sensor row identifies the person. The boost applies only to someone not already on,
+  and only if their own sensor was seen shortly before — so a door cycle with no movement
+  (*"opened the door, forgot something in the car, closed it"*) does not count as arriving, and
+  someone leaving is never boosted by their own exit.
 
 ### Advanced mode
 
@@ -170,10 +169,10 @@ A checkbox on the General tab unlocks the full model; rows are kept either way.
   contribution on the rising edge that fades with a configurable half-life. LR < 1 is negative
   evidence.
 - **Sequences** — custom composite rules like *"door open→closed within 3 min, confirmed by
-  hall motion within 2 min ⇒ someone entered (LR 30)"* (this is what the entry template
-  expands to). Rules flagged *only as candidate* apply only while the output is off and a
-  designated candidate-trigger row fired recently — evaluated when the sequence arms, so
-  anonymous door events never boost someone already home.
+  hall motion within 2 min ⇒ someone entered (LR 30)"*. This is exactly what an arrival row
+  expands into: two `LR 1` event rows plus a cycle sequence. Rules flagged *only as candidate*
+  apply only while the output is off and a designated candidate-trigger row fired recently —
+  evaluated when the sequence arms, so anonymous door events never boost someone already home.
 - **Model parameters** — prior, the two hysteresis thresholds (on at P ≥ on-threshold, off
   first at P ≤ off-threshold, so the output does not flap), default half-life, log-odds clamp
   and tick interval.
@@ -183,7 +182,9 @@ A checkbox on the General tab unlocks the full model; rows are kept either way.
 The estimate survives restarts via node context and keeps fading by wall clock while Node-RED
 is down. Output 1 emits on change of the binary result; output 2 emits a full snapshot
 (`p`, `logOdds`, active terms, sequence state) for tuning. `msg.topic` `reset` / `set` /
-`evidence` (`{ lr, halfLife? }`) are available as escape hatches.
+`evidence` (`{ lr, halfLife? }`) are available as escape hatches. To record the result on a
+Thing, wire output 1 onward like any other message — the node has no side channel into the
+object model.
 
 ## Other recent additions
 
