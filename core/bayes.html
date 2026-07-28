@@ -552,7 +552,19 @@
                     removable: true,
                     sortable: true,
                     height: 'auto',
-                    addButton: "Sensor"
+                    addButton: "sensor",
+                    // editableList supports extra add buttons alongside its own.
+                    buttons: [{
+                        label: "arrival",
+                        icon: "fa fa-sign-in",
+                        title: "add an arrival rule (door + motion in time order)",
+                        click: function() {
+                            $("#node-input-observation-container").editableList('addItem', {
+                                id: halCreateId(), kind: 'arrival', door: {}, motion: {},
+                                personRow: '', lr: 30, cycleMax: 180, confirmWindow: 120
+                            });
+                        }
+                    }]
                 });
 
                 function renderObservations(rows) {
@@ -572,19 +584,6 @@
                 }
                 renderObservations(initialRows);
 
-                // Second add button, for arrival rows.
-                $('<button type="button" class="red-ui-button red-ui-button-small" style="margin-top:6px;">' +
-                  '<i class="fa fa-sign-in"></i> add arrival</button>')
-                    .insertAfter($("#node-input-observation-container").parent().find('.red-ui-editableList-addButton').first())
-                    .css({ 'margin-left': '6px' })
-                    .on('click', function(e) {
-                        e.preventDefault();
-                        $("#node-input-observation-container").editableList('addItem', {
-                            id: halCreateId(), kind: 'arrival', door: {}, motion: {},
-                            personRow: '', lr: 30, cycleMax: 180, confirmWindow: 120
-                        });
-                    });
-
                 // ── sequences (advanced only) ────────────────────────────────
                 $("#node-input-composite-container").editableList({
                     addItem: function(container, i, opt) {
@@ -594,16 +593,17 @@
                         container.data('compId', comp.id);
                         container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
 
-                        var rowName = newRowDiv(container, true);
+                        var rowHead = newRowDiv(container, true);
                         var rowArm = newRowDiv(container);
                         var rowPattern = newRowDiv(container);
                         var rowConfirm = newRowDiv(container);
                         var rowWindow = newRowDiv(container);
                         var rowLr = newRowDiv(container);
 
-                        label(rowName, 'fa fa-tag', 'Name');
-                        $('<input/>', { class: "bayes-comp-name", type: "text", style: "width:calc(100% - 110px)" })
-                            .appendTo(rowName).val(comp.name);
+                        // Sequences have no name of their own — like sensor rows they are
+                        // identified by what they watch, derived live from the two selects.
+                        $('<span/>', { class: "fa fa-code-fork", style: "margin-right:8px; color:#888;" }).appendTo(rowHead);
+                        var headText = $('<b/>').appendTo(rowHead);
 
                         label(rowArm, 'fa fa-play', 'Arm row');
                         var armField = $('<select/>', { class: "bayes-comp-arm", style: "width:calc(100% - 110px)" }).appendTo(rowArm);
@@ -638,9 +638,17 @@
                             .appendTo(candLabel).prop('checked', comp.onlyAsCandidate === true);
                         candLabel.append(' only as candidate');
 
+                        function refreshHead() {
+                            var a = armField.find('option:selected').text() || '?';
+                            var c = confirmField.find('option:selected').text() || '?';
+                            headText.text(a + ' → ' + c);
+                        }
                         patternField.change(function() { cycleSpan.toggle(patternField.val() === 'cycle'); });
                         rowRefSelect(armField, comp.armRow);
                         rowRefSelect(confirmField, comp.confirmRow);
+                        armField.change(refreshHead);
+                        confirmField.change(refreshHead);
+                        refreshHead();
                         patternField.val(comp.armPattern).trigger('change');
                     },
                     removable: true,
@@ -685,11 +693,10 @@
                 node.observations.forEach(function(r) { rowIds[r.id] = true; });
 
                 node.composites = [];
-                $("#node-input-composite-container").children().each(function() {
+                $("#node-input-composite-container").children().each(function(index) {
                     var el = $(this);
                     var comp = {
                         id:               el.data('compId'),
-                        name:             el.find('.bayes-comp-name').val(),
                         armRow:           el.find('.bayes-comp-arm option:selected').val(),
                         armPattern:       el.find('.bayes-comp-pattern option:selected').val(),
                         cycleMax:         el.find('.bayes-comp-cyclemax').val(),
@@ -700,7 +707,7 @@
                         onlyAsCandidate:  el.find('.bayes-comp-cand').is(':checked')
                     };
                     if (!rowIds[comp.armRow] || !rowIds[comp.confirmRow]) {
-                        RED.notify("hal2Bayes: sequence \"" + (comp.name || comp.id) + "\" dropped — it references a removed sensor", "warning");
+                        RED.notify("hal2Bayes: sequence " + (index + 1) + " dropped — it references a removed sensor", "warning");
                         return;
                     }
                     node.composites.push(comp);

@@ -35,7 +35,7 @@ module.exports = function(RED) {
                 onlyAsCandidate: r.onlyAsCandidate === true
             })),
             composites: (config.composites || []).map(c => ({
-                id: c.id, name: c.name || c.id,
+                id: c.id,
                 armRow: c.armRow, armPattern: c.armPattern === 'edge' ? 'edge' : 'cycle',
                 cycleMaxMs: sec(c.cycleMax, 180),
                 confirmRow: c.confirmRow, confirmWindowMs: sec(c.confirmWindow, 120),
@@ -50,9 +50,9 @@ module.exports = function(RED) {
 
         // Drop composites whose row references no longer exist (defensive; editor validates too).
         const rowIds = new Set(cfg.observations.map(r => r.id));
-        cfg.composites = cfg.composites.filter(c => {
+        cfg.composites = cfg.composites.filter((c, i) => {
             const ok = rowIds.has(c.armRow) && rowIds.has(c.confirmRow);
-            if (!ok) { node.warn('Sequence "' + c.name + '" references a removed observation row — disabled'); }
+            if (!ok) { node.warn('Sequence ' + (i + 1) + ' references a removed sensor — disabled'); }
             return ok;
         });
 
