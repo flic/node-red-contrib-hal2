@@ -528,7 +528,7 @@
                         var isTime = src === 'time';
 
                         var allowed = src === 'thing' ? ['is', 'isOrBecomes', 'becomes', 'cycle']
-                                    : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
+                                    : (isTime || i === 0) ? ['is'] : ['is', 'isOrBecomes'];
                         var patSel = el.find('.bs-pattern');
                         var have = patSel.find('option').map(function() { return this.value; }).get().join(',');
                         if (have !== allowed.join(',')) {
@@ -555,10 +555,13 @@
                             var spec = { start: el.find('.bs-start').val(), end: el.find('.bs-end').val(),
                                          days: el.find('.bs-day').filter(function() { return $(this).data('on'); })
                                                  .map(function() { return Number($(this).attr('data-day')); }).get() };
-                            var active = btime.inWindow(new Date(), spec);
+                            var inside = btime.inWindow(new Date(), spec);
+                            var wantInside = el.find('.bs-op').val() !== 'false';
+                            var matches = (inside === wantInside);
                             el.find('.bs-days-hint')
-                                .text(btime.describe(spec) + ' — ' + (active ? 'active right now' : 'not active right now'))
-                                .css('color', active ? '#4b8' : '#999');
+                                .text(btime.describe(spec) + ' — ' +
+                                      (matches ? 'matches right now' : 'does not match right now'))
+                                .css('color', matches ? '#4b8' : '#999');
                         }
                     });
 

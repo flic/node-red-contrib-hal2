@@ -49,6 +49,9 @@ module.exports = function(RED) {
                     // subscription to wake it and no previous step to be "soon" after, so
                     // 'isOrBecomes' there would never fire at all.
                     if (src !== 'thing' && si === 0 && pattern === 'isOrBecomes') { pattern = 'is'; }
+                    // Waiting for the clock to cross into a window is never useful, so a time
+                    // step is always a plain condition wherever it sits.
+                    if (src === 'time') { pattern = 'is'; }
                     return {
                         src, thing: s.thing, item: s.item, prop: s.prop,
                         start: s.start, end: s.end,
