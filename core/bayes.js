@@ -1,6 +1,7 @@
 module.exports = function(RED) {
     const { createBayes } = require('../lib/bayes');
     const scale = require('../resources/bayes-scale');
+    const bayesTime = require('../resources/bayes-time');
 
     function hal2Bayes(config) {
         RED.nodes.createNode(this, config);
@@ -36,7 +37,7 @@ module.exports = function(RED) {
                     ? sec(r.halfLife, 1200)
                     : scale.fadeSeconds(r.fade) * 1000;
                 const steps = (r.steps || []).map(s => {
-                    const src = ['thing', 'flow', 'global', 'env'].indexOf(s.src) >= 0 ? s.src : 'thing';
+                    const src = ['thing', 'flow', 'global', 'env', 'time'].indexOf(s.src) >= 0 ? s.src : 'thing';
                     let pattern = ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is';
                     // Polled sources have no change event, so an edge on them could only be
                     // sampled on the tick and would be missed outright between two ticks.
@@ -46,12 +47,19 @@ module.exports = function(RED) {
                     }
                     return {
                         src, thing: s.thing, item: s.item, prop: s.prop,
+                        start: s.start, end: s.end,
+                        days: Array.isArray(s.days) ? s.days.map(Number) : undefined,
                         operator: s.operator, value: s.value, valueType: s.valueType || 'str',
                         pattern,
                         cycleMaxMs: sec(s.cycleMax, 180),
                         windowMs: sec(s.window, 120)
                     };
-                }).filter(s => (s.src === 'thing' ? (s.thing && s.item) : s.prop));
+                }).filter(s => {
+                    if (s.src === 'thing') { return s.thing && s.item; }
+                    if (s.src === 'time')  { return bayesTime.parseHHMM(s.start) !== null &&
+                                                    bayesTime.parseHHMM(s.end) !== null; }
+                    return s.prop;
+                });
                 // Pre-'is' configs expressed the continuous case as a lone 'becomes'
                 // step; that is exactly a level check, so carry it over unchanged.
                 if (steps.length === 1 && steps[0].pattern === 'becomes') { steps[0].pattern = 'is'; }
@@ -88,6 +96,8 @@ module.exports = function(RED) {
                 case 'flow':   return node.context().flow.get(step.prop);
                 case 'global': return node.context().global.get(step.prop);
                 case 'env':    return process.env[step.prop];
+                // A boolean, so the existing is-true / is-false operator gives inside/outside.
+                case 'time':   return bayesTime.inWindow(new Date(), step);
                 default: {
                     const thing = RED.nodes.getNode(step.thing);
                     return thing && thing.state ? thing.state[step.item] : undefined;

@@ -1,5 +1,6 @@
 <script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
 <script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-scale.js"></script>
+<script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-time.js"></script>
 
 <script type="text/x-red" data-template-name="hal2Bayes">
     <div class="form-row">
@@ -119,11 +120,19 @@
     previous step</i> is how long that step has to happen, and <i>stays on for at most N s</i> is how
     long a cycle may stay true &mdash; a door held open longer than that is not a pass-through and the
     rule does not advance.</p>
-    <p><b>flow, global and env can only be conditions</b> &mdash; <i>right now</i> or <i>now or soon</i>.
-    Only a thing is subscribed to, so a variable is read when the node evaluates rather than pushed
-    when it changes; an edge qualifier on one could only be sampled on the tick and would miss
-    anything faster than that. The same polling means a rule reading a variable updates within one
-    tick (30 s by default), not instantly. Note also that <code>flow</code> and <code>global</code>
+    <p>A <b>time</b> source is a window of the day rather than a sensor: a start and end in
+    24-hour format plus the weekdays it applies on. It may cross midnight (22:00&ndash;06:00), the
+    start is inclusive and the end exclusive, and a window whose start equals its end is never
+    active. The weekday is simply <b>the day it is right now</b> &mdash; with 22:00&ndash;06:00 on
+    Mon&ndash;Fri, Tuesday 02:00 counts but Saturday 02:00 does not, even though that is Friday
+    night. Because the value is just "inside the window or not", the condition reads
+    <b>inside</b> / <b>outside</b>, so one window covers both "during the night" and "outside
+    working hours". Times follow the server's local clock, including daylight saving.</p>
+    <p><b>flow, global, env and time can only be conditions</b> &mdash; <i>right now</i> or <i>now or soon</i>.
+    Only a thing is subscribed to, so these are read when the node evaluates rather than pushed
+    when they change; an edge qualifier on one could only be sampled on the tick and would miss
+    anything faster than that. The same polling means such a rule &mdash; including a time boundary
+    &mdash; takes effect within one tick (30 s by default), not on the second. Note also that <code>flow</code> and <code>global</code>
     survive a restart only when the context store is file-backed &mdash; the default is memory, and a
     continuous contribution silently vanishing after a redeploy is exactly what the lock exists for.</p>
     <p>A rule that is a single <b>right now</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
@@ -196,6 +205,7 @@
 <script type="text/javascript">
     (function() {
         var scale = window.hal2BayesScale;
+        var btime = window.hal2BayesTime;
 
         RED.nodes.registerType('hal2Bayes', {
             category: 'Home Automation',
@@ -318,7 +328,7 @@
                     var line1 = flexRow();
                     $('<span/>', { class: "bs-lead", style: "flex:0 0 50px; font-weight:bold;" }).appendTo(line1);
                     var srcSel = $('<select/>', { class: "bs-src", style: "flex:0 0 90px; min-width:0;" }).appendTo(line1);
-                    [['thing', 'thing'], ['flow', 'flow'], ['global', 'global'], ['env', 'env']]
+                    [['thing', 'thing'], ['flow', 'flow'], ['global', 'global'], ['env', 'env'], ['time', 'time']]
                         .forEach(function(s) { srcSel.append($("<option></option>").val(s[0]).text(s[1])); });
                     var thingWrap = $('<span/>', { class: "bs-thing-wrap",
                         style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
@@ -328,6 +338,13 @@
                         style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
                     $('<input/>', { class: "bs-prop", type: "text", placeholder: "variable name", style: "width:100%;" })
                         .appendTo(propWrap).val(step.prop || '');
+                    var timeWrap = $('<span/>', { class: "bs-time-wrap",
+                        style: "flex:3 1 0; min-width:0; display:flex; align-items:center; margin-left:4px;" }).appendTo(line1);
+                    $('<input/>', { class: "bs-start", type: "time", style: "flex:1 1 0; min-width:0;" })
+                        .appendTo(timeWrap).val(step.start || '22:00');
+                    $('<span/>', { style: "flex:0 0 auto; margin:0 4px; color:#888;" }).appendTo(timeWrap).html('&ndash;');
+                    $('<input/>', { class: "bs-end", type: "time", style: "flex:1 1 0; min-width:0;" })
+                        .appendTo(timeWrap).val(step.end || '06:00');
                     $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="flex:0 0 auto; margin-left:6px;"><i class="fa fa-remove"></i></button>')
                         .appendTo(line1)
                         .on('click', function(e) {
@@ -374,6 +391,29 @@
                         .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
                     $('<span/>').appendTo(windowSpan).text(' s of the previous step');
 
+                    // A time step has no seconds to configure, so the timing line carries its
+                    // weekday toggles instead. Monday first for reading; the stored numbers are
+                    // getDay(), where 0 is Sunday.
+                    var daysSpan = $('<span/>', { class: "bs-days-span" }).appendTo(timing);
+                    $('<span/>', { class: "bs-days-sep" }).appendTo(daysSpan).text(' · ');
+                    var savedDays = Array.isArray(step.days) ? step.days.map(Number) : [0,1,2,3,4,5,6];
+                    btime.DAYS.forEach(function(d) {
+                        var on = savedDays.indexOf(d.d) !== -1;
+                        $('<button type="button" class="red-ui-button red-ui-button-small bs-day"/>')
+                            .attr('data-day', d.d).text(d.short)
+                            .css({ 'margin-right': '2px', 'min-width': '30px',
+                                   'font-weight': on ? 'bold' : 'normal', opacity: on ? 1 : 0.45 })
+                            .data('on', on)
+                            .appendTo(daysSpan)
+                            .on('click', function(e) {
+                                e.preventDefault();
+                                var b = $(this), now = !b.data('on');
+                                b.data('on', now).css({ 'font-weight': now ? 'bold' : 'normal', opacity: now ? 1 : 0.45 });
+                                refreshRuleView(ruleContainer);
+                            });
+                    });
+                    var daysHint = $('<span/>', { class: "bs-days-hint", style: "margin-left:10px;" }).appendTo(daysSpan);
+
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
                     $('<span/>').appendTo(cycleSpan).text('stays on for at most ');
@@ -392,11 +432,30 @@
                     opSel.change(opHandler);
 
                     var srcHandler = function() {
-                        var isThing = srcSel.val() === 'thing';
-                        thingWrap.toggle(isThing);
-                        propWrap.toggle(!isThing);
+                        var src = srcSel.val();
+                        thingWrap.toggle(src === 'thing');
+                        propWrap.toggle(src !== 'thing' && src !== 'time');
+                        timeWrap.toggle(src === 'time');
+                        syncOperatorOptions();
                         syncPatternOptions();
                     };
+                    // For a time step resolveState yields a boolean, so the existing
+                    // true/false operator is inside/outside — just worded for humans.
+                    function syncOperatorOptions() {
+                        var isTime = srcSel.val() === 'time';
+                        var current = opSel.val() || step.operator || 'true';
+                        if (isTime === opSel.data('isTime')) { return; }
+                        opSel.data('isTime', isTime).empty();
+                        if (isTime) {
+                            opSel.append($("<option></option>").val('true').text('inside'));
+                            opSel.append($("<option></option>").val('false').text('outside'));
+                            opSel.val(current === 'false' ? 'false' : 'true');
+                        } else {
+                            halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                            opSel.val(current);
+                        }
+                        opHandler();
+                    }
                     srcSel.change(function() { srcHandler(); refreshRuleView(ruleContainer); });
 
                     fillThingSelect(thingSel, step.thing);
@@ -434,6 +493,10 @@
                         var timing = el;
                         rule.steps.push({
                             src:      el.find('.bs-src option:selected').val(),
+                            start:    el.find('.bs-start').val(),
+                            end:      el.find('.bs-end').val(),
+                            days:     el.find('.bs-day').filter(function() { return $(this).data('on'); })
+                                        .map(function() { return Number($(this).attr('data-day')); }).get(),
                             thing:    el.find('.bs-thing option:selected').val(),
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
@@ -465,12 +528,26 @@
                         // Timing line: only the parts that actually apply, and only when
                         // at least one of them does.
                         var timing = el.find('.bs-timing');
+                        var isTime = el.find('.bs-src').val() === 'time';
                         var showWindow = i > 0 && pat !== 'is';
                         var showCycle = (pat === 'cycle');
                         timing.find('.bs-window-span').toggle(showWindow);
                         timing.find('.bs-cycle-span').toggle(showCycle);
                         timing.find('.bs-cycle-sep').toggle(showWindow && showCycle);
-                        timing.toggle(showWindow || showCycle);
+                        timing.find('.bs-days-span').toggle(isTime);
+                        timing.find('.bs-days-sep').toggle(isTime && showWindow);
+                        timing.toggle(showWindow || showCycle || isTime);
+
+                        // Live read-back so a wrong window or day selection is obvious at once.
+                        if (isTime) {
+                            var spec = { start: el.find('.bs-start').val(), end: el.find('.bs-end').val(),
+                                         days: el.find('.bs-day').filter(function() { return $(this).data('on'); })
+                                                 .map(function() { return Number($(this).attr('data-day')); }).get() };
+                            var active = btime.inWindow(new Date(), spec);
+                            el.find('.bs-days-hint')
+                                .text(btime.describe(spec) + ' — ' + (active ? 'active right now' : 'not active right now'))
+                                .css('color', active ? '#4b8' : '#999');
+                        }
                     });
 
                     // A level check cannot start a sequence — nothing would trigger it.
@@ -681,6 +758,10 @@
                         var timing = s;
                         rule.steps.push({
                             src:       s.find('.bs-src option:selected').val(),
+                            start:     s.find('.bs-start').val(),
+                            end:       s.find('.bs-end').val(),
+                            days:      s.find('.bs-day').filter(function() { return $(this).data('on'); })
+                                         .map(function() { return Number($(this).attr('data-day')); }).get(),
                             thing:     s.find('.bs-thing option:selected').val(),
                             item:      s.find('.bs-item option:selected').val(),
                             prop:      s.find('.bs-prop').val(),

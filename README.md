@@ -152,7 +152,7 @@ other message — e.g. into a Scene-type sensor representing the person.
 Everything is a **rule**, built from steps. Each step names a source and a condition, then says
 *when* that condition has to hold. A source is normally a **thing** item, but it can also be a
 **flow**, **global** or **env** variable — for facts that live elsewhere in the flow, such as
-"the calendar says we are away" or "guest mode is on".
+"the calendar says we are away" or "guest mode is on" — or a **time** window.
 
 - **right now** — a condition, true at that instant (*and…*)
 - **now or soon** — the same, but it waits for the condition until the window runs out; for
@@ -166,12 +166,20 @@ Timing sits on a second line under a step, only where it applies: *within N s of
 step* is how long that step has to happen, and *stays on for at most N s* is how long a cycle may
 stay true — a door held open longer than that is not a pass-through, so the rule does not advance.
 
-**flow, global and env can only be conditions** — *right now* or *now or soon*. Only a thing is
-subscribed to, so a variable is read when the node evaluates rather than pushed when it changes;
-an edge qualifier on one could only be sampled on the tick and would miss anything faster. The
-same polling means such a rule updates within one tick (30 s by default), not instantly. And
-`flow`/`global` survive a restart only when the context store is file-backed — the default is
-memory.
+A **time** source is a window of the day rather than a sensor: start and end in 24-hour format
+plus the weekdays it applies on. It may cross midnight (22:00–06:00), start is inclusive and end
+exclusive, and a window whose start equals its end is never active. The weekday is **the day it
+is right now** — with 22:00–06:00 on Mon–Fri, Tuesday 02:00 counts but Saturday 02:00 does not,
+even though that is Friday night. The value is simply "inside the window or not", so the
+condition reads *inside* / *outside* and one window covers both "during the night" and "outside
+working hours". Times follow the server's local clock, DST included.
+
+**flow, global, env and time can only be conditions** — *right now* or *now or soon*. Only a
+thing is subscribed to, so these are read when the node evaluates rather than pushed when they
+change; an edge qualifier on one could only be sampled on the tick and would miss anything
+faster. The same polling means such a rule — including a time boundary — takes effect within one
+tick (30 s by default), not on the second. And `flow`/`global` survive a restart only when the
+context store is file-backed; the default is memory.
 
 A rule that is a single *right now* step is **continuous** (*While…*): it pushes the estimate while its
 condition holds and stops the moment it does not. Any other rule is **momentary** (*When…
