@@ -289,42 +289,52 @@
                 }
 
                 // ── step row ─────────────────────────────────────────────────
+                // A step owns everything about itself — both input lines and its timing
+                // detail line — so harvesting never has to reach across siblings.
                 function addStepRow(stepsDiv, ruleContainer, step) {
-                    var row = $('<div/>', { class: "bayes-step", style: "margin-top:6px; white-space:nowrap;" }).appendTo(stepsDiv);
+                    var stepDiv = $('<div/>', { class: "bayes-step", style: "margin-top:8px;" }).appendTo(stepsDiv);
 
-                    $('<span/>', { class: "bs-lead", style: "display:inline-block; width:50px; font-weight:bold;" }).appendTo(row);
+                    var flexRow = function() {
+                        return $('<div/>', { style: "display:flex; align-items:center;" }).appendTo(stepDiv);
+                    };
+                    var indent = function(row) {
+                        return $('<span/>', { style: "flex:0 0 50px;" }).appendTo(row);
+                    };
 
-                    var thingSel = $('<select/>', { class: "bs-thing", style: "width:150px;" }).appendTo(row);
-                    var itemSel = $('<select/>', { class: "bs-item", style: "width:120px; margin-left:4px;" }).appendTo(row);
+                    // Line 1 — which sensor.
+                    var line1 = flexRow();
+                    $('<span/>', { class: "bs-lead", style: "flex:0 0 50px; font-weight:bold;" }).appendTo(line1);
+                    var thingSel = $('<select/>', { class: "bs-thing", style: "flex:1 1 0; min-width:0;" }).appendTo(line1);
+                    var itemSel = $('<select/>', { class: "bs-item", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
+                    $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="flex:0 0 auto; margin-left:6px;"><i class="fa fa-remove"></i></button>')
+                        .appendTo(line1)
+                        .on('click', function(e) {
+                            e.preventDefault();
+                            stepDiv.remove();
+                            refreshRuleView(ruleContainer);
+                        });
 
-                    var opSel = $('<select/>', { class: "bs-op", style: "width:90px; margin-left:4px;" }).appendTo(row);
+                    // Line 2 — the condition, and when it has to hold.
+                    var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
+                    indent(line2);
+                    var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 110px; min-width:0;" }).appendTo(line2);
                     halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
-                    var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:110px; margin-left:4px;" })
-                        .appendTo(row).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
+                    var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
+                    var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
+                        .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
-
-                    // Timing qualifier. Reads as a suffix to the condition:
+                    // Timing qualifier, read as a suffix to the condition:
                     // "iPhone Presence is true — right now".
-                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:130px; margin-left:4px;" }).appendTo(row);
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0; margin-left:4px;" }).appendTo(line2);
                     patSel.append($("<option></option>").val('is').text('right now'));
                     patSel.append($("<option></option>").val('isOrBecomes').text('now or soon'));
                     patSel.append($("<option></option>").val('becomes').text('when it changes'));
                     patSel.append($("<option></option>").val('cycle').text('starts then stops'));
 
-                    var removeBtn = $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="margin-left:6px;"><i class="fa fa-remove"></i></button>')
-                        .appendTo(row)
-                        .on('click', function(e) {
-                            e.preventDefault();
-                            row.remove();
-                            timing.remove();
-                            refreshRuleView(ruleContainer);
-                        });
-
-                    // Timing numbers live on their own indented line, so the step row stays
-                    // narrow and each number can carry a full sentence.
+                    // Line 3 — the timing numbers, spelled out.
                     var timing = $('<div/>', { class: "bs-timing",
-                        style: "margin-left:50px; margin-top:2px; color:#888; font-size:0.9em; white-space:nowrap;" })
-                        .appendTo(stepsDiv);
+                        style: "margin-left:50px; margin-top:3px; color:#888; font-size:0.9em;" })
+                        .appendTo(stepDiv);
 
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
                     $('<span/>').appendTo(windowSpan).text('within ');
@@ -342,9 +352,10 @@
                     thingSel.change(function() {
                         fillItemSelect(itemSel, thingSel.val(), (thingSel.val() === step.thing) ? step.item : null);
                     });
+                    // Hide the wrapper, not just the widget, so its flex space collapses too.
                     var opHandler = function() {
                         var op = opSel.val();
-                        (op === 'true' || op === 'false') ? valField.typedInput('hide') : valField.typedInput('show');
+                        valWrap.toggle(op !== 'true' && op !== 'false');
                     };
                     opSel.change(opHandler);
 
@@ -353,7 +364,7 @@
                     opSel.val(step.operator || 'true');
                     opHandler();
                     patSel.val(step.pattern || 'is');
-                    return row;
+                    return stepDiv;
                 }
 
                 // Harvest one rule item from its DOM.
@@ -371,7 +382,7 @@
                     };
                     container.find('.bayes-step').each(function() {
                         var el = $(this);
-                        var timing = el.next('.bs-timing');
+                        var timing = el;
                         rule.steps.push({
                             thing:    el.find('.bs-thing option:selected').val(),
                             item:     el.find('.bs-item option:selected').val(),
@@ -402,7 +413,7 @@
 
                         // Timing line: only the parts that actually apply, and only when
                         // at least one of them does.
-                        var timing = el.next('.bs-timing');
+                        var timing = el.find('.bs-timing');
                         var showWindow = i > 0 && pat !== 'is';
                         var showCycle = (pat === 'cycle');
                         timing.find('.bs-window-span').toggle(showWindow);
@@ -522,7 +533,7 @@
                                 refreshRuleView(container);
                             });
 
-                        var outRow = $('<div/>', { style: "margin-top:8px; white-space:nowrap;" }).appendTo(container);
+                        var outRow = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px; color:#888;" }).appendTo(outRow).text('→');
                         $('<span/>', { style: "margin-right:6px;" }).appendTo(outRow).text('makes it');
                         var dirSel = $('<select/>', { class: "br-direction", style: "width:70px;" }).appendTo(outRow);
@@ -541,20 +552,20 @@
                             .appendTo(customSpan).val(rule.halfLife);
                         $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
 
-                        var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px; white-space:nowrap;" }).appendTo(container);
+                        var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(advRow);
                         $('<span/>', { style: "color:#888;" }).appendTo(advRow).text('LR');
                         $('<input/>', { class: "br-lr", type: "number", min: "0.001", step: "any", placeholder: "auto", style: "width:80px; margin-left:4px;" })
                             .appendTo(advRow).val(rule.lr);
 
-                        var barRow = $('<div/>', { style: "margin-top:6px; white-space:nowrap;" }).appendTo(container);
+                        var barRow = $('<div/>', { style: "margin-top:6px;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(barRow);
                         var barOuter = $('<span/>', { class: "br-bar-outer",
                             style: "display:inline-block; width:120px; height:10px; border:1px solid #bbb; border-radius:3px; vertical-align:middle; overflow:hidden;" }).appendTo(barRow);
                         $('<span/>', { class: "br-bar-inner", style: "display:block; height:100%;" }).appendTo(barOuter);
                         $('<span/>', { class: "br-share-caption", style: "margin-left:8px; color:#555;" }).appendTo(barRow);
 
-                        var decayRow = $('<div/>', { style: "margin-top:2px; white-space:nowrap;" }).appendTo(container);
+                        var decayRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(decayRow);
                         $('<span/>', { class: "br-decay-caption", style: "color:#999; font-size:0.9em;" }).appendTo(decayRow);
 
@@ -615,7 +626,7 @@
                     };
                     el.find('.bayes-step').each(function() {
                         var s = $(this);
-                        var timing = s.next('.bs-timing');
+                        var timing = s;
                         rule.steps.push({
                             thing:     s.find('.bs-thing option:selected').val(),
                             item:      s.find('.bs-item option:selected').val(),
