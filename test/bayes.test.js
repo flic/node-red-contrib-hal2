@@ -74,6 +74,16 @@ describe('bayes-scale', function() {
         assert.strictEqual(scale.strengthLr('unknown'), 3);
         assert.strictEqual(scale.fadeSeconds('slow'), 3600);
         assert.strictEqual(scale.fadeSeconds('unknown'), 1200);
+        assert.strictEqual(scale.fadeSeconds('never'), scale.NEVER_SECONDS);
+    });
+
+    it('the "never" sentinel is finite, JSON-safe and effectively undecaying', function() {
+        assert.ok(isFinite(scale.NEVER_SECONDS));
+        assert.strictEqual(JSON.parse(JSON.stringify(scale.NEVER_SECONDS)), scale.NEVER_SECONDS);
+        assert.ok(scale.NEVER_SECONDS * 1000 < Number.MAX_SAFE_INTEGER);
+        // A century of decay leaves the contribution essentially untouched (>99.5 %).
+        const century = 100 * 365 * 24 * HOUR;
+        assert.ok(Math.pow(2, -century / (scale.NEVER_SECONDS * 1000)) > 0.995);
     });
 });
 

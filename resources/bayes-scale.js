@@ -26,11 +26,17 @@
         { v: 'certain',  lr: 400 }
     ];
 
-    // Word fade rates → half-life in seconds (momentary rules).
+    // Word fade rates → half-life in seconds (momentary rules). 'never' is a finite
+    // sentinel rather than Infinity so the value survives a JSON round-trip through
+    // the context store (JSON turns Infinity into null). 1e12 s is the largest round
+    // number whose millisecond form stays inside MAX_SAFE_INTEGER; a term keeps
+    // 99.8 % of its weight over a century, which is "never" for any practical purpose.
+    var NEVER_SECONDS = 1e12;
     var FADES = [
         { v: 'quick',  s: 300 },
         { v: 'normal', s: 1200 },
-        { v: 'slow',   s: 3600 }
+        { v: 'slow',   s: 3600 },
+        { v: 'never',  s: NEVER_SECONDS }
     ];
 
     function logit(p)   { return Math.log(p / (1 - p)); }
@@ -95,6 +101,7 @@
     return {
         STRENGTHS: STRENGTHS,
         FADES: FADES,
+        NEVER_SECONDS: NEVER_SECONDS,
         logit: logit,
         sigmoid: sigmoid,
         strengthLr: strengthLr,

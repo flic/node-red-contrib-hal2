@@ -199,13 +199,19 @@ opposing evidence, and a stored certain statement is cleared by any later contra
 
 ### Fading and the latch
 
-Momentary pushes fade (**quick** 5 min / **normal** 20 min / **slow** 1 h half-life);
-continuous rules simply stop when their condition does. By default the output falls back to
+Momentary pushes fade — **quick** (5 min half-life), **normal** (20 min), **slow** (1 h),
+**never** (the push stands until something contradicts it) or **custom…** for an explicit
+half-life; continuous rules simply stop when their condition does. Strength buys very little
+time here: each doubling of `ln(LR)` adds only one half-life, so if you want a push to last,
+change the fade rather than the strength. By default the output falls back to
 off as evidence disappears. The **lock** changes that: *only rules that make it false can turn
 it off* — silence, decay or a sensor dropping out will not (status shows `held`). Use it when
 the state cannot end unnoticed: nobody leaves the house without the door opening, so a phone
 rebooting indoors must not flip the estimate. An optional hour limit turns it off anyway after
-that long without supporting evidence.
+that long without supporting evidence. With the lock on, fading no longer makes the output fall
+back by itself — but it still decides whether a push is strong enough to turn the output *on*,
+and how long a "makes it false" rule stays able to turn it off: a false rule that fires while
+the estimate is still high can fade away before the estimate drops, and is then wasted.
 
 Advanced mode exposes the raw numbers (LR, half-life seconds, prior, thresholds, clamp) on the
 same rules — there is one data model, the modes only differ in what is shown. The estimate is

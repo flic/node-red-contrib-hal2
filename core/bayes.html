@@ -143,8 +143,16 @@
     opposing evidence, and a stored certain statement is cleared by any later contradicting rule.</p>
 
     <h3>Fading and the latch</h3>
-    <p>Momentary pushes fade &mdash; <b>quick</b> (5 min half-life), <b>normal</b> (20 min) or
-    <b>slow</b> (1 h). Continuous rules never fade; they simply stop when their condition does.
+    <p>Momentary pushes fade &mdash; <b>quick</b> (5 min half-life), <b>normal</b> (20 min),
+    <b>slow</b> (1 h), <b>never</b> (the push stands until something contradicts it), or
+    <b>custom&hellip;</b> for an explicit half-life in seconds. Continuous rules never fade; they simply
+    stop when their condition does. Note that strength buys very little time: each doubling of
+    <code>ln(LR)</code> only adds one half-life, so <i>certain</i> outlasts <i>decisive</i> by well
+    under one &mdash; if you want a push to last, change the fade, not the strength.</p>
+    <p>With the lock on, fading no longer makes the output fall back by itself, but it still decides
+    whether a push is still strong enough to turn the output <i>on</i>, and how long a
+    "makes it false" rule stays able to turn it off &mdash; a false rule that fires while the estimate
+    is still high can fade away before the estimate drops, and then it is wasted.</p>
     By default the output falls back to off when evidence disappears. The <b>lock</b> on the General
     tab changes that: <i>only rules that make it false can turn it off</i> &mdash; silence, decay or a
     sensor dropping out will not (the status shows <code>held</code>). Use it when the state cannot end
@@ -266,8 +274,10 @@
                 }
 
                 function ruleHalfLifeS(rule) {
-                    return Number(rule.halfLife) > 0 ? Number(rule.halfLife) : scale.fadeSeconds(rule.fade);
+                    if (rule.fade === 'custom') { return Number(rule.halfLife) > 0 ? Number(rule.halfLife) : 1200; }
+                    return scale.fadeSeconds(rule.fade);
                 }
+                function neverFades(rule) { return rule.fade === 'never'; }
 
                 function pct(x) { return Math.round(x * 100); }
 
@@ -355,7 +365,9 @@
                         strength: container.find('.br-strength option:selected').val(),
                         fade: container.find('.br-fade option:selected').val(),
                         lr: container.find('.br-lr').val(),
-                        halfLife: container.find('.br-halflife').val()
+                        // Only a custom fade stores a raw half-life; the named rates own it otherwise.
+                        halfLife: container.find('.br-fade option:selected').val() === 'custom'
+                            ? container.find('.br-halflife').val() : ''
                     };
                     container.find('.bayes-step').each(function() {
                         var el = $(this);
@@ -425,6 +437,8 @@
                     var decay;
                     if (cont) {
                         decay = 'holds while true';
+                    } else if (neverFades(rule)) {
+                        decay = 'does not fade — this push stands until something contradicts it';
                     } else {
                         var hlMin = ruleHalfLifeS(rule) / 60;
                         decay = Math.abs(sPct) + ' % now → ' + Math.abs(Math.round(sPct / 2)) + ' % after ' +
@@ -433,7 +447,7 @@
                     }
                     container.find('.br-decay-caption').text(decay);
                     container.find('.br-fade-span').toggle(!cont);
-                    container.find('.br-halflife-span').toggle(!cont);
+                    container.find('.br-custom-span').toggle(rule.fade === 'custom');
 
                     refreshSummary();
                 }
@@ -472,7 +486,7 @@
                     } else {
                         var ms = scale.offAfterMs(momentaryTerms, p.prior, p.pOff, p.clamp);
                         lines.push(ms === null
-                            ? 'The resting state never falls below the off-threshold.'
+                            ? 'The output never falls back on its own — only a "makes it false" rule can turn it off.'
                             : (ms === 0
                                 ? 'If all evidence stops, the output turns off immediately.'
                                 : 'If all evidence stops now, the output turns off after ' + fmtDuration(ms) + '.'));
@@ -515,17 +529,18 @@
                         $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(fadeSpan).text('fades');
                         var fadeSel = $('<select/>', { class: "br-fade", style: "width:90px; margin-left:4px;" }).appendTo(fadeSpan);
                         scale.FADES.forEach(function(f) { fadeSel.append($("<option></option>").val(f.v).text(f.v)); });
+                        fadeSel.append($("<option></option>").val('custom').text('custom…'));
+                        var customSpan = $('<span/>', { class: "br-custom-span" }).appendTo(fadeSpan);
+                        $('<input/>', { class: "br-halflife", type: "number", min: "1", step: "any",
+                            placeholder: "half-life", style: "width:80px; margin-left:6px;" })
+                            .appendTo(customSpan).val(rule.halfLife);
+                        $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
 
                         var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px; white-space:nowrap;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(advRow);
                         $('<span/>', { style: "color:#888;" }).appendTo(advRow).text('LR');
                         $('<input/>', { class: "br-lr", type: "number", min: "0.001", step: "any", placeholder: "auto", style: "width:80px; margin-left:4px;" })
                             .appendTo(advRow).val(rule.lr);
-                        var hlSpan = $('<span/>', { class: "br-halflife-span" }).appendTo(advRow);
-                        $('<span/>', { style: "margin-left:12px; color:#888;" }).appendTo(hlSpan).text('half-life');
-                        $('<input/>', { class: "br-halflife", type: "number", min: "1", step: "any", placeholder: "auto", style: "width:80px; margin-left:4px;" })
-                            .appendTo(hlSpan).val(rule.halfLife);
-                        $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(hlSpan).text('s');
 
                         var barRow = $('<div/>', { style: "margin-top:6px; white-space:nowrap;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(barRow);
@@ -544,7 +559,8 @@
 
                         dirSel.val(rule.direction || 'true');
                         strSel.val(rule.strength || 'moderate');
-                        fadeSel.val(rule.fade || 'normal');
+                        // A stored half-life means the rule was authored with a custom fade.
+                        fadeSel.val(Number(rule.halfLife) > 0 ? 'custom' : (rule.fade || 'normal'));
 
                         container.on('change input', function() { refreshRuleView(container); });
                         refreshRuleView(container);
@@ -589,7 +605,8 @@
                         strength: el.find('.br-strength option:selected').val(),
                         fade: el.find('.br-fade option:selected').val(),
                         lr: el.find('.br-lr').val(),
-                        halfLife: el.find('.br-halflife').val()
+                        halfLife: el.find('.br-fade option:selected').val() === 'custom'
+                            ? el.find('.br-halflife').val() : ''
                     };
                     el.find('.bayes-step').each(function() {
                         var s = $(this);
