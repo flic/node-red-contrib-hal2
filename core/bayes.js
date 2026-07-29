@@ -67,9 +67,6 @@ module.exports = function(RED) {
                                                     bayesTime.parseHHMM(s.end) !== null; }
                     return s.prop;
                 });
-                // Pre-'is' configs expressed the continuous case as a lone 'becomes'
-                // step; that is exactly a level check, so carry it over unchanged.
-                if (steps.length === 1 && steps[0].pattern === 'becomes') { steps[0].pattern = 'is'; }
                 // Ids key the rule map and every step hit, so a missing one would collapse
                 // every rule onto the same entry. Fall back to the position in the list.
                 return { id: r.id || ('rule' + idx), lr, halfLifeMs, steps };
