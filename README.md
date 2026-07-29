@@ -142,49 +142,48 @@ History powers two tools:
 `hal2Bayes` estimates something you cannot measure directly — typically *"is this person
 home?"* — by weighing up several unreliable sensors instead of trusting any single one. A phone
 presence sensor that already reports "home" from the street corner is not enough on its own;
-combined with the front door opening and movement in the hallway, it becomes convincing. One
-node estimates one thing, so use one node per person.
+combined with the front door opening and closing and movement in the hallway, it becomes
+convincing. The node is an anonymous estimator: it knows nothing about people, it just fuses
+evidence. Use one node per hypothesis (one per person) and wire its output onward like any
+other message — e.g. into a Scene-type sensor representing the person.
 
-### Simple mode (default)
+### Rules
 
-Every row on the **Sensors** tab is a piece of evidence, of one of two kinds.
+Everything is a **rule**. A rule with a single *becomes* step is **continuous** (*While…*): it
+pushes the estimate while its condition holds and stops the moment it does not. Any other rule
+is **momentary** (*When… then…*): its steps must happen in order, each within its time window,
+and completing the last step gives a one-off push that then fades. A *cycle* step means the
+condition goes true and back to false within a limit — a door opening and closing. An event
+that happened while the previous step was still in progress also counts, so motion while the
+door stood open is accepted when it closes.
 
-- **Sensor** rows are a single observation and read as a sentence: *when [sensor] [is true /
-  > 20 / …], that indicates [true/false], [slight…decisive]*. Strength is how much the
-  observation should move the estimate: **slight** is a weak hint, **decisive** is near-proof.
-  The row keeps contributing for as long as the condition holds.
-- **Arrival** rows are two sensors in a time order, which no single observation can express:
-  a door opens and closes again, and movement follows. Pick the door sensor, the motion sensor,
-  and which sensor row identifies the person. The boost applies only to someone not already on,
-  and only if their own sensor was seen shortly before — so a door cycle with no movement
-  (*"opened the door, forgot something in the car, closed it"*) does not count as arriving, and
-  someone leaving is never boosted by their own exit.
+### Strengths and the share scale
 
-### Advanced mode
+Each rule pushes toward true or false with a word strength — **slight** (LR 1.5), **moderate**
+(3), **strong** (10), **decisive** (30), **certain** (400). The editor shows every rule as a
+*share of the way* from the prior to the on-threshold, and shares add exactly: 74 % + 35 % =
+109 % turns the output on. This is also how shared sensors are disambiguated without any
+special logic: give the door/motion arrival rule a share too small to cross the line alone, so
+it only matters together with the node's own strong indicator — someone else arriving contributes
+35 % to this node and nothing happens. A **certain** rule overrides history: firing it clears
+opposing evidence, and a stored certain statement is cleared by any later contradicting rule.
 
-A checkbox on the General tab unlocks the full model; rows are kept either way.
+### Fading and the latch
 
-- **Likelihood ratios** instead of word strengths: `LR = P(obs|true) / P(obs|false)`. **State**
-  rows contribute `ln(LR)` while their condition holds; **event** rows add a one-shot
-  contribution on the rising edge that fades with a configurable half-life. LR < 1 is negative
-  evidence.
-- **Sequences** — custom composite rules like *"door open→closed within 3 min, confirmed by
-  hall motion within 2 min ⇒ someone entered (LR 30)"*. This is exactly what an arrival row
-  expands into: two `LR 1` event rows plus a cycle sequence. Rules flagged *only as candidate*
-  apply only while the output is off and a designated candidate-trigger row fired recently —
-  evaluated when the sequence arms, so anonymous door events never boost someone already home.
-- **Model parameters** — prior, the two hysteresis thresholds (on at P ≥ on-threshold, off
-  first at P ≤ off-threshold, so the output does not flap), default half-life, log-odds clamp
-  and tick interval.
-- Rows authored in advanced mode that have no simple equivalent show read-only in simple mode —
-  they are never modified or dropped.
+Momentary pushes fade (**quick** 5 min / **normal** 20 min / **slow** 1 h half-life);
+continuous rules simply stop when their condition does. By default the output falls back to
+off as evidence disappears. The **lock** changes that: *only rules that make it false can turn
+it off* — silence, decay or a sensor dropping out will not (status shows `held`). Use it when
+the state cannot end unnoticed: nobody leaves the house without the door opening, so a phone
+rebooting indoors must not flip the estimate. An optional hour limit turns it off anyway after
+that long without supporting evidence.
 
-The estimate survives restarts via node context and keeps fading by wall clock while Node-RED
-is down. Output 1 emits on change of the binary result; output 2 emits a full snapshot
-(`p`, `logOdds`, active terms, sequence state) for tuning. `msg.topic` `reset` / `set` /
-`evidence` (`{ lr, halfLife? }`) are available as escape hatches. To record the result on a
-Thing, wire output 1 onward like any other message — the node has no side channel into the
-object model.
+Advanced mode exposes the raw numbers (LR, half-life seconds, prior, thresholds, clamp) on the
+same rules — there is one data model, the modes only differ in what is shown. The estimate is
+persisted in node context and keeps fading by wall clock across restarts. Output 1 emits on
+change of the binary result; output 2 emits a snapshot (`p`, `logOdds`, `held`, active rules,
+terms, sequence state) for tuning. `msg.topic` `reset` / `evidence` (`{ lr, halfLife? }`) are
+available as escape hatches.
 
 ## Other recent additions
 

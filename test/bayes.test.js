@@ -1,153 +1,410 @@
 'use strict';
 const assert = require('node:assert');
 const { createBayes, logit, sigmoid } = require('../lib/bayes');
-const { expandArrivalRows } = require('../lib/bayesArrival');
+const scale = require('../resources/bayes-scale');
+
+const MIN = 60e3;
+const HOUR = 60 * MIN;
 
 // ---- helpers ----------------------------------------------------------------
 
-const MIN = 60e3;
-
-function cfg(overrides) {
+function cfgOf(overrides) {
     return Object.assign({
         prior: 0.2, pOn: 0.85, pOff: 0.30, clamp: 6, halfLifeMs: 20 * MIN,
-        observations: [], composites: [], candidateRow: '', candidateWindowMs: 5 * MIN
+        latch: false, maxHoldMs: 0, rules: []
     }, overrides);
 }
 
-function eventRow(id, overrides) {
-    return Object.assign({ id, name: id, type: 'event', operator: 'true', value: '',
-        valueType: 'bool', lr: 3, halfLifeMs: null, onlyAsCandidate: false }, overrides);
+function step(pattern, overrides) {
+    return Object.assign({ thing: 't', item: 'i', operator: 'true', value: '', valueType: 'str',
+        pattern: pattern, cycleMaxMs: 3 * MIN, windowMs: 2 * MIN }, overrides);
 }
 
-function stateRow(id, overrides) {
-    return Object.assign(eventRow(id), { type: 'state' }, overrides);
+// Continuous rule: one step, pattern 'becomes'.
+function contRule(id, lr, stepOverrides) {
+    return { id, lr, halfLifeMs: null, steps: [step('becomes', stepOverrides)] };
 }
 
-// Presence-lab composite: door cycle (≤3 min) confirmed by motion (≤2 min window).
-function doorComposite(overrides) {
-    return Object.assign({ id: 'c1', name: 'entry', armRow: 'door', armPattern: 'cycle',
-        cycleMaxMs: 3 * MIN, confirmRow: 'motion', confirmWindowMs: 2 * MIN,
-        confirmDuringArm: true, lr: 30, onlyAsCandidate: false }, overrides);
+// The lab's arrival: door cycle then motion, as a two-step momentary rule.
+function arrivalRule(id, lr) {
+    return { id, lr, halfLifeMs: null,
+        steps: [step('cycle', { thing: 'door' }), step('becomes', { thing: 'motion' })] };
 }
 
-function labSetup(compOverrides, cfgOverrides) {
-    return createBayes(cfg(Object.assign({
-        observations: [
-            eventRow('radio'),
-            eventRow('door',   { lr: 1 }),
-            eventRow('motion', { lr: 1 })
-        ],
-        composites: [doorComposite(compOverrides)]
-    }, cfgOverrides)));
-}
-
+const hit = (ruleId, stepIndex) => [{ ruleId, stepIndex }];
 const noState = () => undefined;
 const pOf = (b, t) => b.evaluate(noState, t).p;
 
-// ---- 1. math primitives -----------------------------------------------------
+// ---- scale helpers ----------------------------------------------------------
 
-describe('bayes math', function() {
-    it('logit/sigmoid roundtrip', function() {
-        for (const p of [0.01, 0.2, 0.5, 0.85, 0.99]) {
-            assert.ok(Math.abs(sigmoid(logit(p)) - p) < 1e-12);
-        }
+describe('bayes-scale', function() {
+    it('required gain with defaults is 3.121', function() {
+        assert.ok(Math.abs(scale.requiredGain(0.2, 0.85) - 3.1209) < 1e-3);
     });
 
-    it('posterior is clamped to ±clamp', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e', { lr: 1e9 })], clamp: 6 }));
-        b.handleEvent(['e'], true, 0);
-        const r = b.evaluate(noState, 0);
-        assert.ok(r.logOdds <= 6);
-        assert.ok(r.p < 1);
+    it('strength shares: strong 74 %, decisive over 100 %, certain saturates', function() {
+        const share = lr => scale.shareOfWay(lr, 0.2, 0.85, 6);
+        assert.ok(Math.abs(share(10) - 0.7378) < 1e-3);
+        assert.ok(share(30) > 1);
+        assert.ok(Math.abs(share(400) - Math.log(400) / 3.1209) < 1e-3);   // ln 400 ≈ 5.99, inside the clamp
     });
 
-    it('per-term ln(LR) is capped to ±clamp', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e', { lr: Math.exp(10) })], clamp: 6 }));
-        b.handleEvent(['e'], true, 0);
-        // single term capped at 6 + prior logit ≈ -1.386 → below hard clamp
-        assert.ok(Math.abs(b.evaluate(noState, 0).logOdds - (logit(0.2) + 6)) < 1e-9);
+    it('direction false yields a negative share; shares add', function() {
+        const share = lr => scale.shareOfWay(lr, 0.2, 0.85, 6);
+        assert.ok(share(1 / 3) < 0);
+        assert.ok(Math.abs(share(10) + share(3) - (share(10) + share(3))) < 1e-12);
+        assert.ok(share(10) + share(3) > 1);                    // strong + moderate ⇒ enough
     });
 
-    it('empty estimator sits at the prior', function() {
-        const b = createBayes(cfg({ prior: 0.3 }));
-        assert.ok(Math.abs(pOf(b, 0) - 0.3) < 1e-12);
+    it('offAfterMs: reference momentary term decays to off in ~21 min', function() {
+        // A lone moderate term at full strength on top of the prior.
+        const t = scale.offAfterMs([{ l0: Math.log(3), halfLifeMs: 20 * MIN }], 0.2, 0.30, 6);
+        assert.ok(t > 15 * MIN && t < 30 * MIN, 'got ' + t);
+    });
+
+    it('offAfterMs: already off gives 0, prior above pOff gives null', function() {
+        assert.strictEqual(scale.offAfterMs([], 0.2, 0.30, 6), 0);
+        assert.strictEqual(scale.offAfterMs([{ l0: 2, halfLifeMs: MIN }], 0.4, 0.30, 6), null);
+    });
+
+    it('strength and fade tables resolve labels', function() {
+        assert.strictEqual(scale.strengthLr('strong'), 10);
+        assert.strictEqual(scale.strengthLr('unknown'), 3);
+        assert.strictEqual(scale.fadeSeconds('slow'), 3600);
+        assert.strictEqual(scale.fadeSeconds('unknown'), 1200);
     });
 });
 
-// ---- 2-3. state vs event evidence -------------------------------------------
+// ---- 1-3. continuous rules --------------------------------------------------
 
-describe('state rows', function() {
-    it('contribute while the condition holds, vanish when it stops, never decay', function() {
-        const b = createBayes(cfg({ observations: [stateRow('tv', { lr: 4 })] }));
+describe('continuous rules', function() {
+    it('contribute while true, gone when false, never decay', function() {
+        const b = createBayes(cfgOf({ rules: [contRule('tv', 4)] }));
         let raw = true;
         const resolve = () => raw;
         const pOn = b.evaluate(resolve, 0).p;
         assert.ok(pOn > 0.2);
-        // 10 hours later: identical contribution — no decay
-        assert.ok(Math.abs(b.evaluate(resolve, 600 * MIN).p - pOn) < 1e-12);
+        assert.ok(Math.abs(b.evaluate(resolve, 600 * MIN).p - pOn) < 1e-12);   // 10 h later: identical
         raw = false;
         assert.ok(Math.abs(b.evaluate(resolve, 600 * MIN).p - 0.2) < 1e-12);
     });
+
+    it('direction false (reciprocal LR) pushes down', function() {
+        const b = createBayes(cfgOf({ rules: [contRule('away', 1 / 3)] }));
+        assert.ok(b.evaluate(() => true, 0).p < 0.2);
+    });
+
+    it('a lone certain rule flips the output; certain false drops it', function() {
+        const on = createBayes(cfgOf({ rules: [contRule('sure', 400)] }));
+        let raw = true;
+        const r1 = on.evaluate(() => raw, 0);
+        assert.strictEqual(r1.binary, true);
+        assert.ok(r1.p > 0.99);
+
+        const b = createBayes(cfgOf({ rules: [contRule('sureOn', 400, { thing: 'a' }),
+                                              contRule('sureOff', 1 / 400, { thing: 'x' })] }));
+        const states = { a: true, x: false };
+        const resolve = s => states[s.thing];
+        assert.strictEqual(b.evaluate(resolve, 0).binary, true);
+        states.x = true;   // certain false now also active — cancels, drops below pOff
+        assert.strictEqual(b.evaluate(resolve, 1).binary, false);
+    });
+
+    it('the reference case: strong alone off, moderate alone off, both on', function() {
+        // iPhone (continuous strong) + arrival (momentary moderate).
+        const b = createBayes(cfgOf({ rules: [contRule('phone', 10, { thing: 'ph' }), arrivalRule('arr', 3)] }));
+        let phone = false;
+        const resolve = s => (s.thing === 'ph' ? phone : undefined);
+
+        // Arrival fires alone: moderate ⇒ off.
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
+        let r = b.evaluate(resolve, 2 * MIN);
+        assert.ok(r.p < 0.85);
+        assert.strictEqual(r.binary, false);
+
+        // Phone appears: strong + moderate ⇒ on.
+        phone = true;
+        r = b.evaluate(resolve, 2 * MIN);
+        assert.ok(r.p >= 0.85);
+        assert.strictEqual(r.binary, true);
+
+        // Phone alone (arrival decayed away): strong ⇒ stays on only via hysteresis…
+        const alone = createBayes(cfgOf({ rules: [contRule('phone', 10, { thing: 'ph' })] }));
+        const rAlone = alone.evaluate(() => true, 0);
+        assert.ok(rAlone.p < 0.85);
+        assert.strictEqual(rAlone.binary, false);
+    });
 });
 
-describe('event rows', function() {
-    it('rising edge adds a term; repeated identical reports do not', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e')] }));
-        b.handleEvent(['e'], true, 0);
-        const p1 = pOf(b, 0);
-        b.handleEvent(['e'], true, 0);
-        b.handleEvent(['e'], true, 0);
-        assert.ok(Math.abs(pOf(b, 0) - p1) < 1e-12);
-        assert.strictEqual(b.evaluate(noState, 0).terms.length, 1);
+// ---- 4. certainty interactions ---------------------------------------------
+
+describe('certain terms', function() {
+    it('a certain rule clears opposing terms when it fires', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 30), arrivalRule('exit', 1 / 400)] }));
+        // Arrival fires (+ decisive term).
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        // Exit (certain false) fires — the positive term is cleared, not fought.
+        b.handleEvent(hit('exit', 0), true, 3 * MIN);
+        b.handleEvent(hit('exit', 0), false, 4 * MIN);
+        b.handleEvent(hit('exit', 1), true, 4.5 * MIN);
+        const r = b.evaluate(noState, 5 * MIN);
+        assert.deepStrictEqual(r.terms.map(t => t.ruleId), ['exit']);
+        assert.ok(r.p < 0.05);
     });
 
-    it('contribution exactly halves after one half-life', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e')] }));
-        b.handleEvent(['e'], true, 0);
-        const t0 = b.evaluate(noState, 0).logOdds - logit(0.2);
-        const t1 = b.evaluate(noState, 20 * MIN).logOdds - logit(0.2);
-        assert.ok(Math.abs(t1 - t0 / 2) < 1e-9);
+    it('any opposing firing clears a stored certain term (return home is not blocked)', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 3), arrivalRule('exit', 1 / 400)] }));
+        // Exit fired earlier — a certain false statement.
+        b.handleEvent(hit('exit', 0), true, 0);
+        b.handleEvent(hit('exit', 0), false, MIN);
+        b.handleEvent(hit('exit', 1), true, 1.5 * MIN);
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        // Coming back: a mere moderate arrival invalidates the certain statement.
+        b.handleEvent(hit('arr', 0), true, 10 * MIN);
+        b.handleEvent(hit('arr', 0), false, 11 * MIN);
+        b.handleEvent(hit('arr', 1), true, 11.5 * MIN);
+        const r = b.evaluate(noState, 12 * MIN);
+        assert.deepStrictEqual(r.terms.map(t => t.ruleId), ['arr']);
+        assert.ok(r.p > 0.2);
     });
 
-    it('per-row half-life override is honored', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e', { halfLifeMs: 5 * MIN })] }));
-        b.handleEvent(['e'], true, 0);
-        const full = b.evaluate(noState, 0).logOdds - logit(0.2);
-        const dec  = b.evaluate(noState, 5 * MIN).logOdds - logit(0.2);
+    it('weak opposing terms accumulate — no clearing between them', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('up', 3), arrivalRule('down', 1 / 3)] }));
+        b.handleEvent(hit('up', 0), true, 0);
+        b.handleEvent(hit('up', 0), false, MIN);
+        b.handleEvent(hit('up', 1), true, 1.5 * MIN);
+        b.handleEvent(hit('down', 0), true, 3 * MIN);
+        b.handleEvent(hit('down', 0), false, 4 * MIN);
+        b.handleEvent(hit('down', 1), true, 4.5 * MIN);
+        assert.strictEqual(b.evaluate(noState, 5 * MIN).terms.length, 2);
+    });
+});
+
+// ---- 5. momentary decay -----------------------------------------------------
+
+describe('momentary rules decay', function() {
+    it('term on completion, halves after one half-life, per-rule override honoured', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 3)] }));
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 2 * MIN);
+        const full = b.evaluate(noState, 2 * MIN).logOdds - logit(0.2);
+        const dec  = b.evaluate(noState, 22 * MIN).logOdds - logit(0.2);
         assert.ok(Math.abs(dec - full / 2) < 1e-9);
+
+        const fast = createBayes(cfgOf({ rules: [Object.assign(arrivalRule('a', 3), { halfLifeMs: 5 * MIN })] }));
+        fast.handleEvent(hit('a', 0), true, 0);
+        fast.handleEvent(hit('a', 0), false, MIN);
+        fast.handleEvent(hit('a', 1), true, 2 * MIN);
+        const f0 = fast.evaluate(noState, 2 * MIN).logOdds - logit(0.2);
+        const f1 = fast.evaluate(noState, 7 * MIN).logOdds - logit(0.2);
+        assert.ok(Math.abs(f1 - f0 / 2) < 1e-9);
     });
 
-    it('a re-trigger needs a falling edge first', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e')] }));
-        b.handleEvent(['e'], true, 0);
-        b.handleEvent(['e'], false, MIN);
-        b.handleEvent(['e'], true, 2 * MIN);
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 2);
-    });
-
-    it('LR below 1 is negative evidence', function() {
-        const b = createBayes(cfg({ observations: [eventRow('gone', { operator: 'false', lr: 0.25 })] }));
-        b.handleEvent(['gone'], false, 0);
-        assert.ok(pOf(b, 0) < 0.2);
+    it('tick prunes decayed-out terms', function() {
+        const b = createBayes(cfgOf({ rules: [Object.assign(arrivalRule('a', 3), { halfLifeMs: MIN })] }));
+        b.handleEvent(hit('a', 0), true, 0);
+        b.handleEvent(hit('a', 0), false, 0.5 * MIN);
+        b.handleEvent(hit('a', 1), true, MIN);
+        b.tick(40 * MIN);
+        assert.strictEqual(b.evaluate(noState, 40 * MIN).terms.length, 0);
     });
 });
 
-// ---- 4. persistence ---------------------------------------------------------
+// ---- 6-10. step sequences ---------------------------------------------------
 
-describe('serialize/restore', function() {
-    it('decays by wall clock across a restart', function() {
-        const a = createBayes(cfg({ observations: [eventRow('e')] }));
-        a.handleEvent(['e'], true, 0);
+describe('step sequences', function() {
+    it('valid cycle plus an edge inside the window fires; too slow a cycle does not', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);            // cycle ok (≤ 3 min)
+        b.handleEvent(hit('arr', 1), true, 2 * MIN);          // within 2 min window
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+
+        const slow = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        slow.handleEvent(hit('arr', 0), true, 0);
+        slow.handleEvent(hit('arr', 0), false, 4 * MIN);      // > cycleMax
+        slow.handleEvent(hit('arr', 1), true, 4.5 * MIN);
+        assert.strictEqual(slow.evaluate(noState, 5 * MIN).terms.length, 0);
+    });
+
+    it('overlap: an edge during the previous step counts at its completion', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        b.handleEvent(hit('arr', 0), true, 0);                // door opens
+        b.handleEvent(hit('arr', 1), true, 0.5 * MIN);        // motion while open
+        b.handleEvent(hit('arr', 0), false, MIN);             // door closes — fires here
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 1);
+    });
+
+    it('an edge before arming never counts', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        b.handleEvent(hit('arr', 1), true, 0);                // motion before the door ever opens
+        b.handleEvent(hit('arr', 0), true, 5 * MIN);
+        b.handleEvent(hit('arr', 0), false, 6 * MIN);
+        assert.strictEqual(b.evaluate(noState, 6 * MIN).terms.length, 0);
+        // …but fresh motion within the window still confirms
+        b.handleEvent(hit('arr', 1), false, 6.5 * MIN);
+        b.handleEvent(hit('arr', 1), true, 7 * MIN);
+        assert.strictEqual(b.evaluate(noState, 7 * MIN).terms.length, 1);
+    });
+
+    it('a three-step rule completes in order and not out of order', function() {
+        const rule = { id: 'r3', lr: 30, halfLifeMs: null, steps: [
+            step('becomes', { thing: 'phone' }),
+            step('cycle',   { thing: 'door', windowMs: 5 * MIN }),
+            step('becomes', { thing: 'motion', windowMs: 2 * MIN })
+        ] };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('r3', 0), true, 0);                 // phone appears
+        b.handleEvent(hit('r3', 1), true, MIN);               // door opens
+        b.handleEvent(hit('r3', 1), false, 2 * MIN);          // door closes
+        b.handleEvent(hit('r3', 2), true, 3 * MIN);           // motion
+        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.length, 1);
+
+        const wrong = createBayes(cfgOf({ rules: [rule] }));
+        wrong.handleEvent(hit('r3', 1), true, 0);             // door first — ignored at step 0
+        wrong.handleEvent(hit('r3', 1), false, MIN);
+        wrong.handleEvent(hit('r3', 2), true, 1.5 * MIN);
+        assert.strictEqual(wrong.evaluate(noState, 2 * MIN).terms.length, 0);
+    });
+
+    it('timeout between steps resets the sequence; tick also cleans up', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);             // pending, window 2 min
+        b.handleEvent(hit('arr', 1), true, 5 * MIN);          // too late
+        assert.strictEqual(b.evaluate(noState, 5 * MIN).terms.length, 0);
+
+        const t = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        t.handleEvent(hit('arr', 0), true, 0);                // door opens, never closes
+        t.tick(10 * MIN);                                     // stale opening dropped
+        t.handleEvent(hit('arr', 0), false, 10.5 * MIN);      // close without tracked open
+        t.handleEvent(hit('arr', 1), true, 11 * MIN);
+        assert.strictEqual(t.evaluate(noState, 11 * MIN).terms.length, 0);
+    });
+
+    it('no rising edge on step 0 means nothing ever arms (exit protection)', function() {
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 30, halfLifeMs: null, steps: [
+            step('becomes', { thing: 'phone' }), step('becomes', { thing: 'motion' })
+        ] }] }));
+        // Phone goes true→false is a falling edge on "is true" — never arms.
+        b.handleEvent(hit('r', 0), false, 0);
+        b.handleEvent(hit('r', 1), true, MIN);
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+    });
+
+    it('repeated identical reports count once (edge dedupe)', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), true, 10);               // repeat — no new edge
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
+        b.handleEvent(hit('arr', 1), true, 1.6 * MIN);        // repeat
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+    });
+});
+
+// ---- 11-13. hysteresis and the latch ----------------------------------------
+
+describe('hysteresis and latch', function() {
+    function onThenPhoneDrops(latch, maxHoldMs) {
+        const b = createBayes(cfgOf({ latch, maxHoldMs: maxHoldMs || 0,
+            rules: [contRule('phone', 10, { thing: 'ph' }), arrivalRule('arr', 3)] }));
+        const state = { ph: true };
+        const resolve = s => state[s.thing];
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
+        assert.strictEqual(b.evaluate(resolve, 2 * MIN).binary, true);   // on
+        state.ph = false;                                                 // phone drops out
+        return { b, resolve, state };
+    }
+
+    it('hysteresis holds between the thresholds', function() {
+        const { b, resolve } = onThenPhoneDrops(false);
+        const r = b.evaluate(resolve, 3 * MIN);       // arrival term still fresh: p ≈ 0.43
+        assert.ok(r.p > 0.30 && r.p < 0.85);
+        assert.strictEqual(r.binary, true);
+        assert.strictEqual(r.changed, false);
+    });
+
+    it('without the latch, decay turns the output off', function() {
+        const { b, resolve } = onThenPhoneDrops(false);
+        const r = b.evaluate(resolve, 5 * HOUR);
+        assert.strictEqual(r.binary, false);
+        assert.strictEqual(r.held, false);
+    });
+
+    it('with the latch, silence keeps it on (held) until a false rule fires', function() {
+        const b = createBayes(cfgOf({ latch: true,
+            rules: [contRule('phone', 10, { thing: 'ph' }), arrivalRule('arr', 3),
+                    arrivalRule('exit', 1 / 400)] }));
+        const state = { ph: true };
+        const resolve = s => state[s.thing];
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
+        assert.strictEqual(b.evaluate(resolve, 2 * MIN).binary, true);
+
+        state.ph = false;                                     // spurious dropout — door never opened
+        const held = b.evaluate(resolve, 5 * HOUR);
+        assert.strictEqual(held.binary, true);
+        assert.strictEqual(held.held, true);
+
+        // A real exit fires the certain-false rule — now it turns off.
+        b.handleEvent(hit('exit', 0), true, 5 * HOUR);
+        b.handleEvent(hit('exit', 0), false, 5 * HOUR + MIN);
+        b.handleEvent(hit('exit', 1), true, 5 * HOUR + 1.5 * MIN);
+        const off = b.evaluate(resolve, 5 * HOUR + 2 * MIN);
+        assert.strictEqual(off.binary, false);
+    });
+
+    it('maxHold expires the latch after the configured silence', function() {
+        const { b, resolve } = onThenPhoneDrops(true, 2 * HOUR);
+        // A decaying term above the prune floor still counts as supporting evidence,
+        // so each of these evaluations refreshes the silence clock.
+        assert.strictEqual(b.evaluate(resolve, 10 * MIN).binary, true);
+        const mid = b.evaluate(resolve, 70 * MIN);   // term ≈ 0.10 — still positive, p ≤ pOff
+        assert.strictEqual(mid.binary, true);
+        assert.strictEqual(mid.held, true);
+        // 4 h later the term has pruned and 2 h of true silence have passed.
+        const late = b.evaluate(resolve, 70 * MIN + 4 * HOUR);
+        assert.strictEqual(late.binary, false);
+    });
+
+    it('blank maxHold never expires', function() {
+        const { b, resolve } = onThenPhoneDrops(true, 0);
+        const r = b.evaluate(resolve, 400 * HOUR);
+        assert.strictEqual(r.binary, true);
+        assert.strictEqual(r.held, true);
+    });
+});
+
+// ---- 14-15. persistence and escape hatches ----------------------------------
+
+describe('persistence and input', function() {
+    it('serialize/restore decays by wall clock and keeps lastPositiveAt', function() {
+        const a = createBayes(cfgOf({ rules: [arrivalRule('arr', 3)] }));
+        a.handleEvent(hit('arr', 0), true, 0);
+        a.handleEvent(hit('arr', 0), false, MIN);
+        a.handleEvent(hit('arr', 1), true, 2 * MIN);
+        a.evaluate(noState, 2 * MIN);
         const saved = a.serialize();
+        assert.strictEqual(saved.lastPositiveAt, 2 * MIN);
 
-        const b = createBayes(cfg({ observations: [eventRow('e')] }));
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 3)] }));
         b.restore(saved);
-        const expectHalf = (b.evaluate(noState, 20 * MIN).logOdds - logit(0.2));
-        assert.ok(Math.abs(expectHalf - Math.log(3) / 2) < 1e-9);
+        const gain = b.evaluate(noState, 22 * MIN).logOdds - logit(0.2);
+        assert.ok(Math.abs(gain - Math.log(3) / 2) < 1e-9);
     });
 
     it('restore tolerates garbage and old shapes', function() {
-        const b = createBayes(cfg({}));
+        const b = createBayes(cfgOf({}));
         for (const junk of [null, undefined, 42, 'x', {}, { terms: 'no', fsm: 3, binary: 'yes' }]) {
             b.restore(junk);
             const r = b.evaluate(noState, 0);
@@ -155,311 +412,18 @@ describe('serialize/restore', function() {
             assert.strictEqual(r.terms.length, 0);
         }
     });
-});
 
-// ---- 5. hysteresis ----------------------------------------------------------
-
-describe('hysteresis', function() {
-    it('on at ≥ pOn, holds in between, off at ≤ pOff', function() {
-        const b = createBayes(cfg({ observations: [eventRow('big', { lr: 100 })], prior: 0.2 }));
-        assert.strictEqual(b.evaluate(noState, 0).binary, false);
-        b.handleEvent(['big'], true, 0);
-        const on = b.evaluate(noState, 0);
-        assert.ok(on.p >= 0.85);
-        assert.strictEqual(on.binary, true);
-        assert.strictEqual(on.changed, true);
-
-        // decay until P is between thresholds → still on, not changed
-        let t = 0, mid;
-        for (t = 0; t < 600 * MIN; t += MIN) {
-            mid = b.evaluate(noState, t);
-            if (mid.p < 0.85) { break; }
-        }
-        assert.ok(mid.p > 0.30 && mid.p < 0.85);
-        assert.strictEqual(mid.binary, true);
-        assert.strictEqual(mid.changed, false);
-
-        // decay to prior (0.2 ≤ pOff) → off
-        const off = b.evaluate(noState, 6000 * MIN);
-        assert.ok(off.p <= 0.30);
-        assert.strictEqual(off.binary, false);
-        assert.strictEqual(off.changed, true);
-    });
-});
-
-// ---- 6-8. composite (sequence) rules ----------------------------------------
-
-describe('composite: door cycle + motion', function() {
-    it('open→close within cycleMax arms; too slow does not', function() {
-        const b = labSetup();
-        b.handleEvent(['door'], true, 0);
-        b.handleEvent(['door'], false, MIN);           // valid cycle → pending
-        b.handleEvent(['motion'], true, 1.5 * MIN);    // confirm
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
-
-        const slow = labSetup();
-        slow.handleEvent(['door'], true, 0);
-        slow.handleEvent(['door'], false, 4 * MIN);    // > cycleMax
-        slow.handleEvent(['motion'], true, 4.5 * MIN);
-        assert.strictEqual(slow.evaluate(noState, 5 * MIN).terms.length, 0);
-    });
-
-    it('motion during the open phase confirms at close', function() {
-        const b = labSetup();
-        b.handleEvent(['door'], true, 0);
-        b.handleEvent(['motion'], true, 0.5 * MIN);    // while open
-        b.handleEvent(['door'], false, MIN);           // fires here
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 1);
-    });
-
-    it('motion before the door opens never counts', function() {
-        const b = labSetup();
-        b.handleEvent(['motion'], true, 0);
-        b.handleEvent(['door'], true, MIN);
-        b.handleEvent(['door'], false, 2 * MIN);
-        // no motion during arm or pending → nothing fired (yet)
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 0);
-    });
-
-    it('confirmDuringArm=false ignores motion during open, still allows pending confirm', function() {
-        const b = labSetup({ confirmDuringArm: false });
-        b.handleEvent(['door'], true, 0);
-        b.handleEvent(['motion'], true, 0.5 * MIN);
-        b.handleEvent(['door'], false, MIN);           // pending opens instead of firing
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
-        b.handleEvent(['motion'], false, 1.2 * MIN);
-        b.handleEvent(['motion'], true, 1.5 * MIN);    // within pending window
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
-    });
-
-    it('pending confirms once, expiry clears, tick expires stale arming', function() {
-        const b = labSetup();
-        b.handleEvent(['door'], true, 0);
-        b.handleEvent(['door'], false, MIN);
-        b.handleEvent(['motion'], true, 1.5 * MIN);
-        b.handleEvent(['motion'], false, 1.6 * MIN);
-        b.handleEvent(['motion'], true, 1.7 * MIN);    // second motion — pending already consumed
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
-
-        const exp = labSetup();
-        exp.handleEvent(['door'], true, 0);
-        exp.handleEvent(['door'], false, MIN);         // pending until 3 min
-        exp.tick(4 * MIN);                             // expires
-        exp.handleEvent(['motion'], true, 4.5 * MIN);
-        assert.strictEqual(exp.evaluate(noState, 5 * MIN).terms.length, 0);
-
-        const stale = labSetup();
-        stale.handleEvent(['door'], true, 0);          // arming
-        stale.tick(10 * MIN);                          // > cycleMax — arming dropped
-        stale.handleEvent(['door'], false, 10.5 * MIN);
-        stale.handleEvent(['motion'], true, 11 * MIN);
-        assert.strictEqual(stale.evaluate(noState, 12 * MIN).terms.length, 0);
-    });
-
-    it('edge armPattern: arm rising edge opens pending directly', function() {
-        const b = createBayes(cfg({
-            observations: [eventRow('btn', { lr: 1 }), eventRow('motion', { lr: 1 })],
-            composites: [doorComposite({ armRow: 'btn', armPattern: 'edge' })]
-        }));
-        b.handleEvent(['btn'], true, 0);
-        b.handleEvent(['motion'], true, MIN);
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 1);
-    });
-});
-
-// ---- 9. candidacy -----------------------------------------------------------
-
-describe('candidacy (onlyAsCandidate)', function() {
-    function candSetup() {
-        return labSetup({ onlyAsCandidate: true }, { candidateRow: 'radio', candidateWindowMs: 5 * MIN });
-    }
-    function runCycle(b, t0) {
-        b.handleEvent(['door'], true, t0);
-        b.handleEvent(['door'], false, t0 + MIN);
-        b.handleEvent(['motion'], true, t0 + 1.5 * MIN);
-    }
-
-    it('applied when trigger is fresh and estimator is off', function() {
-        const b = candSetup();
-        b.handleEvent(['radio'], true, 0);             // candidate trigger (also adds LR 3 term)
-        runCycle(b, MIN);
-        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.length, 2);
-    });
-
-    it('skipped when the trigger edge is too old', function() {
-        const b = candSetup();
-        b.handleEvent(['radio'], true, 0);
-        runCycle(b, 10 * MIN);                          // trigger 10 min old > 5 min window
-        // only the radio term exists
-        assert.strictEqual(b.evaluate(noState, 12 * MIN).terms.filter(t => t.src === 'c1').length, 0);
-    });
-
-    it('exit protection: already-on estimator is never boosted', function() {
-        const b = candSetup();
-        b.force(true);
-        b.handleEvent(['radio'], true, 0);
-        runCycle(b, MIN);
-        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.filter(t => t.src === 'c1').length, 0);
-    });
-
-    it('candidacy is frozen at arm time', function() {
-        const b = candSetup();
-        b.handleEvent(['radio'], true, 0);
-        b.handleEvent(['door'], true, MIN);
-        b.handleEvent(['door'], false, 2 * MIN);        // arm completes → candidacy frozen (ok)
-        b.force(true);                                  // flips on after arming
-        b.handleEvent(['motion'], true, 3 * MIN);       // confirm still applies
-        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.filter(t => t.src === 'c1').length, 1);
-    });
-
-    it('no candidate row configured → gate degrades to "not on"', function() {
-        const b = labSetup({ onlyAsCandidate: true }, { candidateRow: '' });
-        runCycle(b, 0);
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.filter(t => t.src === 'c1').length, 1);
-    });
-});
-
-// ---- 10. escape hatches + pruning -------------------------------------------
-
-describe('inject / reset / force / pruning', function() {
-    it('inject adds a decaying term', function() {
-        const b = createBayes(cfg({}));
+    it('inject adds a decaying term and rejects nonsense; reset returns to the prior', function() {
+        const b = createBayes(cfgOf({}));
         assert.strictEqual(b.inject(30, 10 * MIN, 0), true);
         assert.ok(pOf(b, 0) > 0.8);
         assert.ok(pOf(b, 60 * MIN) < pOf(b, 0));
-    });
-
-    it('inject rejects nonsense', function() {
-        const b = createBayes(cfg({}));
         assert.strictEqual(b.inject(0, null, 0), false);
         assert.strictEqual(b.inject(-3, null, 0), false);
-        assert.strictEqual(b.inject('x', null, 0), false);
-        assert.strictEqual(b.inject(1, null, 0), false);   // LR 1 = no evidence
-    });
-
-    it('reset returns to prior and clears everything', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e', { lr: 100 })] }));
-        b.handleEvent(['e'], true, 0);
-        b.evaluate(noState, 0);
+        assert.strictEqual(b.inject(1, null, 0), false);
         b.reset();
         const r = b.evaluate(noState, 0);
-        assert.strictEqual(r.binary, false);
         assert.strictEqual(r.terms.length, 0);
         assert.ok(Math.abs(r.p - 0.2) < 1e-12);
-    });
-
-    it('tick prunes decayed-out terms', function() {
-        const b = createBayes(cfg({ observations: [eventRow('e', { halfLifeMs: MIN })] }));
-        b.handleEvent(['e'], true, 0);
-        b.tick(30 * MIN);                               // ln3 · 2^-30 ≈ 1e-9 — dead
-        assert.strictEqual(b.evaluate(noState, 30 * MIN).terms.length, 0);
-    });
-});
-
-// ---- 11. arrival row expander -----------------------------------------------
-
-describe('expandArrivalRows', function() {
-    const sensorRow = { id: 'r1', kind: 'sensor', thing: 't1', item: 'i1', type: 'event',
-        operator: 'true', value: '', valueType: 'str', lr: 3, halfLife: '', onlyAsCandidate: false };
-    const arrivalRow = { id: 'a1', kind: 'arrival', door: { thing: 'td', item: 'id' },
-        motion: { thing: 'tm', item: 'im' }, personRow: 'r1', lr: 30, cycleMax: 180, confirmWindow: 120 };
-
-    function rawConfig(overrides) {
-        return Object.assign({
-            observations: [sensorRow, arrivalRow], composites: [],
-            candidateRow: '', candidateWindow: 300
-        }, overrides);
-    }
-
-    it('config without arrival rows is returned untouched', function() {
-        const input = rawConfig({ observations: [sensorRow] });
-        const { config, warnings } = expandArrivalRows(input);
-        assert.strictEqual(config, input);                  // same object
-        assert.deepStrictEqual(warnings, []);
-    });
-
-    it('an arrival row becomes two lr-1 event rows plus a composite', function() {
-        const { config, warnings } = expandArrivalRows(rawConfig({}));
-        assert.deepStrictEqual(warnings, []);
-
-        // The arrival row itself is replaced, not kept.
-        assert.ok(!config.observations.some(r => r.kind === 'arrival'));
-        assert.strictEqual(config.observations.length, 3);
-
-        const added = config.observations.filter(r => r.id.startsWith('a1__'));
-        assert.deepStrictEqual(added.map(r => r.id), ['a1__door', 'a1__motion']);
-        assert.deepStrictEqual(added.map(r => [r.thing, r.item]), [['td', 'id'], ['tm', 'im']]);
-        for (const r of added) {
-            assert.strictEqual(r.type, 'event');
-            assert.strictEqual(r.lr, 1);
-        }
-
-        assert.strictEqual(config.composites.length, 1);
-        const c = config.composites[0];
-        assert.deepStrictEqual(
-            [c.id, c.armRow, c.armPattern, c.cycleMax, c.confirmRow, c.confirmWindow, c.confirmDuringArm, c.lr, c.onlyAsCandidate],
-            ['a1__seq', 'a1__door', 'cycle', 180, 'a1__motion', 120, true, 30, true]);
-
-        assert.strictEqual(config.candidateRow, 'r1');
-        assert.strictEqual(config.candidateWindow, 300);
-    });
-
-    it('an incomplete arrival row is skipped with a warning', function() {
-        const { config, warnings } = expandArrivalRows(rawConfig({
-            observations: [sensorRow, Object.assign({}, arrivalRow, { motion: { thing: 'tm' } })]
-        }));
-        assert.strictEqual(warnings.length, 1);
-        assert.strictEqual(config.composites.length, 0);
-        assert.strictEqual(config.observations.length, 1);
-    });
-
-    it('an explicit candidate trigger wins over the person sensor, with a warning', function() {
-        const { config, warnings } = expandArrivalRows(rawConfig({ candidateRow: 'r9' }));
-        assert.strictEqual(config.candidateRow, 'r9');
-        assert.strictEqual(warnings.length, 1);
-    });
-
-    it('two arrival rows both expand; the first person sensor wins', function() {
-        const second = Object.assign({}, arrivalRow, { id: 'a2', personRow: 'rX' });
-        const { config, warnings } = expandArrivalRows(rawConfig({
-            observations: [sensorRow, arrivalRow, second]
-        }));
-        assert.strictEqual(config.composites.length, 2);
-        assert.strictEqual(config.candidateRow, 'r1');
-        assert.strictEqual(warnings.length, 1);
-    });
-
-    it('migrates a legacy entry template into an arrival row', function() {
-        const { config } = expandArrivalRows({
-            observations: [sensorRow], composites: [], candidateRow: '', candidateWindow: 300,
-            entry: { door: { thing: 'td', item: 'id' }, motion: { thing: 'tm', item: 'im' }, personRow: 'r1' }
-        });
-        assert.strictEqual(config.composites.length, 1);
-        assert.strictEqual(config.composites[0].id, '__entry__seq');
-        assert.strictEqual(config.candidateRow, 'r1');
-    });
-
-    it('does not mutate its input', function() {
-        const input = rawConfig({});
-        const snapshot = JSON.parse(JSON.stringify(input));
-        expandArrivalRows(input);
-        assert.deepStrictEqual(input, snapshot);
-    });
-
-    it('expanded config drives createBayes: door cycle + motion fires the arrival term', function() {
-        const { config } = expandArrivalRows(rawConfig({}));
-        const b = createBayes({
-            prior: 0.2, pOn: 0.85, pOff: 0.30, clamp: 6, halfLifeMs: 20 * MIN,
-            observations: config.observations.map(r => Object.assign({}, r, { halfLifeMs: null })),
-            composites: config.composites.map(c => Object.assign({}, c, {
-                cycleMaxMs: c.cycleMax * 1000, confirmWindowMs: c.confirmWindow * 1000 })),
-            candidateRow: config.candidateRow, candidateWindowMs: config.candidateWindow * 1000
-        });
-        b.handleEvent(['r1'], true, 0);                     // person's sensor → candidate
-        b.handleEvent(['a1__door'], true, MIN);
-        b.handleEvent(['a1__door'], false, 2 * MIN);        // valid cycle
-        b.handleEvent(['a1__motion'], true, 2.5 * MIN);     // confirm
-        const terms = b.evaluate(noState, 3 * MIN).terms;
-        assert.strictEqual(terms.filter(t => t.src === 'a1__seq').length, 1);
     });
 });
