@@ -154,12 +154,12 @@ Everything is a **rule**, built from steps. Each step names a source and a condi
 **flow**, **global** or **env** variable — for facts that live elsewhere in the flow, such as
 "the calendar says we are away" or "guest mode is on" — or a **time** window.
 
-- **right now** — a condition, true at that instant (*and…*)
+- **now** — a condition, true at that instant (*and…*)
 - **now or soon** — the same, but it waits for the condition until the window runs out; for
   sensors that report late (*and…*)
-- **when it changes** — an event: the condition must actually turn true, being already true does
+- **on change** — an event: the condition must actually turn true, being already true does
   not count (*then…*)
-- **starts then stops** — a cycle: true and back to false within its limit, e.g. a door opening
+- **on a full cycle** — a cycle: true and back to false within its limit, e.g. a door opening
   and closing (*then…*)
 
 Timing sits on a second line under a step, only where it applies: *within N s of the previous
@@ -174,14 +174,14 @@ even though that is Friday night. The value is simply "inside the window or not"
 condition reads *inside* / *outside* and one window covers both "during the night" and "outside
 working hours". Times follow the server's local clock, DST included.
 
-**flow, global, env and time can only be conditions** — *right now* or *now or soon*. Only a
+**flow, global, env and time can only be conditions** — *now* or *now or soon*. Only a
 thing is subscribed to, so these are read when the node evaluates rather than pushed when they
 change; an edge qualifier on one could only be sampled on the tick and would miss anything
 faster. The same polling means such a rule — including a time boundary — takes effect within one
 tick (30 s by default), not on the second. And `flow`/`global` survive a restart only when the
 context store is file-backed; the default is memory.
 
-A rule that is a single *right now* step is **continuous** (*While…*): it pushes the estimate while its
+A rule that is a single *now* step is **continuous** (*While…*): it pushes the estimate while its
 condition holds and stops the moment it does not. Any other rule is **momentary** (*When…
 then…*): the steps must happen in order, each event within its time window, and completing the
 last step gives a one-off push that then fades. An event that happened while the previous step
@@ -191,16 +191,16 @@ closes.
 **Put the event first and the conditions after.** Trigger on what actually happens at a point
 in time — usually the door — and use a condition step to ask what was true at that moment:
 
-> *When the front door is true, starts then stops — and iPhone Fredrik is true, right now →
+> *When the front door is true, on a full cycle — and iPhone Fredrik is true, now →
 > makes it true, decisive*
 
 Written this way the rule does not care whether the phone appeared thirty seconds or thirty
 minutes earlier, and it never fires for somebody else's arrival, because their phone is not
 here — the identity check falls out of the condition, with no special logic. If that sensor is
 slow to report, *now or soon* makes the step wait rather than fail. Only a step that needs the
-*change* itself — leaving — uses *when it changes*:
+*change* itself — leaving — uses *on change*:
 
-> *When the front door starts then stops, then iPhone Fredrik is false, when it changes, within
+> *When the front door on a full cycle, then iPhone Fredrik is false, on change, within
 > 5 min → makes it false, certain*
 
 ### Strengths and the share scale

@@ -108,12 +108,12 @@
     also be a <b>flow</b>, <b>global</b> or <b>env</b> variable &mdash; useful for facts that live
     elsewhere in the flow, such as "the calendar says we are away" or "guest mode is on".</p>
     <ul>
-        <li><b>right now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
+        <li><b>now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
         <li><b>now or soon</b> &mdash; the same, but if it is not true yet the step waits for it until
             the window runs out. Use this for sensors that report late. Reads <i>and&hellip;</i></li>
-        <li><b>when it changes</b> &mdash; an event: the condition must actually turn true, being already
+        <li><b>on change</b> &mdash; an event: the condition must actually turn true, being already
             true does not count. Reads <i>then&hellip;</i></li>
-        <li><b>starts then stops</b> &mdash; a cycle: true and back to false within its limit, e.g. a
+        <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
             door opening and closing. Reads <i>then&hellip;</i></li>
     </ul>
     <p>Timing appears on a second line under a step, only where it applies: <i>within N s of the
@@ -128,14 +128,14 @@
     night. Because the value is just "inside the window or not", the condition reads
     <b>inside</b> / <b>outside</b>, so one window covers both "during the night" and "outside
     working hours". Times follow the server's local clock, including daylight saving.</p>
-    <p><b>flow, global, env and time can only be conditions</b> &mdash; <i>right now</i> or <i>now or soon</i>.
+    <p><b>flow, global, env and time can only be conditions</b> &mdash; <i>now</i> or <i>now or soon</i>.
     Only a thing is subscribed to, so these are read when the node evaluates rather than pushed
     when they change; an edge qualifier on one could only be sampled on the tick and would miss
     anything faster than that. The same polling means such a rule &mdash; including a time boundary
     &mdash; takes effect within one tick (30 s by default), not on the second. Note also that <code>flow</code> and <code>global</code>
     survive a restart only when the context store is file-backed &mdash; the default is memory, and a
     continuous contribution silently vanishing after a redeploy is exactly what the lock exists for.</p>
-    <p>A rule that is a single <b>right now</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
+    <p>A rule that is a single <b>now</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
     the estimate while its condition holds and stops the moment it does not. Any other rule is
     <b>momentary</b> (<i>When&hellip;then&hellip;</i>): the steps must happen in order, each event within
     its time window, and completing the last step gives a one-off push that then fades. An event that
@@ -143,13 +143,14 @@
     stood open is accepted when it closes.</p>
     <p><b>Put the event first and the conditions after.</b> Trigger on the thing that actually happens
     at a point in time &mdash; usually a door &mdash; and use a condition step to ask what was true at
-    that moment: <i>"When the front door is true, starts then stops &mdash; and iPhone Fredrik is true,
-    right now &rarr; makes it true"</i>. Written that way the rule does not care whether the phone
-    appeared thirty seconds or thirty minutes earlier, and it never fires for somebody else's arrival,
-    because their phone is not here. If that sensor is slow to report, use <b>now or soon</b> so the step
-    waits instead of failing. A step that needs the change itself &mdash; leaving &mdash; uses
-    <b>when it changes</b>: <i>"When the front door starts then stops, then iPhone Fredrik is false,
-    when it changes, within 5 min &rarr; makes it false, certain"</i>.</p>
+    that moment: <i>"When the front door is true &#8231; on a full cycle &mdash; and iPhone Fredrik is
+    true &#8231; now &rarr; makes it true"</i>. Written that way the rule does not care whether the
+    phone appeared thirty seconds or thirty minutes earlier, and it never fires for somebody else's
+    arrival, because their phone is not here. If that sensor is slow to report, use <b>now or soon</b>
+    so the step waits instead of failing &mdash; "soon" being the step's own <i>within N s</i>. A step
+    that needs the change itself &mdash; leaving &mdash; uses <b>on change</b>: <i>"When the front door
+    is true &#8231; on a full cycle, then iPhone Fredrik is false &#8231; on change, within 5 min
+    &rarr; makes it false, certain"</i>.</p>
 
     <h3>Strengths and the share scale</h3>
     <p>Each rule pushes with a strength: <b>slight</b> (LR 1.5), <b>moderate</b> (3), <b>strong</b> (10),
@@ -206,8 +207,8 @@
     (function() {
         var scale = window.hal2BayesScale;
         var btime = window.hal2BayesTime;
-        var PATTERNS = { is: 'right now', isOrBecomes: 'now or soon',
-                         becomes: 'when it changes', cycle: 'starts then stops' };
+        var PATTERNS = { is: 'now', isOrBecomes: 'now or soon',
+                         becomes: 'on change', cycle: 'on a full cycle' };
         var ALL_PATTERNS = ['is', 'isOrBecomes', 'becomes', 'cycle'];
         // Rebuilds only when the option set actually differs, so a selection survives
         // every refresh. `keep` is what the value should be if it is still offered.
@@ -375,24 +376,24 @@
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
                         .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
-                    // Timing qualifier, read as a suffix to the condition:
-                    // "iPhone Presence is true — right now".
-                    var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0; margin-left:4px;" }).appendTo(line2);
+                    // Line 3 — when the condition has to hold, plus the numbers that bound it.
+                    // Deliberately off the condition line: that one says *what*, this says
+                    // *when*, and read in sequence they became "When ... when it changes".
+                    var timing = $('<div/>', { class: "bs-timing",
+                        style: "margin-left:50px; margin-top:4px; color:#888; font-size:0.9em;" })
+                        .appendTo(stepDiv);
+                    $('<i/>', { class: "fa fa-clock-o", style: "margin-right:6px;" }).appendTo(timing);
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:150px;" }).appendTo(timing);
                     // Start with the full set so the saved value can be selected at all;
                     // refreshRuleView narrows it once the source and position are known.
                     setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
-
-
-                    // Line 3 — the timing numbers, spelled out.
-                    var timing = $('<div/>', { class: "bs-timing",
-                        style: "margin-left:50px; margin-top:3px; color:#888; font-size:0.9em;" })
-                        .appendTo(stepDiv);
+                    $('<span/>', { class: "bs-pat-sep", style: "margin:0 8px;" }).appendTo(timing).text('·');
                     // Read-back of the configured window, on its own line under the weekdays.
                     $('<div/>', { class: "bs-days-hint",
                         style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
 
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
-                    $('<span/>').appendTo(windowSpan).text('within ');
+                    $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('must happen within ');
                     $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
                         .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
                     $('<span/>').appendTo(windowSpan).text(' s of the previous step');
@@ -422,7 +423,7 @@
 
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
-                    $('<span/>').appendTo(cycleSpan).text('stays on for at most ');
+                    $('<span/>').appendTo(cycleSpan).text('a full cycle = on then off again, within ');
                     $('<input/>', { class: "bs-cyclemax", type: "number", min: "1", step: "any", style: "width:55px;" })
                         .appendTo(cycleSpan).val(step.cycleMax === undefined ? 180 : step.cycleMax);
                     $('<span/>').appendTo(cycleSpan).text(' s');
@@ -477,7 +478,7 @@
                     // A saved edge qualifier on a polled source can never fire; say so rather
                     // than silently swapping it.
                     if (src !== 'thing' && (step.pattern === 'becomes' || step.pattern === 'cycle')) {
-                        RED.notify('hal2Bayes: a ' + src + ' step cannot detect changes — changed it to "right now"', 'warning');
+                        RED.notify('hal2Bayes: a ' + src + ' step cannot detect changes — changed it to "now"', 'warning');
                     }
                     return stepDiv;
                 }
@@ -552,7 +553,14 @@
                         timing.find('.bs-cycle-sep').toggle(showWindow && showCycle);
                         timing.find('.bs-days-span').toggle(isTime);
                         timing.find('.bs-days-sep').toggle(isTime && showWindow);
-                        timing.toggle(showWindow || showCycle || isTime);
+                        // The dot only earns its place when something follows the qualifier.
+                        timing.find('.bs-pat-sep').toggle(allowed.length > 1 && (showWindow || showCycle || isTime));
+                        timing.toggle(allowed.length > 1 || showWindow || showCycle || isTime);
+
+                        // Pin down what bounds the step, so "soon" is never left undefined.
+                        timing.find('.bs-window-lead').text(pat === 'isOrBecomes'
+                            ? '"soon" means within '
+                            : 'must happen within ');
 
                         // Live read-back so a wrong window or day selection is obvious at once.
                         el.find('.bs-days-hint').toggle(isTime);
@@ -574,7 +582,7 @@
                     var deadTrigger = rule.steps.length > 1 &&
                         (rule.steps[0].pattern === 'is' || rule.steps[0].pattern === 'isOrBecomes');
                     container.find('.br-warning')
-                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "when it changes" or "starts then stops".' : '')
+                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "on change" or "on a full cycle".' : '')
                         .toggle(deadTrigger);
 
                     var lr = effectiveLr(rule);
