@@ -149,8 +149,10 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Rules
 
-Everything is a **rule**, built from steps. Each step names a sensor and a condition, then says
-*when* that condition has to hold:
+Everything is a **rule**, built from steps. Each step names a source and a condition, then says
+*when* that condition has to hold. A source is normally a **thing** item, but it can also be a
+**flow**, **global** or **env** variable — for facts that live elsewhere in the flow, such as
+"the calendar says we are away" or "guest mode is on".
 
 - **right now** — a condition, true at that instant (*and…*)
 - **now or soon** — the same, but it waits for the condition until the window runs out; for
@@ -163,6 +165,13 @@ Everything is a **rule**, built from steps. Each step names a sensor and a condi
 Timing sits on a second line under a step, only where it applies: *within N s of the previous
 step* is how long that step has to happen, and *stays on for at most N s* is how long a cycle may
 stay true — a door held open longer than that is not a pass-through, so the rule does not advance.
+
+**flow, global and env can only be conditions** — *right now* or *now or soon*. Only a thing is
+subscribed to, so a variable is read when the node evaluates rather than pushed when it changes;
+an edge qualifier on one could only be sampled on the tick and would miss anything faster. The
+same polling means such a rule updates within one tick (30 s by default), not instantly. And
+`flow`/`global` survive a restart only when the context store is file-backed — the default is
+memory.
 
 A rule that is a single *right now* step is **continuous** (*While…*): it pushes the estimate while its
 condition holds and stops the moment it does not. Any other rule is **momentary** (*When…

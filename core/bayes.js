@@ -35,13 +35,23 @@ module.exports = function(RED) {
                 const halfLifeMs = num(r.halfLife, 0) > 0
                     ? sec(r.halfLife, 1200)
                     : scale.fadeSeconds(r.fade) * 1000;
-                const steps = (r.steps || []).map(s => ({
-                    thing: s.thing, item: s.item,
-                    operator: s.operator, value: s.value, valueType: s.valueType || 'str',
-                    pattern: ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is',
-                    cycleMaxMs: sec(s.cycleMax, 180),
-                    windowMs: sec(s.window, 120)
-                })).filter(s => s.thing && s.item);
+                const steps = (r.steps || []).map(s => {
+                    const src = ['thing', 'flow', 'global', 'env'].indexOf(s.src) >= 0 ? s.src : 'thing';
+                    let pattern = ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is';
+                    // Polled sources have no change event, so an edge on them could only be
+                    // sampled on the tick and would be missed outright between two ticks.
+                    if (src !== 'thing' && (pattern === 'cycle' || pattern === 'becomes')) {
+                        node.warn('A ' + src + ' step cannot detect changes — treating it as a condition');
+                        pattern = 'is';
+                    }
+                    return {
+                        src, thing: s.thing, item: s.item, prop: s.prop,
+                        operator: s.operator, value: s.value, valueType: s.valueType || 'str',
+                        pattern,
+                        cycleMaxMs: sec(s.cycleMax, 180),
+                        windowMs: sec(s.window, 120)
+                    };
+                }).filter(s => (s.src === 'thing' ? (s.thing && s.item) : s.prop));
                 // Pre-'is' configs expressed the continuous case as a lone 'becomes'
                 // step; that is exactly a level check, so carry it over unchanged.
                 if (steps.length === 1 && steps[0].pattern === 'becomes') { steps[0].pattern = 'is'; }
@@ -71,9 +81,18 @@ module.exports = function(RED) {
         est.restore(nodeContext.get('bayes', contextStore));
         function persist() { nodeContext.set('bayes', est.serialize(), contextStore); }
 
+        // Thing items arrive by subscription; flow/global/env are read on demand, which is
+        // why they are restricted to condition steps (see the pattern guard above).
         function resolveState(step) {
-            const thing = RED.nodes.getNode(step.thing);
-            return thing && thing.state ? thing.state[step.item] : undefined;
+            switch (step.src) {
+                case 'flow':   return node.context().flow.get(step.prop);
+                case 'global': return node.context().global.get(step.prop);
+                case 'env':    return process.env[step.prop];
+                default: {
+                    const thing = RED.nodes.getNode(step.thing);
+                    return thing && thing.state ? thing.state[step.item] : undefined;
+                }
+            }
         }
 
         function showStatus(result) {
@@ -113,6 +132,7 @@ module.exports = function(RED) {
         const byThing = {};
         cfg.rules.forEach(rule => {
             rule.steps.forEach((step, i) => {
+                if (step.src !== 'thing') { return; }   // polled sources are read, not subscribed
                 const t = (byThing[step.thing] = byThing[step.thing] || {});
                 (t[step.item] = t[step.item] || []).push({ ruleId: rule.id, stepIndex: i });
             });
@@ -132,7 +152,7 @@ module.exports = function(RED) {
 
         // ---- decay/expiry tick ----
         node.tickId = setInterval(function() {
-            est.tick(Date.now());
+            est.tick(Date.now(), resolveState);
             run(snapshotOnTick);
         }, tickMs);
 

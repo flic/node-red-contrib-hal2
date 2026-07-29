@@ -102,8 +102,10 @@
     estimates one thing, so use one node per person.</p>
 
     <h3>Rules</h3>
-    <p>Everything is a <b>rule</b>, built from steps. Each step names a sensor and a condition, then
-    says <i>when</i> that condition has to hold:</p>
+    <p>Everything is a <b>rule</b>, built from steps. Each step names a source and a condition, then
+    says <i>when</i> that condition has to hold. A source is normally a <b>thing</b> item, but it can
+    also be a <b>flow</b>, <b>global</b> or <b>env</b> variable &mdash; useful for facts that live
+    elsewhere in the flow, such as "the calendar says we are away" or "guest mode is on".</p>
     <ul>
         <li><b>right now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
         <li><b>now or soon</b> &mdash; the same, but if it is not true yet the step waits for it until
@@ -117,6 +119,13 @@
     previous step</i> is how long that step has to happen, and <i>stays on for at most N s</i> is how
     long a cycle may stay true &mdash; a door held open longer than that is not a pass-through and the
     rule does not advance.</p>
+    <p><b>flow, global and env can only be conditions</b> &mdash; <i>right now</i> or <i>now or soon</i>.
+    Only a thing is subscribed to, so a variable is read when the node evaluates rather than pushed
+    when it changes; an edge qualifier on one could only be sampled on the tick and would miss
+    anything faster than that. The same polling means a rule reading a variable updates within one
+    tick (30 s by default), not instantly. Note also that <code>flow</code> and <code>global</code>
+    survive a restart only when the context store is file-backed &mdash; the default is memory, and a
+    continuous contribution silently vanishing after a redeploy is exactly what the lock exists for.</p>
     <p>A rule that is a single <b>right now</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
     the estimate while its condition holds and stops the moment it does not. Any other rule is
     <b>momentary</b> (<i>When&hellip;then&hellip;</i>): the steps must happen in order, each event within
@@ -305,11 +314,20 @@
                         return $('<span/>', { style: "flex:0 0 50px;" }).appendTo(row);
                     };
 
-                    // Line 1 — which sensor.
+                    // Line 1 — where the value comes from.
                     var line1 = flexRow();
                     $('<span/>', { class: "bs-lead", style: "flex:0 0 50px; font-weight:bold;" }).appendTo(line1);
-                    var thingSel = $('<select/>', { class: "bs-thing", style: "flex:1 1 0; min-width:0;" }).appendTo(line1);
-                    var itemSel = $('<select/>', { class: "bs-item", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
+                    var srcSel = $('<select/>', { class: "bs-src", style: "flex:0 0 90px; min-width:0;" }).appendTo(line1);
+                    [['thing', 'thing'], ['flow', 'flow'], ['global', 'global'], ['env', 'env']]
+                        .forEach(function(s) { srcSel.append($("<option></option>").val(s[0]).text(s[1])); });
+                    var thingWrap = $('<span/>', { class: "bs-thing-wrap",
+                        style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
+                    var thingSel = $('<select/>', { class: "bs-thing", style: "flex:1 1 0; min-width:0;" }).appendTo(thingWrap);
+                    var itemSel = $('<select/>', { class: "bs-item", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(thingWrap);
+                    var propWrap = $('<span/>', { class: "bs-prop-wrap",
+                        style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
+                    $('<input/>', { class: "bs-prop", type: "text", placeholder: "variable name", style: "width:100%;" })
+                        .appendTo(propWrap).val(step.prop || '');
                     $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="flex:0 0 auto; margin-left:6px;"><i class="fa fa-remove"></i></button>')
                         .appendTo(line1)
                         .on('click', function(e) {
@@ -330,10 +348,20 @@
                     // Timing qualifier, read as a suffix to the condition:
                     // "iPhone Presence is true — right now".
                     var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0; margin-left:4px;" }).appendTo(line2);
-                    patSel.append($("<option></option>").val('is').text('right now'));
-                    patSel.append($("<option></option>").val('isOrBecomes').text('now or soon'));
-                    patSel.append($("<option></option>").val('becomes').text('when it changes'));
-                    patSel.append($("<option></option>").val('cycle').text('starts then stops'));
+                    // Only a subscribed Thing produces change events, so edge qualifiers are
+                    // offered for Thing sources only — a polled variable could only be sampled
+                    // on the tick and would miss anything faster than that.
+                    var PATTERNS = { is: 'right now', isOrBecomes: 'now or soon',
+                                     becomes: 'when it changes', cycle: 'starts then stops' };
+                    function syncPatternOptions() {
+                        var allowed = srcSel.val() === 'thing'
+                            ? ['is', 'isOrBecomes', 'becomes', 'cycle']
+                            : ['is', 'isOrBecomes'];
+                        var current = patSel.val() || step.pattern || 'is';
+                        patSel.empty();
+                        allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
+                        patSel.val(allowed.indexOf(current) >= 0 ? current : 'is');
+                    }
 
                     // Line 3 — the timing numbers, spelled out.
                     var timing = $('<div/>', { class: "bs-timing",
@@ -363,11 +391,28 @@
                     };
                     opSel.change(opHandler);
 
+                    var srcHandler = function() {
+                        var isThing = srcSel.val() === 'thing';
+                        thingWrap.toggle(isThing);
+                        propWrap.toggle(!isThing);
+                        syncPatternOptions();
+                    };
+                    srcSel.change(function() { srcHandler(); refreshRuleView(ruleContainer); });
+
                     fillThingSelect(thingSel, step.thing);
                     thingSel.trigger('change');
                     opSel.val(step.operator || 'true');
                     opHandler();
+
+                    var src = ['thing', 'flow', 'global', 'env'].indexOf(step.src) >= 0 ? step.src : 'thing';
+                    srcSel.val(src);
                     patSel.val(step.pattern || 'is');
+                    srcHandler();
+                    // A saved edge qualifier on a polled source can never fire; say so rather
+                    // than silently swapping it.
+                    if (src !== 'thing' && (step.pattern === 'becomes' || step.pattern === 'cycle')) {
+                        RED.notify('hal2Bayes: a ' + src + ' step cannot detect changes — changed it to "right now"', 'warning');
+                    }
                     return stepDiv;
                 }
 
@@ -388,8 +433,10 @@
                         var el = $(this);
                         var timing = el;
                         rule.steps.push({
+                            src:      el.find('.bs-src option:selected').val(),
                             thing:    el.find('.bs-thing option:selected').val(),
                             item:     el.find('.bs-item option:selected').val(),
+                            prop:     el.find('.bs-prop').val(),
                             operator: el.find('.bs-op option:selected').val(),
                             value:    el.find('.bs-val').typedInput('value'),
                             valueType: el.find('.bs-val').typedInput('type'),
@@ -427,7 +474,8 @@
                     });
 
                     // A level check cannot start a sequence — nothing would trigger it.
-                    var deadTrigger = rule.steps.length > 1 && rule.steps[0].pattern === 'is';
+                    var deadTrigger = rule.steps.length > 1 &&
+                        (rule.steps[0].pattern === 'is' || rule.steps[0].pattern === 'isOrBecomes');
                     container.find('.br-warning')
                         .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "when it changes" or "starts then stops".' : '')
                         .toggle(deadTrigger);
@@ -632,8 +680,10 @@
                         var s = $(this);
                         var timing = s;
                         rule.steps.push({
+                            src:       s.find('.bs-src option:selected').val(),
                             thing:     s.find('.bs-thing option:selected').val(),
                             item:      s.find('.bs-item option:selected').val(),
+                            prop:      s.find('.bs-prop').val(),
                             operator:  s.find('.bs-op option:selected').val(),
                             value:     s.find('.bs-val').typedInput('value'),
                             valueType: s.find('.bs-val').typedInput('type'),

@@ -383,6 +383,66 @@ describe('step sequences', function() {
         assert.strictEqual(b.evaluate(noState, 10 * MIN).terms.length, 0);
     });
 
+    it('"now or soon" completes on a later tick when a polled source turns true', function() {
+        // flow/global/env have no change event, so the fallback edge never arrives —
+        // tick() re-checks the level instead.
+        const rule = { id: 'r', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'flowvar', windowMs: 5 * MIN })
+        ] };
+        const state = { flowvar: false };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('r', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('r', 0), false, MIN, stateOf(state));      // pending, level still false
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+
+        state.flowvar = true;                                         // changes with no event
+        b.tick(3 * MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.length, 1);
+    });
+
+    it('a polled "now or soon" still times out if it never turns true', function() {
+        const rule = { id: 'r', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'flowvar', windowMs: 2 * MIN })
+        ] };
+        const state = { flowvar: false };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('r', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('r', 0), false, MIN, stateOf(state));
+        b.tick(10 * MIN, stateOf(state));                             // window long gone
+        state.flowvar = true;
+        b.tick(11 * MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, 11 * MIN).terms.length, 0);
+    });
+
+    it('a tick-completed step cascades into a following condition step', function() {
+        const rule = { id: 'r', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'flowvar', windowMs: 5 * MIN }),
+            step('is',          { thing: 'phone' })
+        ] };
+        const state = { flowvar: false, phone: true };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('r', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('r', 0), false, MIN, stateOf(state));
+        state.flowvar = true;
+        b.tick(2 * MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+    });
+
+    it('tick without a resolver leaves pending steps alone', function() {
+        const rule = { id: 'r', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'flowvar', windowMs: 5 * MIN })
+        ] };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('r', 0), true, 0, stateOf({ flowvar: true }));
+        b.handleEvent(hit('r', 0), false, MIN, stateOf({ flowvar: false }));
+        b.tick(2 * MIN);                                              // no resolver passed
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 0);
+    });
+
     it('level checks chain: door cycle, then motion, and the phone is here', function() {
         const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
             step('cycle',   { thing: 'door' }),
