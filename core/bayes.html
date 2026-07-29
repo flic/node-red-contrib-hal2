@@ -101,27 +101,36 @@
     estimates one thing, so use one node per person.</p>
 
     <h3>Rules</h3>
-    <p>Everything is a <b>rule</b>, built from steps. A step is one of three kinds:</p>
+    <p>Everything is a <b>rule</b>, built from steps. Each step names a sensor and a condition, then
+    says <i>when</i> that condition has to hold:</p>
     <ul>
-        <li><b>is</b> &mdash; a condition, checked at that instant. Reads <i>and&hellip;</i></li>
-        <li><b>becomes</b> &mdash; an event: the condition changes to true. Reads <i>then&hellip;</i></li>
-        <li><b>goes on then off</b> &mdash; a cycle: true and back to false within the limit, e.g. a
+        <li><b>right now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
+        <li><b>now or soon</b> &mdash; the same, but if it is not true yet the step waits for it until
+            the window runs out. Use this for sensors that report late. Reads <i>and&hellip;</i></li>
+        <li><b>when it changes</b> &mdash; an event: the condition must actually turn true, being already
+            true does not count. Reads <i>then&hellip;</i></li>
+        <li><b>starts then stops</b> &mdash; a cycle: true and back to false within its limit, e.g. a
             door opening and closing. Reads <i>then&hellip;</i></li>
     </ul>
-    <p>A rule that is a single <b>is</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
+    <p>Timing appears on a second line under a step, only where it applies: <i>within N s of the
+    previous step</i> is how long that step has to happen, and <i>stays on for at most N s</i> is how
+    long a cycle may stay true &mdash; a door held open longer than that is not a pass-through and the
+    rule does not advance.</p>
+    <p>A rule that is a single <b>right now</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
     the estimate while its condition holds and stops the moment it does not. Any other rule is
     <b>momentary</b> (<i>When&hellip;then&hellip;</i>): the steps must happen in order, each event within
     its time window, and completing the last step gives a one-off push that then fades. An event that
     happened while the previous step was still in progress also counts &mdash; motion while the door
     stood open is accepted when it closes.</p>
     <p><b>Put the event first and the conditions after.</b> Trigger on the thing that actually happens
-    at a point in time &mdash; usually a door &mdash; and use <b>is</b> steps to ask what was true at that
-    moment: <i>"When the front door goes on then off, and iPhone Fredrik is true &rarr; makes it true"</i>.
-    Written that way the rule does not care whether the phone appeared thirty seconds or thirty minutes
-    earlier, and it never fires for somebody else's arrival, because their phone is not here. A step that
-    needs the change itself &mdash; leaving &mdash; uses <b>becomes</b>:
-    <i>"When the front door goes on then off, then iPhone Fredrik becomes false within 5 min &rarr;
-    makes it false, certain"</i>.</p>
+    at a point in time &mdash; usually a door &mdash; and use a condition step to ask what was true at
+    that moment: <i>"When the front door is true, starts then stops &mdash; and iPhone Fredrik is true,
+    right now &rarr; makes it true"</i>. Written that way the rule does not care whether the phone
+    appeared thirty seconds or thirty minutes earlier, and it never fires for somebody else's arrival,
+    because their phone is not here. If that sensor is slow to report, use <b>now or soon</b> so the step
+    waits instead of failing. A step that needs the change itself &mdash; leaving &mdash; uses
+    <b>when it changes</b>: <i>"When the front door starts then stops, then iPhone Fredrik is false,
+    when it changes, within 5 min &rarr; makes it false, certain"</i>.</p>
 
     <h3>Strengths and the share scale</h3>
     <p>Each rule pushes with a strength: <b>slight</b> (LR 1.5), <b>moderate</b> (3), <b>strong</b> (10),
@@ -284,30 +293,41 @@
                         .appendTo(row).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
 
-                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:150px; margin-left:4px;" }).appendTo(row);
-                    patSel.append($("<option></option>").val('is').text('is (right now)'));
-                    patSel.append($("<option></option>").val('becomes').text('becomes (changes to)'));
-                    patSel.append($("<option></option>").val('cycle').text('goes on then off'));
-
-                    var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(row);
-                    $('<span/>', { style: "margin-left:6px; color:#888;" }).appendTo(cycleSpan).text('open ≤');
-                    $('<input/>', { class: "bs-cyclemax", type: "number", min: "1", step: "any", style: "width:60px; margin-left:4px;" })
-                        .appendTo(cycleSpan).val(step.cycleMax === undefined ? 180 : step.cycleMax);
-                    $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(cycleSpan).text('s');
-
-                    var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(row);
-                    $('<span/>', { style: "margin-left:6px; color:#888;" }).appendTo(windowSpan).text('within');
-                    $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:60px; margin-left:4px;" })
-                        .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
-                    $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(windowSpan).text('s');
+                    // Timing qualifier. Reads as a suffix to the condition:
+                    // "iPhone Presence is true — right now".
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:130px; margin-left:4px;" }).appendTo(row);
+                    patSel.append($("<option></option>").val('is').text('right now'));
+                    patSel.append($("<option></option>").val('isOrBecomes').text('now or soon'));
+                    patSel.append($("<option></option>").val('becomes').text('when it changes'));
+                    patSel.append($("<option></option>").val('cycle').text('starts then stops'));
 
                     var removeBtn = $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="margin-left:6px;"><i class="fa fa-remove"></i></button>')
                         .appendTo(row)
                         .on('click', function(e) {
                             e.preventDefault();
                             row.remove();
+                            timing.remove();
                             refreshRuleView(ruleContainer);
                         });
+
+                    // Timing numbers live on their own indented line, so the step row stays
+                    // narrow and each number can carry a full sentence.
+                    var timing = $('<div/>', { class: "bs-timing",
+                        style: "margin-left:50px; margin-top:2px; color:#888; font-size:0.9em; white-space:nowrap;" })
+                        .appendTo(stepsDiv);
+
+                    var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
+                    $('<span/>').appendTo(windowSpan).text('within ');
+                    $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
+                        .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
+                    $('<span/>').appendTo(windowSpan).text(' s of the previous step');
+
+                    var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
+                    $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
+                    $('<span/>').appendTo(cycleSpan).text('stays on for at most ');
+                    $('<input/>', { class: "bs-cyclemax", type: "number", min: "1", step: "any", style: "width:55px;" })
+                        .appendTo(cycleSpan).val(step.cycleMax === undefined ? 180 : step.cycleMax);
+                    $('<span/>').appendTo(cycleSpan).text(' s');
 
                     thingSel.change(function() {
                         fillItemSelect(itemSel, thingSel.val(), (thingSel.val() === step.thing) ? step.item : null);
@@ -339,6 +359,7 @@
                     };
                     container.find('.bayes-step').each(function() {
                         var el = $(this);
+                        var timing = el.next('.bs-timing');
                         rule.steps.push({
                             thing:    el.find('.bs-thing option:selected').val(),
                             item:     el.find('.bs-item option:selected').val(),
@@ -346,8 +367,8 @@
                             value:    el.find('.bs-val').typedInput('value'),
                             valueType: el.find('.bs-val').typedInput('type'),
                             pattern:  el.find('.bs-pattern option:selected').val(),
-                            cycleMax: el.find('.bs-cyclemax').val(),
-                            window:   el.find('.bs-window').val()
+                            cycleMax: timing.find('.bs-cyclemax').val(),
+                            window:   timing.find('.bs-window').val()
                         });
                     });
                     return rule;
@@ -362,17 +383,26 @@
                     container.find('.bayes-step').each(function(i) {
                         var el = $(this);
                         var pat = el.find('.bs-pattern').val();
-                        // A level check reads "and …" — it is a condition, not an event.
-                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (pat === 'is' ? 'and' : 'then'));
-                        el.find('.bs-cycle-span').toggle(pat === 'cycle');
-                        el.find('.bs-window-span').toggle(i > 0 && pat !== 'is');
+                        // A condition reads "and …"; an event reads "then …".
+                        var isCond = (pat === 'is' || pat === 'isOrBecomes');
+                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
                         el.find('.bs-remove').toggle(rule.steps.length > 1);
+
+                        // Timing line: only the parts that actually apply, and only when
+                        // at least one of them does.
+                        var timing = el.next('.bs-timing');
+                        var showWindow = i > 0 && pat !== 'is';
+                        var showCycle = (pat === 'cycle');
+                        timing.find('.bs-window-span').toggle(showWindow);
+                        timing.find('.bs-cycle-span').toggle(showCycle);
+                        timing.find('.bs-cycle-sep').toggle(showWindow && showCycle);
+                        timing.toggle(showWindow || showCycle);
                     });
 
                     // A level check cannot start a sequence — nothing would trigger it.
                     var deadTrigger = rule.steps.length > 1 && rule.steps[0].pattern === 'is';
                     container.find('.br-warning')
-                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — make it "becomes" or "goes on then off".' : '')
+                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "when it changes" or "starts then stops".' : '')
                         .toggle(deadTrigger);
 
                     var lr = effectiveLr(rule);
@@ -563,6 +593,7 @@
                     };
                     el.find('.bayes-step').each(function() {
                         var s = $(this);
+                        var timing = s.next('.bs-timing');
                         rule.steps.push({
                             thing:     s.find('.bs-thing option:selected').val(),
                             item:      s.find('.bs-item option:selected').val(),
@@ -570,8 +601,8 @@
                             value:     s.find('.bs-val').typedInput('value'),
                             valueType: s.find('.bs-val').typedInput('type'),
                             pattern:   s.find('.bs-pattern option:selected').val(),
-                            cycleMax:  s.find('.bs-cyclemax').val(),
-                            window:    s.find('.bs-window').val()
+                            cycleMax:  timing.find('.bs-cyclemax').val(),
+                            window:    timing.find('.bs-window').val()
                         });
                     });
                     node.rules.push(rule);

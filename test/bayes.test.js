@@ -331,6 +331,48 @@ describe('step sequences', function() {
         assert.strictEqual(b.evaluate(noState, 11 * MIN).terms.length, 1);
     });
 
+    it('"is or becomes" accepts a condition that already holds', function() {
+        const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'phone' })
+        ] };
+        const state = { phone: true };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 1);
+    });
+
+    it('"is or becomes" waits for a late sensor instead of aborting', function() {
+        const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'phone', windowMs: 2 * MIN })
+        ] };
+        const state = { phone: false };                       // sensor has not caught up yet
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);   // pending, not aborted
+
+        state.phone = true;
+        b.handleEvent(hit('arr', 1), true, 2 * MIN, stateOf(state));    // arrives inside the window
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+    });
+
+    it('"is or becomes" still times out when the sensor never reports', function() {
+        const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',       { thing: 'door' }),
+            step('isOrBecomes', { thing: 'phone', windowMs: 2 * MIN })
+        ] };
+        const state = { phone: false };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
+        state.phone = true;
+        b.handleEvent(hit('arr', 1), true, 10 * MIN, stateOf(state));    // far too late
+        assert.strictEqual(b.evaluate(noState, 10 * MIN).terms.length, 0);
+    });
+
     it('level checks chain: door cycle, then motion, and the phone is here', function() {
         const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
             step('cycle',   { thing: 'door' }),

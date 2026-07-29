@@ -38,7 +38,7 @@ module.exports = function(RED) {
                 const steps = (r.steps || []).map(s => ({
                     thing: s.thing, item: s.item,
                     operator: s.operator, value: s.value, valueType: s.valueType || 'str',
-                    pattern: ['cycle', 'is', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is',
+                    pattern: ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is',
                     cycleMaxMs: sec(s.cycleMax, 180),
                     windowMs: sec(s.window, 120)
                 })).filter(s => s.thing && s.item);

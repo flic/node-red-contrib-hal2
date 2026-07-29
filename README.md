@@ -149,12 +149,22 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Rules
 
-Everything is a **rule**, built from steps of three kinds: **is** (a condition, checked at that
-instant — reads *and…*), **becomes** (an event: the condition changes to true — *then…*), and
-**goes on then off** (a cycle: true and back to false within a limit, e.g. a door opening and
-closing — *then…*).
+Everything is a **rule**, built from steps. Each step names a sensor and a condition, then says
+*when* that condition has to hold:
 
-A rule that is a single *is* step is **continuous** (*While…*): it pushes the estimate while its
+- **right now** — a condition, true at that instant (*and…*)
+- **now or soon** — the same, but it waits for the condition until the window runs out; for
+  sensors that report late (*and…*)
+- **when it changes** — an event: the condition must actually turn true, being already true does
+  not count (*then…*)
+- **starts then stops** — a cycle: true and back to false within its limit, e.g. a door opening
+  and closing (*then…*)
+
+Timing sits on a second line under a step, only where it applies: *within N s of the previous
+step* is how long that step has to happen, and *stays on for at most N s* is how long a cycle may
+stay true — a door held open longer than that is not a pass-through, so the rule does not advance.
+
+A rule that is a single *right now* step is **continuous** (*While…*): it pushes the estimate while its
 condition holds and stops the moment it does not. Any other rule is **momentary** (*When…
 then…*): the steps must happen in order, each event within its time window, and completing the
 last step gives a one-off push that then fades. An event that happened while the previous step
@@ -162,17 +172,19 @@ was still in progress also counts, so motion while the door stood open is accept
 closes.
 
 **Put the event first and the conditions after.** Trigger on what actually happens at a point
-in time — usually the door — and use *is* steps to ask what was true at that moment:
+in time — usually the door — and use a condition step to ask what was true at that moment:
 
-> *When the front door goes on then off, and iPhone Fredrik is true → makes it true, decisive*
+> *When the front door is true, starts then stops — and iPhone Fredrik is true, right now →
+> makes it true, decisive*
 
 Written this way the rule does not care whether the phone appeared thirty seconds or thirty
 minutes earlier, and it never fires for somebody else's arrival, because their phone is not
-here — the identity check falls out of the condition, with no special logic. Only a step that
-needs the *change* itself — leaving — uses *becomes*:
+here — the identity check falls out of the condition, with no special logic. If that sensor is
+slow to report, *now or soon* makes the step wait rather than fail. Only a step that needs the
+*change* itself — leaving — uses *when it changes*:
 
-> *When the front door goes on then off, then iPhone Fredrik becomes false within 5 min →
-> makes it false, certain*
+> *When the front door starts then stops, then iPhone Fredrik is false, when it changes, within
+> 5 min → makes it false, certain*
 
 ### Strengths and the share scale
 
