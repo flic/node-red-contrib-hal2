@@ -27,7 +27,7 @@ module.exports = function(RED) {
             halfLifeMs: nodeHalfLifeMs,
             latch:      config.latch === true,
             maxHoldMs:  num(config.maxHold, 0) * 3600e3,   // hours; 0/blank = never
-            rules: (config.rules || []).map(r => {
+            rules: (config.rules || []).map((r, idx) => {
                 // Effective LR: advanced raw override, else the strength word; the
                 // direction folds in as the reciprocal.
                 let lr = num(r.lr, 0) > 0 ? num(r.lr, 0) : scale.strengthLr(r.strength);
@@ -45,7 +45,9 @@ module.exports = function(RED) {
                 // Pre-'is' configs expressed the continuous case as a lone 'becomes'
                 // step; that is exactly a level check, so carry it over unchanged.
                 if (steps.length === 1 && steps[0].pattern === 'becomes') { steps[0].pattern = 'is'; }
-                return { id: r.id, lr, halfLifeMs, steps };
+                // Ids key the rule map and every step hit, so a missing one would collapse
+                // every rule onto the same entry. Fall back to the position in the list.
+                return { id: r.id || ('rule' + idx), lr, halfLifeMs, steps };
             }).filter(r => r.steps.length > 0)
         };
 

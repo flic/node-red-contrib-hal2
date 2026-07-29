@@ -359,7 +359,7 @@
                 // Harvest one rule item from its DOM.
                 function harvestRule(container) {
                     var rule = {
-                        id: container.data('ruleId'),
+                        id: container.find('.br-id').val(),
                         steps: [],
                         direction: container.find('.br-direction option:selected').val(),
                         strength: container.find('.br-strength option:selected').val(),
@@ -497,13 +497,18 @@
                 // ── rule list ────────────────────────────────────────────────
                 $("#node-input-rule-container").editableList({
                     addItem: function(container, i, opt) {
-                        var rule = opt && opt.id ? opt : {
-                            id: halCreateId(),
+                        // Adopt anything that carries steps, even without an id — configs
+                        // saved before the id survived the round trip must not be discarded.
+                        var rule = (opt && (opt.id || (opt.steps && opt.steps.length))) ? opt : {
                             steps: [{ thing: '', item: '', operator: 'true', value: '', valueType: 'str',
                                       pattern: 'is', cycleMax: 180, window: 120 }],
                             direction: 'true', strength: 'moderate', fade: 'normal', lr: '', halfLife: ''
                         };
-                        container.data('ruleId', rule.id);
+                        if (!rule.id) { rule.id = halCreateId(); }
+                        // editableList hands us a <div> inside its <li>, so .data() here is
+                        // invisible to an .each() over the list's children. Keep the id in a
+                        // hidden field, which .find() reaches from either level.
+                        $('<input/>', { type: 'hidden', class: "br-id" }).appendTo(container).val(rule.id);
                         container.css({ overflow: 'hidden' });
 
                         var stepsDiv = $('<div/>', { class: "bayes-steps" }).appendTo(container);
@@ -599,7 +604,7 @@
                 $("#node-input-rule-container").children().each(function() {
                     var el = $(this);
                     var rule = {
-                        id: el.data('ruleId'),
+                        id: el.find('.br-id').val(),
                         steps: [],
                         direction: el.find('.br-direction option:selected').val(),
                         strength: el.find('.br-strength option:selected').val(),

@@ -502,6 +502,21 @@ describe('persistence and input', function() {
         assert.ok(Math.abs(gain - Math.log(3) / 2) < 1e-9);
     });
 
+    it('distinct rules stay distinct — ids must not collide', function() {
+        // Regression: rules saved without an id all mapped to the same entry, so only
+        // the last one existed and every step hit resolved to it.
+        const b = createBayes(cfgOf({ rules: [
+            contRule('a', 10, { thing: 'x' }),
+            contRule('b', 10, { thing: 'y' })
+        ] }));
+        const state = { x: true, y: true };
+        const r = b.evaluate(stateOf(state), 0);
+        assert.strictEqual(r.activeRules.length, 2);
+        assert.ok(r.p > 0.9);                      // both contribute, not just one
+        state.y = false;
+        assert.strictEqual(b.evaluate(stateOf(state), 0).activeRules.length, 1);
+    });
+
     it('restore tolerates garbage and old shapes', function() {
         const b = createBayes(cfgOf({}));
         for (const junk of [null, undefined, 42, 'x', {}, { terms: 'no', fsm: 3, binary: 'yes' }]) {
