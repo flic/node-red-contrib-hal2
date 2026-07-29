@@ -379,11 +379,15 @@
                     // Line 3 — when the condition has to hold, plus the numbers that bound it.
                     // Deliberately off the condition line: that one says *what*, this says
                     // *when*, and read in sequence they became "When ... when it changes".
+                    // Same flex shape as the two lines above: the icon owns the 50 px lead
+                    // column where While/When/and/then sit, so the dropdown lines up with the
+                    // source and condition selects rather than sitting indented behind an icon.
                     var timing = $('<div/>', { class: "bs-timing",
-                        style: "margin-left:50px; margin-top:4px; color:#888; font-size:0.9em;" })
+                        style: "display:flex; align-items:center; flex-wrap:wrap; margin-top:4px; color:#888; font-size:0.9em;" })
                         .appendTo(stepDiv);
-                    $('<i/>', { class: "fa fa-clock-o", style: "margin-right:6px;" }).appendTo(timing);
-                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:150px;" }).appendTo(timing);
+                    $('<span/>', { style: "flex:0 0 50px;" })
+                        .append($('<i/>', { class: "fa fa-clock-o" })).appendTo(timing);
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0;" }).appendTo(timing);
                     // Start with the full set so the saved value can be selected at all;
                     // refreshRuleView narrows it once the source and position are known.
                     setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
