@@ -17,6 +17,19 @@
                 <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 160px)">
             </div>
 
+            <div class="form-row">
+                <label for="node-input-emitOn" style="width:130px;"><i class="fa fa-share"></i> Emit output 1</label>
+                <select id="node-input-emitOn" style="width:calc(100% - 160px)">
+                    <option value="change">only when the result changes</option>
+                    <option value="evaluation">on every evaluation</option>
+                </select>
+            </div>
+            <div class="form-tips">Output 1 normally stays quiet unless the true/false result actually
+            flips, so a rule firing again while the node is already on sends nothing. Switch to
+            <i>every evaluation</i> if a downstream flow wants the state re-asserted continuously;
+            <code>msg.changed</code> then tells you which messages were real transitions.
+            Output 2 (the snapshot) always follows every evaluation.</div>
+
             <div class="form-row" style="margin-top:14px;">
                 <label for="node-input-latch" style="width:auto"><i class="fa fa-lock"></i>
                     Only rules that make it false can turn this off</label>
@@ -135,8 +148,10 @@
     snapshot on output 2.</p>
 
     <h3>Outputs</h3>
-    <p><b>1:</b> on change of the binary result &mdash; <code>payload</code> true/false,
-    <code>probability</code>. <b>2:</b> snapshot
+    <p><b>1:</b> the binary result &mdash; <code>payload</code> true/false, <code>probability</code>,
+    <code>changed</code>. By default this only emits when the result actually flips, so a rule firing
+    again while the node is already on sends nothing; set <b>Emit output 1</b> to <i>every evaluation</i>
+    to have the state re-asserted continuously instead. <b>2:</b> snapshot
     <code>{ p, logOdds, binary, held, activeRules, terms, fsm }</code> on every sensor evaluation
     (and every tick if enabled). Wire output 1 onward like any other message to record the result on
     a Thing &mdash; the node has no side channel into the object model.</p>
@@ -170,6 +185,7 @@
                 rules:          { value: [] },
                 latch:          { value: false },
                 maxHold:        { value: "" },
+                emitOn:         { value: "change" },
                 snapshotOnTick: { value: false }
             },
             inputs: 1,

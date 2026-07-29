@@ -52,6 +52,9 @@ module.exports = function(RED) {
         const topic          = config.topic || ('bayes/' + (config.name || node.id));
         const tickMs         = Math.max(5, num(config.tickInterval, 30)) * 1000;
         const snapshotOnTick = config.snapshotOnTick === true;
+        // 'change' (default) emits output 1 only when the binary result flips;
+        // 'evaluation' re-asserts the current state on every evaluation.
+        const emitOn         = config.emitOn === 'evaluation' ? 'evaluation' : 'change';
 
         const est = createBayes(cfg);
 
@@ -87,8 +90,9 @@ module.exports = function(RED) {
             const result = est.evaluate(resolveState, Date.now());
             persist();
             showStatus(result);
-            const change = result.changed
-                ? { topic: topic, payload: result.binary, probability: Number(result.p.toFixed(4)) }
+            const change = (result.changed || emitOn === 'evaluation')
+                ? { topic: topic, payload: result.binary, probability: Number(result.p.toFixed(4)),
+                    changed: result.changed }
                 : null;
             const snapshot = (emitSnapshot || result.changed)
                 ? { topic: topic + '/snapshot', payload: snapshotPayload(result) }

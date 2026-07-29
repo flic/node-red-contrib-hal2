@@ -197,10 +197,14 @@ that long without supporting evidence.
 
 Advanced mode exposes the raw numbers (LR, half-life seconds, prior, thresholds, clamp) on the
 same rules — there is one data model, the modes only differ in what is shown. The estimate is
-persisted in node context and keeps fading by wall clock across restarts. Output 1 emits on
-change of the binary result; output 2 emits a snapshot (`p`, `logOdds`, `held`, active rules,
-terms, sequence state) for tuning. `msg.topic` `reset` / `evidence` (`{ lr, halfLife? }`) are
-available as escape hatches.
+persisted in node context and keeps fading by wall clock across restarts.
+
+Output 1 carries the binary result (`payload`, `probability`, `changed`). By default it only
+emits when the result actually flips — a rule firing again while the node is already on sends
+nothing — but **Emit output 1** can be set to *every evaluation* when a downstream flow wants
+the state re-asserted continuously. Output 2 emits a snapshot (`p`, `logOdds`, `held`, active
+rules, terms, sequence state) on every evaluation, for tuning. `msg.topic` `reset` / `evidence`
+(`{ lr, halfLife? }`) are available as escape hatches.
 
 ## Other recent additions
 
