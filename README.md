@@ -149,13 +149,30 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Rules
 
-Everything is a **rule**. A rule with a single *becomes* step is **continuous** (*While…*): it
-pushes the estimate while its condition holds and stops the moment it does not. Any other rule
-is **momentary** (*When… then…*): its steps must happen in order, each within its time window,
-and completing the last step gives a one-off push that then fades. A *cycle* step means the
-condition goes true and back to false within a limit — a door opening and closing. An event
-that happened while the previous step was still in progress also counts, so motion while the
-door stood open is accepted when it closes.
+Everything is a **rule**, built from steps of three kinds: **is** (a condition, checked at that
+instant — reads *and…*), **becomes** (an event: the condition changes to true — *then…*), and
+**goes on then off** (a cycle: true and back to false within a limit, e.g. a door opening and
+closing — *then…*).
+
+A rule that is a single *is* step is **continuous** (*While…*): it pushes the estimate while its
+condition holds and stops the moment it does not. Any other rule is **momentary** (*When…
+then…*): the steps must happen in order, each event within its time window, and completing the
+last step gives a one-off push that then fades. An event that happened while the previous step
+was still in progress also counts, so motion while the door stood open is accepted when it
+closes.
+
+**Put the event first and the conditions after.** Trigger on what actually happens at a point
+in time — usually the door — and use *is* steps to ask what was true at that moment:
+
+> *When the front door goes on then off, and iPhone Fredrik is true → makes it true, decisive*
+
+Written this way the rule does not care whether the phone appeared thirty seconds or thirty
+minutes earlier, and it never fires for somebody else's arrival, because their phone is not
+here — the identity check falls out of the condition, with no special logic. Only a step that
+needs the *change* itself — leaving — uses *becomes*:
+
+> *When the front door goes on then off, then iPhone Fredrik becomes false within 5 min →
+> makes it false, certain*
 
 ### Strengths and the share scale
 

@@ -35,16 +35,17 @@ module.exports = function(RED) {
                 const halfLifeMs = num(r.halfLife, 0) > 0
                     ? sec(r.halfLife, 1200)
                     : scale.fadeSeconds(r.fade) * 1000;
-                return {
-                    id: r.id, lr, halfLifeMs,
-                    steps: (r.steps || []).map(s => ({
-                        thing: s.thing, item: s.item,
-                        operator: s.operator, value: s.value, valueType: s.valueType || 'str',
-                        pattern: s.pattern === 'cycle' ? 'cycle' : 'becomes',
-                        cycleMaxMs: sec(s.cycleMax, 180),
-                        windowMs: sec(s.window, 120)
-                    })).filter(s => s.thing && s.item)
-                };
+                const steps = (r.steps || []).map(s => ({
+                    thing: s.thing, item: s.item,
+                    operator: s.operator, value: s.value, valueType: s.valueType || 'str',
+                    pattern: ['cycle', 'is', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is',
+                    cycleMaxMs: sec(s.cycleMax, 180),
+                    windowMs: sec(s.window, 120)
+                })).filter(s => s.thing && s.item);
+                // Pre-'is' configs expressed the continuous case as a lone 'becomes'
+                // step; that is exactly a level check, so carry it over unchanged.
+                if (steps.length === 1 && steps[0].pattern === 'becomes') { steps[0].pattern = 'is'; }
+                return { id: r.id, lr, halfLifeMs, steps };
             }).filter(r => r.steps.length > 0)
         };
 
@@ -111,7 +112,7 @@ module.exports = function(RED) {
             const listener = function(thingtypeid, thingid, itemid, event) {
                 const hits = items[itemid];
                 if (!hits) { return; }
-                est.handleEvent(hits, event.state, Date.now());
+                est.handleEvent(hits, event.state, Date.now(), resolveState);
                 run(true);
             };
             node.eventHandler && node.eventHandler.subscribe('update', thingId, listener);

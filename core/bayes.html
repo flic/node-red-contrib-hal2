@@ -88,13 +88,27 @@
     estimates one thing, so use one node per person.</p>
 
     <h3>Rules</h3>
-    <p>Everything is a <b>rule</b>. A rule with a single <i>becomes</i> step is <b>continuous</b>
-    (reads <i>While&hellip;</i>): it pushes the estimate while its condition holds and stops the moment
-    it does not. Any other rule is <b>momentary</b> (reads <i>When&hellip;then&hellip;</i>): its steps must
-    happen in order, each within its time window, and completing the last step gives a one-off push
-    that then fades. A <i>cycle</i> step means the condition goes true and back to false within the
-    limit &mdash; a door opening and closing. An event that happened while the previous step was still
-    in progress also counts (motion while the door stood open is accepted when it closes).</p>
+    <p>Everything is a <b>rule</b>, built from steps. A step is one of three kinds:</p>
+    <ul>
+        <li><b>is</b> &mdash; a condition, checked at that instant. Reads <i>and&hellip;</i></li>
+        <li><b>becomes</b> &mdash; an event: the condition changes to true. Reads <i>then&hellip;</i></li>
+        <li><b>goes on then off</b> &mdash; a cycle: true and back to false within the limit, e.g. a
+            door opening and closing. Reads <i>then&hellip;</i></li>
+    </ul>
+    <p>A rule that is a single <b>is</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
+    the estimate while its condition holds and stops the moment it does not. Any other rule is
+    <b>momentary</b> (<i>When&hellip;then&hellip;</i>): the steps must happen in order, each event within
+    its time window, and completing the last step gives a one-off push that then fades. An event that
+    happened while the previous step was still in progress also counts &mdash; motion while the door
+    stood open is accepted when it closes.</p>
+    <p><b>Put the event first and the conditions after.</b> Trigger on the thing that actually happens
+    at a point in time &mdash; usually a door &mdash; and use <b>is</b> steps to ask what was true at that
+    moment: <i>"When the front door goes on then off, and iPhone Fredrik is true &rarr; makes it true"</i>.
+    Written that way the rule does not care whether the phone appeared thirty seconds or thirty minutes
+    earlier, and it never fires for somebody else's arrival, because their phone is not here. A step that
+    needs the change itself &mdash; leaving &mdash; uses <b>becomes</b>:
+    <i>"When the front door goes on then off, then iPhone Fredrik becomes false within 5 min &rarr;
+    makes it false, certain"</i>.</p>
 
     <h3>Strengths and the share scale</h3>
     <p>Each rule pushes with a strength: <b>slight</b> (LR 1.5), <b>moderate</b> (3), <b>strong</b> (10),
@@ -222,7 +236,8 @@
                 }
 
                 function isContinuous(rule) {
-                    return rule.steps.length === 1 && rule.steps[0].pattern === 'becomes';
+                    // A lone level check is the continuous case: "while X is true".
+                    return rule.steps.length === 1 && rule.steps[0].pattern === 'is';
                 }
 
                 function ruleHalfLifeS(rule) {
@@ -253,8 +268,9 @@
                         .appendTo(row).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
 
-                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:130px; margin-left:4px;" }).appendTo(row);
-                    patSel.append($("<option></option>").val('becomes').text('becomes / is'));
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "width:150px; margin-left:4px;" }).appendTo(row);
+                    patSel.append($("<option></option>").val('is').text('is (right now)'));
+                    patSel.append($("<option></option>").val('becomes').text('becomes (changes to)'));
                     patSel.append($("<option></option>").val('cycle').text('goes on then off'));
 
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(row);
@@ -290,7 +306,7 @@
                     thingSel.trigger('change');
                     opSel.val(step.operator || 'true');
                     opHandler();
-                    patSel.val(step.pattern || 'becomes');
+                    patSel.val(step.pattern || 'is');
                     return row;
                 }
 
@@ -329,11 +345,19 @@
 
                     container.find('.bayes-step').each(function(i) {
                         var el = $(this);
-                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : 'then');
-                        el.find('.bs-cycle-span').toggle(el.find('.bs-pattern').val() === 'cycle');
-                        el.find('.bs-window-span').toggle(i > 0);
+                        var pat = el.find('.bs-pattern').val();
+                        // A level check reads "and …" — it is a condition, not an event.
+                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (pat === 'is' ? 'and' : 'then'));
+                        el.find('.bs-cycle-span').toggle(pat === 'cycle');
+                        el.find('.bs-window-span').toggle(i > 0 && pat !== 'is');
                         el.find('.bs-remove').toggle(rule.steps.length > 1);
                     });
+
+                    // A level check cannot start a sequence — nothing would trigger it.
+                    var deadTrigger = rule.steps.length > 1 && rule.steps[0].pattern === 'is';
+                    container.find('.br-warning')
+                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — make it "becomes" or "goes on then off".' : '')
+                        .toggle(deadTrigger);
 
                     var lr = effectiveLr(rule);
                     var share = scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
@@ -416,7 +440,7 @@
                         var rule = opt && opt.id ? opt : {
                             id: halCreateId(),
                             steps: [{ thing: '', item: '', operator: 'true', value: '', valueType: 'str',
-                                      pattern: 'becomes', cycleMax: 180, window: 120 }],
+                                      pattern: 'is', cycleMax: 180, window: 120 }],
                             direction: 'true', strength: 'moderate', fade: 'normal', lr: '', halfLife: ''
                         };
                         container.data('ruleId', rule.id);
@@ -429,7 +453,7 @@
                             .appendTo(container)
                             .on('click', function(e) {
                                 e.preventDefault();
-                                addStepRow(stepsDiv, container, { operator: 'true', pattern: 'becomes', cycleMax: 180, window: 120 });
+                                addStepRow(stepsDiv, container, { operator: 'true', pattern: 'is', cycleMax: 180, window: 120 });
                                 refreshRuleView(container);
                             });
 
@@ -467,6 +491,10 @@
                         var decayRow = $('<div/>', { style: "margin-top:2px; white-space:nowrap;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(decayRow);
                         $('<span/>', { class: "br-decay-caption", style: "color:#999; font-size:0.9em;" }).appendTo(decayRow);
+
+                        var warnRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(container);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(warnRow);
+                        $('<span/>', { class: "br-warning", style: "color:#a60; font-size:0.9em;" }).appendTo(warnRow).hide();
 
                         dirSel.val(rule.direction || 'true');
                         strSel.val(rule.strength || 'moderate');

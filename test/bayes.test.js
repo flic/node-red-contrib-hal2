@@ -20,9 +20,9 @@ function step(pattern, overrides) {
         pattern: pattern, cycleMaxMs: 3 * MIN, windowMs: 2 * MIN }, overrides);
 }
 
-// Continuous rule: one step, pattern 'becomes'.
+// Continuous rule: a lone level check.
 function contRule(id, lr, stepOverrides) {
-    return { id, lr, halfLifeMs: null, steps: [step('becomes', stepOverrides)] };
+    return { id, lr, halfLifeMs: null, steps: [step('is', stepOverrides)] };
 }
 
 // The lab's arrival: door cycle then motion, as a two-step momentary rule.
@@ -33,6 +33,8 @@ function arrivalRule(id, lr) {
 
 const hit = (ruleId, stepIndex) => [{ ruleId, stepIndex }];
 const noState = () => undefined;
+// Level-check resolver backed by a mutable map keyed on step.thing.
+const stateOf = map => (s => map[s.thing]);
 const pOf = (b, t) => b.evaluate(noState, t).p;
 
 // ---- scale helpers ----------------------------------------------------------
@@ -296,6 +298,51 @@ describe('step sequences', function() {
         b.handleEvent(hit('r', 0), false, 0);
         b.handleEvent(hit('r', 1), true, MIN);
         assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+    });
+
+    it('a level check is answered when the previous step completes, whenever it turned true', function() {
+        // Door-first arrival: the phone went true long before the door ever opened,
+        // so an edge-based step would never fire — a level check does.
+        const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
+            step('cycle', { thing: 'door' }),
+            step('is',    { thing: 'phone' })
+        ] };
+        const state = { phone: true };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('arr', 0), true, 60 * MIN, stateOf(state));      // door opens
+        b.handleEvent(hit('arr', 0), false, 61 * MIN, stateOf(state));     // closes → level check
+        assert.strictEqual(b.evaluate(noState, 61 * MIN).terms.length, 1);
+    });
+
+    it('a failing level check aborts the sequence', function() {
+        const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
+            step('cycle', { thing: 'door' }),
+            step('is',    { thing: 'phone' })
+        ] };
+        const state = { phone: false };                                    // somebody else's door cycle
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+        // …and the sequence is reset, so the next real cycle still works.
+        state.phone = true;
+        b.handleEvent(hit('arr', 0), true, 10 * MIN, stateOf(state));
+        b.handleEvent(hit('arr', 0), false, 11 * MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, 11 * MIN).terms.length, 1);
+    });
+
+    it('level checks chain: door cycle, then motion, and the phone is here', function() {
+        const rule = { id: 'arr', lr: 30, halfLifeMs: null, steps: [
+            step('cycle',   { thing: 'door' }),
+            step('becomes', { thing: 'motion' }),
+            step('is',      { thing: 'phone' })
+        ] };
+        const state = { phone: true };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
+        b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN, stateOf(state));
+        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
     });
 
     it('repeated identical reports count once (edge dedupe)', function() {
