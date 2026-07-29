@@ -208,6 +208,17 @@
         var btime = window.hal2BayesTime;
         var PATTERNS = { is: 'right now', isOrBecomes: 'now or soon',
                          becomes: 'when it changes', cycle: 'starts then stops' };
+        var ALL_PATTERNS = ['is', 'isOrBecomes', 'becomes', 'cycle'];
+        // Rebuilds only when the option set actually differs, so a selection survives
+        // every refresh. `keep` is what the value should be if it is still offered.
+        function setPatternOptions(patSel, allowed, keep) {
+            var have = patSel.find('option').map(function() { return this.value; }).get().join(',');
+            if (have !== allowed.join(',')) {
+                patSel.empty();
+                allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
+            }
+            patSel.val(allowed.indexOf(keep) >= 0 ? keep : 'is');
+        }
 
         RED.nodes.registerType('hal2Bayes', {
             category: 'Home Automation',
@@ -367,9 +378,9 @@
                     // Timing qualifier, read as a suffix to the condition:
                     // "iPhone Presence is true — right now".
                     var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0; margin-left:4px;" }).appendTo(line2);
-                    // Only a subscribed Thing produces change events, so edge qualifiers are
-                    // offered for Thing sources only — a polled variable could only be sampled
-                    // on the tick and would miss anything faster than that.
+                    // Start with the full set so the saved value can be selected at all;
+                    // refreshRuleView narrows it once the source and position are known.
+                    setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
 
 
                     // Line 3 — the timing numbers, spelled out.
@@ -515,10 +526,6 @@
 
                     container.find('.bayes-step').each(function(i) {
                         var el = $(this);
-                        var pat = el.find('.bs-pattern').val();   // refined below once options are synced
-                        // A condition reads "and …"; an event reads "then …".
-                        var isCond = (pat === 'is' || pat === 'isOrBecomes');
-                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
                         el.find('.bs-remove').toggle(rule.steps.length > 1);
 
                         // Timing line: only the parts that actually apply, and only when
@@ -527,19 +534,17 @@
                         var src = el.find('.bs-src').val();
                         var isTime = src === 'time';
 
-                        var allowed = src === 'thing' ? ['is', 'isOrBecomes', 'becomes', 'cycle']
+                        var allowed = src === 'thing' ? ALL_PATTERNS
                                     : (isTime || i === 0) ? ['is'] : ['is', 'isOrBecomes'];
                         var patSel = el.find('.bs-pattern');
-                        var have = patSel.find('option').map(function() { return this.value; }).get().join(',');
-                        if (have !== allowed.join(',')) {
-                            var keep = patSel.val();
-                            patSel.empty();
-                            allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
-                            patSel.val(allowed.indexOf(keep) >= 0 ? keep : 'is');
-                        }
+                        setPatternOptions(patSel, allowed, patSel.val());
                         patSel.toggle(allowed.length > 1);
                         el.find('.bs-val-wrap').toggle(!isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0);
-                        pat = patSel.val();
+
+                        var pat = patSel.val();
+                        // A condition reads "and …"; an event reads "then …".
+                        var isCond = (pat === 'is' || pat === 'isOrBecomes');
+                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
                         var showWindow = i > 0 && pat !== 'is';
                         var showCycle = (pat === 'cycle');
                         timing.find('.bs-window-span').toggle(showWindow);
