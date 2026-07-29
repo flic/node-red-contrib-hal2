@@ -217,6 +217,9 @@ Advanced mode exposes the raw numbers (LR, half-life seconds, prior, thresholds,
 same rules — there is one data model, the modes only differ in what is shown. The estimate is
 persisted in node context and keeps fading by wall clock across restarts.
 
+Set **Topic** to put a `msg.topic` on both outputs — output 1 gets it as written, output 2 gets
+it with `/snapshot` appended. Leave it blank and no topic is set at all, as in the Event node.
+
 Output 1 carries the binary result (`payload`, `probability`, `changed`). By default it only
 emits when the result actually flips — a rule firing again while the node is already on sends
 nothing — but **Emit output 1** can be set to *every evaluation* when a downstream flow wants

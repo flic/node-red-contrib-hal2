@@ -18,6 +18,11 @@
             </div>
 
             <div class="form-row">
+                <label for="node-input-topic" style="width:130px;"><i class="fa fa-tasks"></i> Topic</label>
+                <input type="text" id="node-input-topic" placeholder="(leave blank to not set one)" style="width:calc(100% - 160px)">
+            </div>
+
+            <div class="form-row">
                 <label for="node-input-emitOn" style="width:130px;"><i class="fa fa-share"></i> Emit output 1</label>
                 <select id="node-input-emitOn" style="width:calc(100% - 160px)">
                     <option value="change">only when the result changes</option>
@@ -45,10 +50,6 @@
             sensor drops out.</div>
 
             <div class="form-row hal2bayes-adv" style="margin-top:14px;">
-                <label for="node-input-topic" style="width:130px;"><i class="fa fa-comment"></i> Topic</label>
-                <input type="text" id="node-input-topic" placeholder="bayes/<name>" style="width:calc(100% - 160px)">
-            </div>
-            <div class="form-row hal2bayes-adv">
                 <label for="node-input-prior" style="width:130px;"><i class="fa fa-balance-scale"></i> Prior</label>
                 <input type="number" id="node-input-prior" min="0.001" max="0.999" step="any" style="width:80px">
             </div>
@@ -165,6 +166,9 @@
     snapshot on output 2.</p>
 
     <h3>Outputs</h3>
+    <p>Set <b>Topic</b> to put a <code>msg.topic</code> on both outputs &mdash; output 1 gets it as
+    written, output 2 gets it with <code>/snapshot</code> appended. Leave it blank and no topic is
+    set at all.</p>
     <p><b>1:</b> the binary result &mdash; <code>payload</code> true/false, <code>probability</code>,
     <code>changed</code>. By default this only emits when the result actually flips, so a rule firing
     again while the node is already on sends nothing; set <b>Emit output 1</b> to <i>every evaluation</i>

@@ -51,7 +51,12 @@ module.exports = function(RED) {
             }).filter(r => r.steps.length > 0)
         };
 
-        const topic          = config.topic || ('bayes/' + (config.name || node.id));
+        // Like hal2Event: a blank topic leaves msg.topic alone rather than inventing one.
+        const topic          = config.topic || '';
+        const withTopic      = (msg, suffix) => {
+            if (topic !== '') { msg.topic = topic + (suffix || ''); }
+            return msg;
+        };
         const tickMs         = Math.max(5, num(config.tickInterval, 30)) * 1000;
         const snapshotOnTick = config.snapshotOnTick === true;
         // 'change' (default) emits output 1 only when the binary result flips;
@@ -93,11 +98,11 @@ module.exports = function(RED) {
             persist();
             showStatus(result);
             const change = (result.changed || emitOn === 'evaluation')
-                ? { topic: topic, payload: result.binary, probability: Number(result.p.toFixed(4)),
-                    changed: result.changed }
+                ? withTopic({ payload: result.binary, probability: Number(result.p.toFixed(4)),
+                              changed: result.changed })
                 : null;
             const snapshot = (emitSnapshot || result.changed)
-                ? { topic: topic + '/snapshot', payload: snapshotPayload(result) }
+                ? withTopic({ payload: snapshotPayload(result) }, '/snapshot')
                 : null;
             if (change || snapshot) { node.send([change, snapshot]); }
             return result;
@@ -151,7 +156,7 @@ module.exports = function(RED) {
                 const result = est.evaluate(resolveState, Date.now());
                 persist();
                 showStatus(result);
-                send([null, { topic: topic + '/snapshot', payload: snapshotPayload(result) }]);
+                send([null, withTopic({ payload: snapshotPayload(result) }, '/snapshot')]);
                 return done();
             }
             run(true);
