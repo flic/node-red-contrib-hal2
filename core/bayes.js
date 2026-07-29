@@ -36,7 +36,7 @@ module.exports = function(RED) {
                 const halfLifeMs = num(r.halfLife, 0) > 0
                     ? sec(r.halfLife, 1200)
                     : scale.fadeSeconds(r.fade) * 1000;
-                const steps = (r.steps || []).map(s => {
+                const steps = (r.steps || []).map((s, si) => {
                     const src = ['thing', 'flow', 'global', 'env', 'time'].indexOf(s.src) >= 0 ? s.src : 'thing';
                     let pattern = ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is';
                     // Polled sources have no change event, so an edge on them could only be
@@ -45,6 +45,10 @@ module.exports = function(RED) {
                         node.warn('A ' + src + ' step cannot detect changes — treating it as a condition');
                         pattern = 'is';
                     }
+                    // Nothing can drive a polled source at the head of a rule: there is no
+                    // subscription to wake it and no previous step to be "soon" after, so
+                    // 'isOrBecomes' there would never fire at all.
+                    if (src !== 'thing' && si === 0 && pattern === 'isOrBecomes') { pattern = 'is'; }
                     return {
                         src, thing: s.thing, item: s.item, prop: s.prop,
                         start: s.start, end: s.end,

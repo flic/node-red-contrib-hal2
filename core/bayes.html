@@ -206,6 +206,8 @@
     (function() {
         var scale = window.hal2BayesScale;
         var btime = window.hal2BayesTime;
+        var PATTERNS = { is: 'right now', isOrBecomes: 'now or soon',
+                         becomes: 'when it changes', cycle: 'starts then stops' };
 
         RED.nodes.registerType('hal2Bayes', {
             category: 'Home Automation',
@@ -368,22 +370,15 @@
                     // Only a subscribed Thing produces change events, so edge qualifiers are
                     // offered for Thing sources only — a polled variable could only be sampled
                     // on the tick and would miss anything faster than that.
-                    var PATTERNS = { is: 'right now', isOrBecomes: 'now or soon',
-                                     becomes: 'when it changes', cycle: 'starts then stops' };
-                    function syncPatternOptions() {
-                        var allowed = srcSel.val() === 'thing'
-                            ? ['is', 'isOrBecomes', 'becomes', 'cycle']
-                            : ['is', 'isOrBecomes'];
-                        var current = patSel.val() || step.pattern || 'is';
-                        patSel.empty();
-                        allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
-                        patSel.val(allowed.indexOf(current) >= 0 ? current : 'is');
-                    }
+
 
                     // Line 3 — the timing numbers, spelled out.
                     var timing = $('<div/>', { class: "bs-timing",
                         style: "margin-left:50px; margin-top:3px; color:#888; font-size:0.9em;" })
                         .appendTo(stepDiv);
+                    // Read-back of the configured window, on its own line under the weekdays.
+                    $('<div/>', { class: "bs-days-hint",
+                        style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
 
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
                     $('<span/>').appendTo(windowSpan).text('within ');
@@ -412,7 +407,7 @@
                                 refreshRuleView(ruleContainer);
                             });
                     });
-                    var daysHint = $('<span/>', { class: "bs-days-hint", style: "margin-left:10px;" }).appendTo(daysSpan);
+
 
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
@@ -437,7 +432,6 @@
                         propWrap.toggle(src !== 'thing' && src !== 'time');
                         timeWrap.toggle(src === 'time');
                         syncOperatorOptions();
-                        syncPatternOptions();
                     };
                     // For a time step resolveState yields a boolean, so the existing
                     // true/false operator is inside/outside — just worded for humans.
@@ -447,10 +441,12 @@
                         if (isTime === opSel.data('isTime')) { return; }
                         opSel.data('isTime', isTime).empty();
                         if (isTime) {
-                            opSel.append($("<option></option>").val('true').text('inside'));
-                            opSel.append($("<option></option>").val('false').text('outside'));
+                            opSel.append($("<option></option>").val('true').text('is inside the window'));
+                            opSel.append($("<option></option>").val('false').text('is outside the window'));
                             opSel.val(current === 'false' ? 'false' : 'true');
+                            opSel.css('flex', '1 1 0');          // value and qualifier are hidden here
                         } else {
+                            opSel.css('flex', '0 0 110px');
                             halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                             opSel.val(current);
                         }
@@ -519,7 +515,7 @@
 
                     container.find('.bayes-step').each(function(i) {
                         var el = $(this);
-                        var pat = el.find('.bs-pattern').val();
+                        var pat = el.find('.bs-pattern').val();   // refined below once options are synced
                         // A condition reads "and …"; an event reads "then …".
                         var isCond = (pat === 'is' || pat === 'isOrBecomes');
                         el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
@@ -528,7 +524,22 @@
                         // Timing line: only the parts that actually apply, and only when
                         // at least one of them does.
                         var timing = el.find('.bs-timing');
-                        var isTime = el.find('.bs-src').val() === 'time';
+                        var src = el.find('.bs-src').val();
+                        var isTime = src === 'time';
+
+                        var allowed = src === 'thing' ? ['is', 'isOrBecomes', 'becomes', 'cycle']
+                                    : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
+                        var patSel = el.find('.bs-pattern');
+                        var have = patSel.find('option').map(function() { return this.value; }).get().join(',');
+                        if (have !== allowed.join(',')) {
+                            var keep = patSel.val();
+                            patSel.empty();
+                            allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
+                            patSel.val(allowed.indexOf(keep) >= 0 ? keep : 'is');
+                        }
+                        patSel.toggle(allowed.length > 1);
+                        el.find('.bs-val-wrap').toggle(!isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0);
+                        pat = patSel.val();
                         var showWindow = i > 0 && pat !== 'is';
                         var showCycle = (pat === 'cycle');
                         timing.find('.bs-window-span').toggle(showWindow);
@@ -539,6 +550,7 @@
                         timing.toggle(showWindow || showCycle || isTime);
 
                         // Live read-back so a wrong window or day selection is obvious at once.
+                        el.find('.bs-days-hint').toggle(isTime);
                         if (isTime) {
                             var spec = { start: el.find('.bs-start').val(), end: el.find('.bs-end').val(),
                                          days: el.find('.bs-day').filter(function() { return $(this).data('on'); })
