@@ -377,10 +377,13 @@
                     var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 130px; min-width:0;" }).appendTo(line2);
                     halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                     var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
-                    var valField = $('<input/>', { class: "bs-val", type: "text" })
+                    // The width must be on the element's inline style: typedInput looks for one
+                    // there and, finding it, sizes both parts declaratively (input 100%, container
+                    // that width). Otherwise it measures outerWidth() at construction — which runs
+                    // while the Rules tab is still display:none, so the measurement is 0.
+                    var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
                         .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
-                    valField.typedInput('width', '100%');
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
                     // Line 3 — when the condition has to hold, plus the numbers that bound it.
                     // Deliberately off the condition line: that one says *what*, this says
