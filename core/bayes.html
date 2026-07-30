@@ -350,7 +350,7 @@
                         .forEach(function(s) { srcSel.append($("<option></option>").val(s[0]).text(s[1])); });
                     var thingWrap = $('<span/>', { class: "bs-thing-wrap",
                         style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
-                    var thingSel = $('<select/>', { class: "bs-thing", style: "flex:1 1 0; min-width:0;" }).appendTo(thingWrap);
+                    var thingSel = $('<select/>', { class: "bs-thing", style: "flex:2 1 0; min-width:0;" }).appendTo(thingWrap);
                     var itemSel = $('<select/>', { class: "bs-item", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(thingWrap);
                     var propWrap = $('<span/>', { class: "bs-prop-wrap",
                         style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
@@ -380,6 +380,7 @@
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
                         .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
                     $('<span/>', { style: "flex:0 0 34px;" }).appendTo(line2);
+                    valField.typedInput('width', '100%');
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
                     // Line 3 — when the condition has to hold, plus the numbers that bound it.
                     // Deliberately off the condition line: that one says *what*, this says
