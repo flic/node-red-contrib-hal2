@@ -69,6 +69,33 @@
         return clampLn(Math.log(lr), clamp) / requiredGain(prior, pOn);
     }
 
+    // Maps a measured value onto a share, linearly between two points and clamped to the
+    // endpoint shares outside them. Lets a rule's weight follow the reading — "the drier the
+    // soil, the more this matters" — which is what turns fixed-weight naive Bayes into
+    // logistic regression over a continuous feature.
+    //
+    // spec: { fromValue, fromShare, toValue, toShare } with shares as fractions.
+    // Returns null when the value is not a number or the two points share an x, so the caller
+    // can treat the rule as contributing nothing rather than dividing by zero.
+    function scaleShare(value, spec) {
+        if (!spec) { return null; }
+        var v = Number(value);
+        if (value === null || value === undefined || value === '' || isNaN(v)) { return null; }
+        var x1 = Number(spec.fromValue), y1 = Number(spec.fromShare);
+        var x2 = Number(spec.toValue), y2 = Number(spec.toShare);
+        if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2) || x1 === x2) { return null; }
+        // Order by value so the points can be entered either way round.
+        if (x1 > x2) { var tx = x1, ty = y1; x1 = x2; y1 = y2; x2 = tx; y2 = ty; }
+        if (v <= x1) { return y1; }
+        if (v >= x2) { return y2; }
+        return y1 + (v - x1) * (y2 - y1) / (x2 - x1);
+    }
+
+    // Inverse of shareOfWay: a share back to the log-odds it contributes.
+    function shareToLn(share, prior, pOn, clamp) {
+        return clampLn(share * requiredGain(prior, pOn), clamp);
+    }
+
     // Scenario estimate for the summary line: all continuous rules inactive, the
     // given momentary contributions at full strength — after how many ms does the
     // estimate fall to the off-threshold? terms: [{ l0, halfLifeMs }] (l0 = ln LR,
@@ -108,6 +135,8 @@
         fadeSeconds: fadeSeconds,
         requiredGain: requiredGain,
         shareOfWay: shareOfWay,
+        scaleShare: scaleShare,
+        shareToLn: shareToLn,
         offAfterMs: offAfterMs
     };
 }));

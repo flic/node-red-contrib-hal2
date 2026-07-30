@@ -214,6 +214,27 @@ it only matters together with the node's own strong indicator — someone else a
 35 % to this node and nothing happens. A **certain** rule overrides history: firing it clears
 opposing evidence, and a stored certain statement is cleared by any later contradicting rule.
 
+### Weights that follow the reading
+
+The strength **scaled…** makes a rule's weight depend on the measured value rather than being
+constant. Give two points — *at 20 → 150 %*, *at 60 → 0 %* — and the share is interpolated between
+them, clamped outside. Soil moisture is the natural case: watering in direct sun is normally a bad
+idea, but critically dry soil should override it, which only works if the dryness rule grows
+heavier as the reading falls. This is the step from naive Bayes with binary features to logistic
+regression over a continuous one.
+
+Shares may exceed 100 % and may be negative; the sign lives in the shares, so the *makes it*
+dropdown is hidden for a scaled rule and one rule can push both ways across its range. Mind the
+arithmetic: 100 % reaches the threshold *exactly* from the prior, so any opposing evidence blocks
+it — overriding a moderate 35 % objection needs roughly 150 %. Single-step rules only, since with
+several steps there is no non-arbitrary answer to which value scales the weight.
+
+Two caveats when using the node this way. Irrigation is a **decision, not a hidden state** — there
+is no fact about whether watering "is needed" independent of preference; the machinery still fits,
+but `p` becomes a score rather than a probability. And several moisture sensors in one bed are
+**not independent evidence** — naive Bayes over-counts them and pins the estimate at the clamp, so
+aggregate them (min or mean) into a `global` and use one rule.
+
 ### Fading and the latch
 
 Momentary pushes fade — **quick** (5 min half-life), **normal** (20 min), **slow** (1 h),

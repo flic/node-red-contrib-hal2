@@ -164,6 +164,26 @@
     strong indicator. A <b>certain</b> rule overrides accumulated history: when it fires it clears
     opposing evidence, and a stored certain statement is cleared by any later contradicting rule.</p>
 
+    <h3>Weights that follow the reading</h3>
+    <p>The strength <b>scaled&hellip;</b> makes a rule's weight depend on the measured value instead
+    of being constant. Give two points &mdash; <i>at 20 &rarr; 150 %</i>, <i>at 60 &rarr; 0 %</i> &mdash;
+    and the share is interpolated between them and clamped outside. Soil moisture is the natural
+    example: watering in direct sun is normally a bad idea, but critically dry soil should override
+    it, which only works if the dryness rule grows heavier as the reading falls.</p>
+    <p>Shares may exceed 100 % and may be negative, and the sign lives in the shares &mdash; so the
+    <i>makes it</i> dropdown is hidden for a scaled rule, and one rule can push both ways across its
+    range. Note the arithmetic: 100 % reaches the threshold <i>exactly</i> from the prior, so any
+    opposing evidence blocks it. To override a moderate 35 % objection the dry end needs about
+    150 %. Available on single-step rules only, since with several steps there is no
+    non-arbitrary answer to which value should scale the weight. A reading that is not a number
+    makes the rule contribute nothing rather than erroring.</p>
+    <p>Two things worth knowing when using the node this way. Irrigation is a <b>decision, not a
+    hidden state</b> &mdash; there is no fact about whether watering "is needed" independent of your
+    preferences. The machinery still fits (weighted score, hysteresis, decay), but <code>p</code>
+    stops being a probability and becomes a score. And several moisture sensors in one bed are
+    <b>not independent evidence</b>: naive Bayes over-counts them and pins the estimate at the
+    clamp, so aggregate them (min or mean) into a <code>global</code> in a flow and use one rule.</p>
+
     <h3>Fading and the latch</h3>
     <p>Momentary pushes fade &mdash; <b>quick</b> (5 min half-life), <b>normal</b> (20 min),
     <b>slow</b> (1 h), <b>never</b> (the push stands until something contradicts it), or
@@ -307,6 +327,21 @@
                 function effectiveLr(rule) {
                     var lr = Number(rule.lr) > 0 ? Number(rule.lr) : scale.strengthLr(rule.strength);
                     return rule.direction === 'false' ? 1 / lr : lr;
+                }
+
+                function scaleSpec(rule) {
+                    var sc = rule.scale || {};
+                    return { fromValue: Number(sc.fromValue), fromShare: Number(sc.fromShare) / 100,
+                             toValue: Number(sc.toValue),     toShare: Number(sc.toShare) / 100 };
+                }
+                // The largest share the map can produce — what the bar and the summary report,
+                // since the editor has no access to the live reading.
+                function maxScaleShare(rule) {
+                    var spec = scaleSpec(rule);
+                    var a = scale.scaleShare(spec.fromValue, spec);
+                    var b = scale.scaleShare(spec.toValue, spec);
+                    if (a === null || b === null) { return 0; }
+                    return Math.abs(a) >= Math.abs(b) ? a : b;
                 }
 
                 function isContinuous(rule) {
@@ -505,6 +540,12 @@
                         strength: container.find('.br-strength option:selected').val(),
                         fade: container.find('.br-fade option:selected').val(),
                         lr: container.find('.br-lr').val(),
+                        scale: {
+                            fromValue: container.find('.br-fromValue').val(),
+                            fromShare: container.find('.br-fromShare').val(),
+                            toValue:   container.find('.br-toValue').val(),
+                            toShare:   container.find('.br-toShare').val()
+                        },
                         // Only a custom fade stores a raw half-life; the named rates own it otherwise.
                         halfLife: container.find('.br-fade option:selected').val() === 'custom'
                             ? container.find('.br-halflife').val() : ''
@@ -599,17 +640,36 @@
                         .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "on change" or "on a full cycle".' : '')
                         .toggle(deadTrigger);
 
+                    var scaled = (rule.strength === 'scaled' && rule.steps.length === 1);
                     var lr = effectiveLr(rule);
-                    var share = scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                    var share = scaled ? maxScaleShare(rule) : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
                     var sPct = pct(share);
+
+                    container.find('.br-scale-span').toggle(scaled);
+                    container.find('.br-direction').toggle(!scaled);   // the sign lives in the shares
+                    if (scaled) {
+                        var spec = scaleSpec(rule);
+                        var mid = (Number(spec.fromValue) + Number(spec.toValue)) / 2;
+                        var fmt = function(v) {
+                            var sh = scale.scaleShare(v, spec);
+                            return sh === null ? '?' : v + ' → ' + Math.round(sh * 100) + ' %';
+                        };
+                        container.find('.br-scale-hint').text(
+                            scale.scaleShare(mid, spec) === null
+                                ? 'the two values must differ'
+                                : fmt(spec.fromValue) + ' · ' + fmt(mid) + ' · ' + fmt(spec.toValue) +
+                                  '   (clamped outside)');
+                    }
 
                     var bar = container.find('.br-bar-inner');
                     bar.css({ width: Math.min(100, Math.abs(share) * 100) + '%',
                               background: share >= 0 ? '#4b8' : '#c66' });
 
-                    var capt = sPct >= 0
-                        ? sPct + ' % of the way to on' + (share >= 1 ? ' — enough on its own' : '')
-                        : sPct + ' % (pushes toward off)';
+                    var capt = scaled
+                        ? 'up to ' + sPct + ' % of the way to on' + (share >= 1 ? ' — can be enough on its own' : '')
+                        : (sPct >= 0
+                            ? sPct + ' % of the way to on' + (share >= 1 ? ' — enough on its own' : '')
+                            : sPct + ' % (pushes toward off)');
                     container.find('.br-share-caption').text(capt);
 
                     var custom = Number(rule.lr) > 0;
@@ -641,12 +701,15 @@
                 // ── summary under the list ───────────────────────────────────
                 function refreshSummary() {
                     var p = params();
-                    var totalPos = 0, anyAlone = false, momentaryTerms = [];
+                    var totalPos = 0, anyAlone = false, anyScaled = false, momentaryTerms = [];
                     $("#node-input-rule-container").children().each(function() {
                         var rule = harvestRule($(this));
                         if (!rule.steps.length || !rule.steps[0].thing) { return; }
+                        var scaledRule = (rule.strength === 'scaled' && rule.steps.length === 1);
                         var lr = effectiveLr(rule);
-                        var share = scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                        var share = scaledRule ? maxScaleShare(rule)
+                                               : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                        if (scaledRule) { anyScaled = true; }
                         if (share > 0) {
                             totalPos += share;
                             if (share >= 1) { anyAlone = true; }
@@ -657,7 +720,7 @@
                     });
 
                     var lines = [];
-                    lines.push('<b>Together: ' + pct(totalPos) + ' %</b> → ' +
+                    lines.push('<b>Together: ' + (anyScaled ? 'up to ' : '') + pct(totalPos) + ' %</b> → ' +
                         (totalPos >= 1 ? 'turns on.' : 'not enough to turn on.') + ' ' +
                         (anyAlone ? 'At least one rule is enough on its own.' : 'No single rule is enough on its own.'));
 
@@ -713,6 +776,7 @@
                         dirSel.append($("<option></option>").val('false').text('false'));
                         var strSel = $('<select/>', { class: "br-strength", style: "width:100px; margin-left:6px;" }).appendTo(outRow);
                         scale.STRENGTHS.forEach(function(s) { strSel.append($("<option></option>").val(s.v).text(s.v)); });
+                        strSel.append($("<option></option>").val('scaled').text('scaled…'));
                         var fadeSpan = $('<span/>', { class: "br-fade-span" }).appendTo(outRow);
                         $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(fadeSpan).text('fades');
                         var fadeSel = $('<select/>', { class: "br-fade", style: "width:90px; margin-left:4px;" }).appendTo(fadeSpan);
@@ -723,6 +787,24 @@
                             placeholder: "half-life", style: "width:80px; margin-left:6px;" })
                             .appendTo(customSpan).val(rule.halfLife);
                         $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
+
+                        var sc = rule.scale || {};
+                        var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(container);
+                        [['from', 'fromValue', 'fromShare', sc.fromValue, sc.fromShare],
+                         ['to',   'toValue',   'toShare',   sc.toValue,   sc.toShare]].forEach(function(pt, i) {
+                            var row = $('<div/>', { style: "margin-top:2px;" }).appendTo(scaleRow);
+                            $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(row);
+                            $('<span/>', { style: "color:#888;" }).appendTo(row).text('at ');
+                            $('<input/>', { class: "br-" + pt[1], type: "number", step: "any", style: "width:70px;" })
+                                .appendTo(row).val(pt[3] === undefined ? (i ? 60 : 20) : pt[3]);
+                            $('<span/>', { style: "margin:0 6px; color:#888;" }).appendTo(row).html('&rarr;');
+                            $('<input/>', { class: "br-" + pt[2], type: "number", step: "any", style: "width:70px;" })
+                                .appendTo(row).val(pt[4] === undefined ? (i ? 0 : 100) : pt[4]);
+                            $('<span/>', { style: "margin-left:4px; color:#888;" }).appendTo(row)
+                                .text(i ? '%' : '% of the way to on');
+                        });
+                        var scaleHint = $('<div/>', { class: "br-scale-hint",
+                            style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" }).appendTo(scaleRow);
 
                         var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px;" }).appendTo(container);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(advRow);
@@ -793,6 +875,12 @@
                         strength: el.find('.br-strength option:selected').val(),
                         fade: el.find('.br-fade option:selected').val(),
                         lr: el.find('.br-lr').val(),
+                        scale: {
+                            fromValue: el.find('.br-fromValue').val(),
+                            fromShare: el.find('.br-fromShare').val(),
+                            toValue:   el.find('.br-toValue').val(),
+                            toShare:   el.find('.br-toShare').val()
+                        },
                         halfLife: el.find('.br-fade option:selected').val() === 'custom'
                             ? el.find('.br-halflife').val() : ''
                     };

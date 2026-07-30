@@ -33,6 +33,21 @@ module.exports = function(RED) {
                 // direction folds in as the reciprocal.
                 let lr = num(r.lr, 0) > 0 ? num(r.lr, 0) : scale.strengthLr(r.strength);
                 if (r.direction === 'false') { lr = 1 / lr; }
+                // A scaled weight follows the measured value instead of being constant. The
+                // value that scales it has to be unambiguous, so it is restricted to
+                // single-step rules; the sign lives in the shares, so `direction` is not
+                // applied. Shares are entered as percentages.
+                let scaleSpec = null;
+                if (r.strength === 'scaled' && r.scale) {
+                    if ((r.steps || []).length !== 1) {
+                        node.warn('A scaled weight needs a single-step rule — using a fixed strength instead');
+                    } else {
+                        scaleSpec = {
+                            fromValue: num(r.scale.fromValue, 0), fromShare: num(r.scale.fromShare, 0) / 100,
+                            toValue:   num(r.scale.toValue, 0),   toShare:   num(r.scale.toShare, 0) / 100
+                        };
+                    }
+                }
                 const halfLifeMs = num(r.halfLife, 0) > 0
                     ? sec(r.halfLife, 1200)
                     : scale.fadeSeconds(r.fade) * 1000;
@@ -69,7 +84,8 @@ module.exports = function(RED) {
                 });
                 // Ids key the rule map and every step hit, so a missing one would collapse
                 // every rule onto the same entry. Fall back to the position in the list.
-                return { id: r.id || ('rule' + idx), lr, halfLifeMs, steps };
+                return { id: r.id || ('rule' + idx), lr, halfLifeMs, steps,
+                         scale: scaleSpec && steps.length === 1 ? scaleSpec : null };
             }).filter(r => r.steps.length > 0)
         };
 

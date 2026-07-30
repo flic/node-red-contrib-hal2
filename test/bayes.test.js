@@ -69,6 +69,29 @@ describe('bayes-scale', function() {
         assert.strictEqual(scale.offAfterMs([{ l0: 2, halfLifeMs: MIN }], 0.4, 0.30, 6), null);
     });
 
+    it('scaleShare interpolates, clamps, and rejects what it cannot use', function() {
+        const spec = { fromValue: 20, fromShare: 1, toValue: 60, toShare: 0 };
+        assert.strictEqual(scale.scaleShare(20, spec), 1);
+        assert.strictEqual(scale.scaleShare(60, spec), 0);
+        assert.ok(Math.abs(scale.scaleShare(40, spec) - 0.5) < 1e-12);
+        assert.strictEqual(scale.scaleShare(5, spec), 1);      // clamped below
+        assert.strictEqual(scale.scaleShare(95, spec), 0);     // clamped above
+        // Points may be entered in either order.
+        assert.ok(Math.abs(scale.scaleShare(40, { fromValue: 60, fromShare: 0, toValue: 20, toShare: 1 }) - 0.5) < 1e-12);
+        for (const bad of ['abc', null, undefined, '', NaN]) {
+            assert.strictEqual(scale.scaleShare(bad, spec), null, 'should reject ' + JSON.stringify(bad));
+        }
+        assert.strictEqual(scale.scaleShare(30, { fromValue: 20, fromShare: 1, toValue: 20, toShare: 0 }), null);
+        assert.strictEqual(scale.scaleShare(30, null), null);
+    });
+
+    it('shareToLn inverts shareOfWay', function() {
+        for (const lr of [1.5, 3, 10, 30]) {
+            const share = scale.shareOfWay(lr, 0.2, 0.85, 6);
+            assert.ok(Math.abs(scale.shareToLn(share, 0.2, 0.85, 6) - Math.log(lr)) < 1e-9);
+        }
+    });
+
     it('strength and fade tables resolve labels', function() {
         assert.strictEqual(scale.strengthLr('strong'), 10);
         assert.strictEqual(scale.strengthLr('unknown'), 3);
@@ -541,6 +564,91 @@ describe('hysteresis and latch', function() {
         const r = b.evaluate(resolve, 400 * HOUR);
         assert.strictEqual(r.binary, true);
         assert.strictEqual(r.held, true);
+    });
+});
+
+// ---- value-scaled weight -----------------------------------------------------
+
+describe('scaled rule weight', function() {
+    // "The drier the soil, the more this matters": 20 % moisture is worth the whole way
+    // to on, 60 % is worth nothing.
+    const soilAt = fromShare => ({ id: 'soil', lr: 1, halfLifeMs: null,
+        scale: { fromValue: 20, fromShare, toValue: 60, toShare: 0 },
+        steps: [step('is', { thing: 'soil', operator: 'lt', value: '60', valueType: 'num' })] });
+    const soil = () => soilAt(1.2);
+
+    it('a continuous scaled rule tracks the reading', function() {
+        const b = createBayes(cfgOf({ rules: [soil()] }));
+        const state = { soil: 20 };
+        const R = stateOf(state);
+        const at = v => { state.soil = v; return b.evaluate(R, 0); };
+
+        assert.ok(at(20).p >= 0.85, 'critically dry should reach the threshold');
+        const mid = at(40);
+        assert.ok(mid.p > 0.2 && mid.p < 0.85, 'halfway dry is partial evidence');
+        assert.ok(Math.abs(at(59).p - 0.2) < 0.05, 'nearly wet contributes almost nothing');
+        assert.strictEqual(at(70).activeRules.length, 0, 'above the condition it is not active at all');
+    });
+
+    it('a negative endpoint share pushes the estimate down', function() {
+        const wet = { id: 'wet', lr: 1, halfLifeMs: null,
+            scale: { fromValue: 60, fromShare: 0, toValue: 100, toShare: -1 },
+            steps: [step('is', { thing: 'soil', operator: 'gt', value: '60', valueType: 'num' })] };
+        const b = createBayes(cfgOf({ rules: [wet] }));
+        assert.ok(b.evaluate(stateOf({ soil: 100 }), 0).p < 0.05);
+    });
+
+    it('an unusable reading makes a scaled rule contribute nothing', function() {
+        const b = createBayes(cfgOf({ rules: [soil()] }));
+        const r = b.evaluate(stateOf({ soil: 'n/a' }), 0);
+        assert.strictEqual(r.activeRules.length, 0);
+        assert.ok(Math.abs(r.p - 0.2) < 1e-12);
+    });
+
+    it('a momentary scaled rule snapshots the weight when it fires, then decays', function() {
+        const rule = { id: 'drop', lr: 1, halfLifeMs: 20 * MIN,
+            scale: { fromValue: 20, fromShare: 1, toValue: 60, toShare: 0 },
+            steps: [step('becomes', { thing: 'soil', operator: 'lt', value: '60', valueType: 'num' })] };
+        const b = createBayes(cfgOf({ rules: [rule] }));
+        const state = { soil: 20 };                       // dry at the moment it crosses
+        b.handleEvent(hit('drop', 0), 20, 0, stateOf(state));
+        const atFire = b.evaluate(noState, 0).logOdds - logit(0.2);
+        assert.ok(atFire > 3, 'fired at full weight');
+        state.soil = 55;                                  // a later reading must not rewrite history
+        const later = b.evaluate(noState, 20 * MIN).logOdds - logit(0.2);
+        assert.ok(Math.abs(later - atFire / 2) < 1e-9, 'decays from the snapshotted weight');
+    });
+
+    it('a scaled rule is never treated as a certain statement', function() {
+        // Even at a share that saturates the clamp it must not clear opposing terms.
+        const strongSoil = { id: 'soil', lr: 1, halfLifeMs: 20 * MIN,
+            scale: { fromValue: 20, fromShare: 3, toValue: 60, toShare: 0 },
+            steps: [step('becomes', { thing: 'soil', operator: 'lt', value: '60', valueType: 'num' })] };
+        const against = { id: 'sun', lr: 1 / 3, halfLifeMs: 20 * MIN, steps: [step('becomes', { thing: 'sun' })] };
+        const b = createBayes(cfgOf({ rules: [strongSoil, against] }));
+        b.handleEvent(hit('sun', 0), true, 0, stateOf({ sun: true }));
+        b.handleEvent(hit('soil', 0), 20, MIN, stateOf({ soil: 20 }));
+        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 2, 'both terms coexist');
+    });
+
+    it('reference irrigation set: dryness can override the sun', function() {
+        // Worth pinning the arithmetic: a 100 % share reaches the threshold exactly from the
+        // prior, so ANY opposing evidence blocks it. To override the sun (a moderate 'false'
+        // rule, −35 %) the dry end has to exceed 100 % by at least that much — hence 150 %.
+        const sun = { id: 'sun', lr: 1 / 3, halfLifeMs: null, steps: [step('is', { thing: 'sun' })] };
+        const b = createBayes(cfgOf({ rules: [soilAt(1.5), sun] }));
+        const state = { soil: 45, sun: true };
+        const R = stateOf(state);
+        assert.ok(b.evaluate(R, 0).p < 0.85, 'marginally dry plus sun: hold off');
+        state.soil = 20;
+        assert.ok(b.evaluate(R, 0).p >= 0.85, 'critically dry overrides the sun');
+    });
+
+    it('a 100 % share alone exactly reaches the threshold and no further', function() {
+        // The boundary that makes the rule above need 150 %: at 100 % the estimate lands on
+        // pOn, so it turns on only when nothing opposes it.
+        const b = createBayes(cfgOf({ rules: [soilAt(1)] }));
+        assert.ok(Math.abs(b.evaluate(stateOf({ soil: 20 }), 0).p - 0.85) < 1e-9);
     });
 });
 
