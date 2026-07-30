@@ -345,7 +345,7 @@
                     // Line 1 — where the value comes from.
                     var line1 = flexRow();
                     $('<span/>', { class: "bs-lead", style: "flex:0 0 50px; font-weight:bold;" }).appendTo(line1);
-                    var srcSel = $('<select/>', { class: "bs-src", style: "flex:0 0 90px; min-width:0;" }).appendTo(line1);
+                    var srcSel = $('<select/>', { class: "bs-src", style: "flex:0 0 130px; min-width:0;" }).appendTo(line1);
                     [['thing', 'thing'], ['flow', 'flow'], ['global', 'global'], ['env', 'env'], ['time', 'time']]
                         .forEach(function(s) { srcSel.append($("<option></option>").val(s[0]).text(s[1])); });
                     var thingWrap = $('<span/>', { class: "bs-thing-wrap",
@@ -374,7 +374,7 @@
                     // Line 2 — the condition, and when it has to hold.
                     var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
                     indent(line2);
-                    var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 110px; min-width:0;" }).appendTo(line2);
+                    var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 130px; min-width:0;" }).appendTo(line2);
                     halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                     var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
@@ -467,7 +467,7 @@
                             opSel.val(current === 'false' ? 'false' : 'true');
                             opSel.css('flex', '1 1 0');          // value and qualifier are hidden here
                         } else {
-                            opSel.css('flex', '0 0 110px');
+                            opSel.css('flex', '0 0 130px');
                             halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                             opSel.val(current);
                         }
