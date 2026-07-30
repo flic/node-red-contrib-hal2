@@ -110,7 +110,9 @@
     <ul>
         <li><b>now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
         <li><b>now or soon</b> &mdash; the same, but if it is not true yet the step waits for it until
-            the window runs out. Use this for sensors that report late. Reads <i>and&hellip;</i></li>
+            its window runs out; "soon" is exactly that <i>within N s</i>. Use it for sensors that
+            report late. Only offered after the first step, since it needs a previous step to be soon
+            after. Reads <i>and&hellip;</i></li>
         <li><b>on change</b> &mdash; an event: the condition must actually turn true, being already
             true does not count. Reads <i>then&hellip;</i></li>
         <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
@@ -218,7 +220,9 @@
                 patSel.empty();
                 allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
             }
-            patSel.val(allowed.indexOf(keep) >= 0 ? keep : 'is');
+            if (allowed.indexOf(keep) >= 0) { patSel.val(keep); }
+            else if (keep === 'isOrBecomes' && allowed.indexOf('becomes') >= 0) { patSel.val('becomes'); }
+            else { patSel.val('is'); }
         }
 
         RED.nodes.registerType('hal2Bayes', {
@@ -359,7 +363,7 @@
                     $('<span/>', { style: "flex:0 0 auto; margin:0 4px; color:#888;" }).appendTo(timeWrap).html('&ndash;');
                     $('<input/>', { class: "bs-end", type: "time", style: "flex:1 1 0; min-width:0;" })
                         .appendTo(timeWrap).val(step.end || '06:00');
-                    $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="flex:0 0 auto; margin-left:6px;"><i class="fa fa-remove"></i></button>')
+                    $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="flex:0 0 28px; margin-left:6px; padding:0;"><i class="fa fa-remove"></i></button>')
                         .appendTo(line1)
                         .on('click', function(e) {
                             e.preventDefault();
@@ -385,9 +389,10 @@
                     var timing = $('<div/>', { class: "bs-timing",
                         style: "display:flex; align-items:center; flex-wrap:wrap; margin-top:4px; color:#888; font-size:0.9em;" })
                         .appendTo(stepDiv);
-                    $('<span/>', { style: "flex:0 0 50px;" })
+                    $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box;" })
                         .append($('<i/>', { class: "fa fa-clock-o" })).appendTo(timing);
                     var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0;" }).appendTo(timing);
+                    $('<span/>', { style: "flex:0 0 34px; order:99;" }).appendTo(timing);
                     // Start with the full set so the saved value can be selected at all;
                     // refreshRuleView narrows it once the source and position are known.
                     setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
@@ -539,8 +544,9 @@
                         var src = el.find('.bs-src').val();
                         var isTime = src === 'time';
 
-                        var allowed = src === 'thing' ? ALL_PATTERNS
-                                    : (isTime || i === 0) ? ['is'] : ['is', 'isOrBecomes'];
+                        var allowed = isTime ? ['is']
+                                    : src === 'thing' ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
+                                    : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
                         var patSel = el.find('.bs-pattern');
                         setPatternOptions(patSel, allowed, patSel.val());
                         patSel.toggle(allowed.length > 1);
@@ -695,7 +701,8 @@
                             });
 
                         var outRow = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
-                        $('<span/>', { style: "display:inline-block; width:50px; color:#888;" }).appendTo(outRow).text('→');
+                        $('<span/>', { style: "display:inline-block; width:50px; color:#888; text-align:right; padding-right:8px; box-sizing:border-box;" })
+                            .appendTo(outRow).text('→');
                         $('<span/>', { style: "margin-right:6px;" }).appendTo(outRow).text('makes it');
                         var dirSel = $('<select/>', { class: "br-direction", style: "width:70px;" }).appendTo(outRow);
                         dirSel.append($("<option></option>").val('true').text('true'));
