@@ -331,6 +331,15 @@
                     return rule.direction === 'false' ? 1 / lr : lr;
                 }
 
+                // Mirrors the runtime's per-source validity filter, so the summary counts
+                // exactly the rules the engine will run.
+                function stepValid(s) {
+                    if (!s) { return false; }
+                    if (s.src === 'time') { return btime.parseHHMM(s.start) !== null && btime.parseHHMM(s.end) !== null; }
+                    if (s.src === 'flow' || s.src === 'global' || s.src === 'env') { return !!s.prop; }
+                    return !!(s.thing && s.item);
+                }
+
                 function scaleSpec(rule) {
                     var sc = rule.scale || {};
                     return { fromValue: Number(sc.fromValue), fromShare: Number(sc.fromShare) / 100,
@@ -554,13 +563,9 @@
                     };
                     container.find('.bayes-step').each(function() {
                         var el = $(this);
-                        var timing = el;
-                        rule.steps.push({
-                            src:      el.find('.bs-src option:selected').val(),
-                            start:    el.find('.bs-start').val(),
-                            end:      el.find('.bs-end').val(),
-                            days:     el.find('.bs-day').filter(function() { return $(this).data('on'); })
-                                        .map(function() { return Number($(this).attr('data-day')); }).get(),
+                        var src = el.find('.bs-src option:selected').val();
+                        var step = {
+                            src:      src,
                             thing:    el.find('.bs-thing option:selected').val(),
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
@@ -568,9 +573,17 @@
                             value:    el.find('.bs-val').typedInput('value'),
                             valueType: el.find('.bs-val').typedInput('type'),
                             pattern:  el.find('.bs-pattern option:selected').val(),
-                            cycleMax: timing.find('.bs-cyclemax').val(),
-                            window:   timing.find('.bs-window').val()
-                        });
+                            cycleMax: el.find('.bs-cyclemax').val(),
+                            window:   el.find('.bs-window').val()
+                        };
+                        // The window fields only mean something on a time step.
+                        if (src === 'time') {
+                            step.start = el.find('.bs-start').val();
+                            step.end = el.find('.bs-end').val();
+                            step.days = el.find('.bs-day').filter(function() { return $(this).data('on'); })
+                                .map(function() { return Number($(this).attr('data-day')); }).get();
+                        }
+                        rule.steps.push(step);
                     });
                     return rule;
                 }
@@ -704,7 +717,7 @@
                     var totalPos = 0, anyAlone = false, anyScaled = false, momentaryTerms = [];
                     $("#node-input-rule-container").children().each(function() {
                         var rule = harvestRule($(this));
-                        if (!rule.steps.length || !rule.steps[0].thing) { return; }
+                        if (!rule.steps.length || !stepValid(rule.steps[0])) { return; }
                         var scaledRule = (rule.strength === 'scaled' && rule.steps.length === 1);
                         var lr = effectiveLr(rule);
                         var share = scaledRule ? maxScaleShare(rule)
@@ -871,51 +884,20 @@
 
                 $("#node-input-prior, #node-input-pOn, #node-input-pOff, #node-input-clamp, #node-input-halfLife, #node-input-latch, #node-input-maxHold")
                     .on('change input', refreshAllRules);
+
+                // oneditsave must read the rows through exactly this code path — the editor
+                // has already lost data once to a second, drifting copy of the harvest.
+                node.__harvestRules = function() {
+                    return $("#node-input-rule-container").children().map(function() {
+                        return harvestRule($(this));
+                    }).get();
+                };
             },
 
             oneditsave: function() {
                 var node = this;
-                node.rules = [];
-                $("#node-input-rule-container").children().each(function() {
-                    var el = $(this);
-                    var rule = {
-                        id: el.find('.br-id').val(),
-                        steps: [],
-                        direction: el.find('.br-direction option:selected').val(),
-                        strength: el.find('.br-strength option:selected').val(),
-                        fade: el.find('.br-fade option:selected').val(),
-                        lr: el.find('.br-lr').val(),
-                        scale: {
-                            fromValue: el.find('.br-fromValue').val(),
-                            fromShare: el.find('.br-fromShare').val(),
-                            toValue:   el.find('.br-toValue').val(),
-                            toShare:   el.find('.br-toShare').val()
-                        },
-                        halfLife: el.find('.br-fade option:selected').val() === 'custom'
-                            ? el.find('.br-halflife').val() : ''
-                    };
-                    el.find('.bayes-step').each(function() {
-                        var s = $(this);
-                        var timing = s;
-                        rule.steps.push({
-                            src:       s.find('.bs-src option:selected').val(),
-                            start:     s.find('.bs-start').val(),
-                            end:       s.find('.bs-end').val(),
-                            days:      s.find('.bs-day').filter(function() { return $(this).data('on'); })
-                                         .map(function() { return Number($(this).attr('data-day')); }).get(),
-                            thing:     s.find('.bs-thing option:selected').val(),
-                            item:      s.find('.bs-item option:selected').val(),
-                            prop:      s.find('.bs-prop').val(),
-                            operator:  s.find('.bs-op option:selected').val(),
-                            value:     s.find('.bs-val').typedInput('value'),
-                            valueType: s.find('.bs-val').typedInput('type'),
-                            pattern:   s.find('.bs-pattern option:selected').val(),
-                            cycleMax:  timing.find('.bs-cyclemax').val(),
-                            window:    timing.find('.bs-window').val()
-                        });
-                    });
-                    node.rules.push(rule);
-                });
+                node.rules = node.__harvestRules ? node.__harvestRules() : (node.rules || []);
+                delete node.__harvestRules;
             }
         });
     })();
