@@ -379,6 +379,7 @@
                     var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
                         .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
+                    $('<span/>', { style: "flex:0 0 34px;" }).appendTo(line2);
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
                     // Line 3 — when the condition has to hold, plus the numbers that bound it.
                     // Deliberately off the condition line: that one says *what*, this says
@@ -391,8 +392,7 @@
                         .appendTo(stepDiv);
                     $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box;" })
                         .append($('<i/>', { class: "fa fa-clock-o" })).appendTo(timing);
-                    var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 150px; min-width:0;" }).appendTo(timing);
-                    $('<span/>', { style: "flex:0 0 34px; order:99;" }).appendTo(timing);
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 130px; min-width:0;" }).appendTo(timing);
                     // Start with the full set so the saved value can be selected at all;
                     // refreshRuleView narrows it once the source and position are known.
                     setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
@@ -402,7 +402,7 @@
                         style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
 
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
-                    $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('must happen within ');
+                    $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('within ');
                     $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
                         .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
                     $('<span/>').appendTo(windowSpan).text(' s of the previous step');
@@ -432,7 +432,7 @@
 
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
-                    $('<span/>').appendTo(cycleSpan).text('a full cycle = on then off again, within ');
+                    $('<span/>').appendTo(cycleSpan).text('on then off within ');
                     $('<input/>', { class: "bs-cyclemax", type: "number", min: "1", step: "any", style: "width:55px;" })
                         .appendTo(cycleSpan).val(step.cycleMax === undefined ? 180 : step.cycleMax);
                     $('<span/>').appendTo(cycleSpan).text(' s');
@@ -569,8 +569,8 @@
 
                         // Pin down what bounds the step, so "soon" is never left undefined.
                         timing.find('.bs-window-lead').text(pat === 'isOrBecomes'
-                            ? '"soon" means within '
-                            : 'must happen within ');
+                            ? '"soon" = within '
+                            : 'within ');
 
                         // Live read-back so a wrong window or day selection is obvious at once.
                         el.find('.bs-days-hint').toggle(isTime);
