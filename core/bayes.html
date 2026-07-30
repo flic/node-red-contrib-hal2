@@ -649,15 +649,14 @@
                     container.find('.br-direction').toggle(!scaled);   // the sign lives in the shares
                     if (scaled) {
                         var spec = scaleSpec(rule);
-                        var mid = (Number(spec.fromValue) + Number(spec.toValue)) / 2;
-                        var lo = Math.min(spec.fromValue, spec.toValue);
-                        var hi = Math.max(spec.fromValue, spec.toValue);
-                        var at = function(v) { return Math.round(scale.scaleShare(v, spec) * 100) + ' %'; };
-                        container.find('.br-scale-hint').text(
-                            scale.scaleShare(mid, spec) === null
-                                ? 'the two readings must differ'
-                                : 'reads ' + lo + ' or less → ' + at(lo) + '   ·   ' + mid + ' → ' + at(mid) +
-                                  '   ·   ' + hi + ' or more → ' + at(hi));
+                        // Whichever reading is the lower one gets "or less".
+                        var fromLower = Number(spec.fromValue) <= Number(spec.toValue);
+                        container.find('.br-fromWord').text(fromLower ? ' or less' : ' or more');
+                        container.find('.br-toWord').text(fromLower ? ' or more' : ' or less');
+                        var broken = scale.scaleShare(Number(spec.fromValue), spec) === null;
+                        container.find('.br-scale-hint')
+                            .text(broken ? 'the two readings must differ' : '')
+                            .css('color', '#a60').toggle(broken);
                     }
 
                     var bar = container.find('.br-bar-inner');
@@ -665,7 +664,7 @@
                               background: share >= 0 ? '#4b8' : '#c66' });
 
                     var capt = scaled
-                        ? 'up to ' + sPct + ' % of the way to on' + (share >= 1 ? ' — can be enough on its own' : '')
+                        ? 'up to ' + sPct + ' %' + (share >= 1 ? ' — enough alone' : ' of the way to on')
                         : (sPct >= 0
                             ? sPct + ' % of the way to on' + (share >= 1 ? ' — enough on its own' : '')
                             : sPct + ' % (pushes toward off)');
@@ -789,26 +788,26 @@
 
                         var sc = rule.scale || {};
                         var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(container);
-                        // A column header rather than repeating the labels: the two numbers on
-                        // each row are otherwise a bare pair with no clue which side is the
-                        // sensor reading and which is the weight it produces.
-                        var head = $('<div/>', { style: "margin-top:2px; color:#888; font-size:0.9em;" }).appendTo(scaleRow);
-                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(head);
-                        $('<span/>', { style: "display:inline-block; width:70px;" }).appendTo(head).text('reading');
-                        $('<span/>', { style: "display:inline-block; width:22px;" }).appendTo(head);
-                        $('<span/>').appendTo(head).text('share of the way to on');
-                        [['fromValue', 'fromShare', sc.fromValue, sc.fromShare],
-                         ['toValue',   'toShare',   sc.toValue,   sc.toShare]].forEach(function(pt, i) {
-                            var row = $('<div/>', { style: "margin-top:2px;" }).appendTo(scaleRow);
+                        // Each row states its own meaning — "reads 20 or less → 100 %" — so no
+                        // column header is needed and the clamping sits where it applies. The
+                        // or-less/or-more word is set by comparison in refreshRuleView, so the
+                        // rows stay true whichever order the readings are entered in.
+                        [['fromValue', 'fromShare', 'br-fromWord', sc.fromValue, sc.fromShare],
+                         ['toValue',   'toShare',   'br-toWord',   sc.toValue,   sc.toShare]].forEach(function(pt, i) {
+                            var row = $('<div/>', { style: "margin-top:3px;" }).appendTo(scaleRow);
                             $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(row);
+                            $('<span/>', { style: "color:#888;" }).appendTo(row).text('reads ');
                             $('<input/>', { class: "br-" + pt[0], type: "number", step: "any", style: "width:70px;" })
-                                .appendTo(row).val(pt[2] === undefined ? (i ? 60 : 20) : pt[2]);
-                            $('<span/>', { style: "display:inline-block; width:22px; text-align:center; color:#888;" })
-                                .appendTo(row).html('&rarr;');
+                                .appendTo(row).val(pt[3] === undefined ? (i ? 60 : 20) : pt[3]);
+                            $('<span/>', { class: pt[2], style: "display:inline-block; width:58px; color:#888;" })
+                                .appendTo(row).text(i ? ' or more' : ' or less');
+                            $('<span/>', { style: "margin-right:6px; color:#888;" }).appendTo(row).html('&rarr;');
                             $('<input/>', { class: "br-" + pt[1], type: "number", step: "any", style: "width:70px;" })
-                                .appendTo(row).val(pt[3] === undefined ? (i ? 0 : 100) : pt[3]);
+                                .appendTo(row).val(pt[4] === undefined ? (i ? 0 : 100) : pt[4]);
                             $('<span/>', { style: "margin-left:4px; color:#888;" }).appendTo(row).text('%');
                         });
+                        $('<div/>', { style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" })
+                            .appendTo(scaleRow).text('linear in between');
                         var scaleHint = $('<div/>', { class: "br-scale-hint",
                             style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" }).appendTo(scaleRow);
 
