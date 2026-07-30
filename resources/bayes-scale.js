@@ -79,8 +79,12 @@
     // can treat the rule as contributing nothing rather than dividing by zero.
     function scaleShare(value, spec) {
         if (!spec) { return null; }
+        // Only genuine numbers (or numeric strings from sensors) can scale a weight —
+        // Number(true) is 1, which would silently interpolate at "reading 1".
+        if (typeof value !== 'number' && typeof value !== 'string') { return null; }
+        if (value === '' || (typeof value === 'string' && value.trim() === '')) { return null; }
         var v = Number(value);
-        if (value === null || value === undefined || value === '' || isNaN(v)) { return null; }
+        if (isNaN(v)) { return null; }
         var x1 = Number(spec.fromValue), y1 = Number(spec.fromShare);
         var x2 = Number(spec.toValue), y2 = Number(spec.toShare);
         if (isNaN(x1) || isNaN(y1) || isNaN(x2) || isNaN(y2) || x1 === x2) { return null; }

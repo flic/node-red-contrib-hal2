@@ -78,9 +78,10 @@ describe('bayes-scale', function() {
         assert.strictEqual(scale.scaleShare(95, spec), 0);     // clamped above
         // Points may be entered in either order.
         assert.ok(Math.abs(scale.scaleShare(40, { fromValue: 60, fromShare: 0, toValue: 20, toShare: 1 }) - 0.5) < 1e-12);
-        for (const bad of ['abc', null, undefined, '', NaN]) {
+        for (const bad of ['abc', null, undefined, '', '  ', NaN, true, false, {}, []]) {
             assert.strictEqual(scale.scaleShare(bad, spec), null, 'should reject ' + JSON.stringify(bad));
         }
+        assert.ok(Math.abs(scale.scaleShare('40', spec) - 0.5) < 1e-12, 'numeric strings are readings');
         assert.strictEqual(scale.scaleShare(30, { fromValue: 20, fromShare: 1, toValue: 20, toShare: 0 }), null);
         assert.strictEqual(scale.scaleShare(30, null), null);
     });
@@ -683,6 +684,50 @@ describe('persistence and input', function() {
         assert.ok(r.p > 0.9);                      // both contribute, not just one
         state.y = false;
         assert.strictEqual(b.evaluate(stateOf(state), 0).activeRules.length, 1);
+    });
+
+    it('restore starts the maxHold clock when a held-on state has none', function() {
+        // A held-on state saved without lastPositiveAt would otherwise leave the
+        // safety valve dead forever.
+        const mk = () => createBayes(cfgOf({ latch: true, maxHoldMs: 2 * HOUR,
+            rules: [contRule('phone', 10, { thing: 'ph' })] }));
+        const saved = mk().serialize();
+        saved.binary = true;
+        delete saved.lastPositiveAt;
+
+        const b = mk();
+        b.restore(saved, 100 * HOUR);                       // restore at t=100h
+        const resolve = stateOf({ ph: false });             // no supporting evidence
+        const early = b.evaluate(resolve, 101 * HOUR);      // 1 h of silence — still held
+        assert.strictEqual(early.binary, true);
+        assert.strictEqual(early.held, true);
+        const late = b.evaluate(resolve, 103 * HOUR);       // 3 h — the valve finally opens
+        assert.strictEqual(late.binary, false);
+    });
+
+    it('restore drops state belonging to rules that no longer exist', function() {
+        const a = createBayes(cfgOf({ rules: [arrivalRule('old', 3), arrivalRule('arr', 3)] }));
+        a.handleEvent(hit('old', 0), true, 0);
+        a.handleEvent(hit('old', 0), false, MIN);
+        a.handleEvent(hit('old', 1), true, 1.5 * MIN);
+        a.handleEvent(hit('arr', 0), true, 2 * MIN);        // arm the surviving rule too
+        const saved = a.serialize();
+
+        // The node is redeployed with 'old' removed.
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 3)] }));
+        b.restore(saved, 2 * MIN);
+        const snap = b.serialize();
+        assert.deepStrictEqual(Object.keys(snap.fsm), ['arr']);
+        assert.ok(Object.keys(snap.lastMatch).every(k => k.startsWith('arr:')));
+        assert.ok(Object.keys(snap.lastTrueEdge).every(k => k.startsWith('arr:')));
+        assert.strictEqual(snap.terms.length, 0, "the removed rule's term is gone");
+
+        // …but injected evidence survives, having no owning rule.
+        const c = createBayes(cfgOf({ rules: [] }));
+        c.inject(30, 10 * MIN, 0);
+        const d = createBayes(cfgOf({ rules: [] }));
+        d.restore(c.serialize(), 0);
+        assert.strictEqual(d.serialize().terms.length, 1);
     });
 
     it('restore tolerates garbage and old shapes', function() {

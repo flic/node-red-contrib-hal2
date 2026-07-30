@@ -106,7 +106,7 @@ module.exports = function(RED) {
         // ---- persistence (pattern: event.js contextStore usage) ----
         const nodeContext  = node.context();
         const contextStore = node.eventHandler ? node.eventHandler.contextStore : '';
-        est.restore(nodeContext.get('bayes', contextStore));
+        est.restore(nodeContext.get('bayes', contextStore), Date.now());
         function persist() { nodeContext.set('bayes', est.serialize(), contextStore); }
 
         // Thing items arrive by subscription; flow/global/env are read on demand, which is
