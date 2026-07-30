@@ -166,8 +166,10 @@
 
     <h3>Weights that follow the reading</h3>
     <p>The strength <b>scaled&hellip;</b> makes a rule's weight depend on the measured value instead
-    of being constant. Give two points &mdash; <i>at 20 &rarr; 150 %</i>, <i>at 60 &rarr; 0 %</i> &mdash;
-    and the share is interpolated between them and clamped outside. Soil moisture is the natural
+    of being constant. Give two points &mdash; <i>value 20 or less &rarr; weight 150 %</i>,
+    <i>value 60 or more &rarr; weight 0 %</i> &mdash; and the weight is interpolated between them and
+    clamped outside. A rule's <b>weight</b> is its share of the way to on, the same percentage the
+    bars show: 100 % is exactly enough to flip the output when nothing opposes it. Soil moisture is the natural
     example: watering in direct sun is normally a bad idea, but critically dry soil should override
     it, which only works if the dryness rule grows heavier as the reading falls.</p>
     <p>Shares may exceed 100 % and may be negative, and the sign lives in the shares &mdash; so the
@@ -649,13 +651,13 @@
                     container.find('.br-direction').toggle(!scaled);   // the sign lives in the shares
                     if (scaled) {
                         var spec = scaleSpec(rule);
-                        // Whichever reading is the lower one gets "or less".
+                        // Whichever value is the lower one gets "or less".
                         var fromLower = Number(spec.fromValue) <= Number(spec.toValue);
                         container.find('.br-fromWord').text(fromLower ? ' or less' : ' or more');
                         container.find('.br-toWord').text(fromLower ? ' or more' : ' or less');
                         var broken = scale.scaleShare(Number(spec.fromValue), spec) === null;
                         container.find('.br-scale-hint')
-                            .text(broken ? 'the two readings must differ' : '')
+                            .text(broken ? 'the two values must differ' : '')
                             .css('color', '#a60').toggle(broken);
                     }
 
@@ -788,20 +790,23 @@
 
                         var sc = rule.scale || {};
                         var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(container);
-                        // Each row states its own meaning — "reads 20 or less → 100 %" — so no
-                        // column header is needed and the clamping sits where it applies. The
-                        // or-less/or-more word is set by comparison in refreshRuleView, so the
-                        // rows stay true whichever order the readings are entered in.
+                        // Each row states its own meaning — "value 20 or less → weight 100 %" —
+                        // so no column header is needed and the clamping sits where it applies.
+                        // "value" and "weight" name the two roles; the % scale itself is
+                        // explained once in the help text. The or-less/or-more word is set by
+                        // comparison in refreshRuleView, so the rows stay true whichever order
+                        // the values are entered in.
                         [['fromValue', 'fromShare', 'br-fromWord', sc.fromValue, sc.fromShare],
                          ['toValue',   'toShare',   'br-toWord',   sc.toValue,   sc.toShare]].forEach(function(pt, i) {
                             var row = $('<div/>', { style: "margin-top:3px;" }).appendTo(scaleRow);
                             $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(row);
-                            $('<span/>', { style: "color:#888;" }).appendTo(row).text('reads ');
+                            $('<span/>', { style: "color:#888;" }).appendTo(row).text('value ');
                             $('<input/>', { class: "br-" + pt[0], type: "number", step: "any", style: "width:70px;" })
                                 .appendTo(row).val(pt[3] === undefined ? (i ? 60 : 20) : pt[3]);
                             $('<span/>', { class: pt[2], style: "display:inline-block; width:58px; color:#888;" })
                                 .appendTo(row).text(i ? ' or more' : ' or less');
                             $('<span/>', { style: "margin-right:6px; color:#888;" }).appendTo(row).html('&rarr;');
+                            $('<span/>', { style: "margin-right:4px; color:#888;" }).appendTo(row).text('weight');
                             $('<input/>', { class: "br-" + pt[1], type: "number", step: "any", style: "width:70px;" })
                                 .appendTo(row).val(pt[4] === undefined ? (i ? 0 : 100) : pt[4]);
                             $('<span/>', { style: "margin-left:4px; color:#888;" }).appendTo(row).text('%');

@@ -217,8 +217,10 @@ opposing evidence, and a stored certain statement is cleared by any later contra
 ### Weights that follow the reading
 
 The strength **scaled…** makes a rule's weight depend on the measured value rather than being
-constant. Give two points — *at 20 → 150 %*, *at 60 → 0 %* — and the share is interpolated between
-them, clamped outside. Soil moisture is the natural case: watering in direct sun is normally a bad
+constant. Give two points — *value 20 or less → weight 150 %*, *value 60 or more → weight 0 %* —
+and the weight is interpolated between them, clamped outside. A rule's **weight** is its share of
+the way to on, the same percentage the bars show: 100 % is exactly enough to flip the output when
+nothing opposes it. Soil moisture is the natural case: watering in direct sun is normally a bad
 idea, but critically dry soil should override it, which only works if the dryness rule grows
 heavier as the reading falls. This is the step from naive Bayes with binary features to logistic
 regression over a continuous one.
