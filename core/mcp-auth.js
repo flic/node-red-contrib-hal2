@@ -23,6 +23,7 @@ function createMcpAuth(opts) {
         tokenTTL           = 300000,
         tokenAudience      = '',
         localDebugToken    = '',
+        localDebugGroups   = ['admin'],
         mcpServerUrl       = '',
         discoveryRetryMs   = 30000,
         httpGet,
@@ -115,9 +116,11 @@ function createMcpAuth(opts) {
 
     async function validateToken(token) {
         // Local debug token bypass — skips the IdP entirely. Constant-time compare so the token
-        // can't be recovered by timing the response.
+        // can't be recovered by timing the response. Groups are configurable so claim gates with
+        // values other than 'admin' can be exercised locally too; sliced so a flow that mutates
+        // msg.jwtClaims can't poison later requests.
         if (localDebugToken && secretEqual(token, localDebugToken)) {
-            return { sub: 'debug', name: 'Local debug user', groups: ['admin'] };
+            return { sub: 'debug', name: 'Local debug user', groups: localDebugGroups.slice() };
         }
 
         const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
