@@ -546,9 +546,16 @@ module.exports = function(RED) {
 
             // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
             // See core/mcp-auth.js. External deps injected so the module stays testable.
+            // Groups granted to the local debug token (comma-separated, default 'admin'), so gates
+            // with other values can be tested locally. Default only when never set — an explicitly
+            // emptied field means a debug user with no groups at all.
+            const localDebugGroups = (config.localDebugGroups === undefined ? 'admin' : config.localDebugGroups)
+                .split(',').map(s => s.trim()).filter(Boolean);
+
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
+                localDebugGroups,
                 httpGet,
                 log:  msg => node.log(msg),
                 warn: msg => node.warn(msg)

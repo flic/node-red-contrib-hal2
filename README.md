@@ -49,21 +49,38 @@ The **hal2EventHandler** config node can run an embedded **MCP (Model Context Pr
 
 It ships with a catalog of built-in tools:
 
-- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`
-- **Control** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`
-- **Analyse** — `analyze_patterns`
+- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `analyze_patterns`
+- **Write** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`
 - **Admin** (opt-in) — `get_flow`, `deploy_flow`
+
+Those three classes are also the unit of [access control](#access-control): a token can be allowed to read the house without being allowed to change it.
 
 Tools are exposed only when matching hardware is configured at that location — a server with no covers won't advertise `control_cover`. Things and Items can carry free-text **notes** and **tags**, and devices report derived **categories** (light, fan, cover, climate, spa, scene), all of which help the assistant pick the right device. Full parameters and examples are in **[docs/API.md](docs/API.md)**.
 
 ### Access control
 
-Two independent, optional gates. Each is a **claim** + **value** pair: an array claim must *contain* the value, a scalar claim must *equal* it, and an empty value leaves the gate open to any authenticated caller.
+Tools are gated on the **claims in the caller's verified access token**, so one MCP endpoint can serve several people at different privilege levels. A gate is a **claim name** plus a **value list**: the values are comma-separated and matched **any-of** — an array claim must *contain* at least one of them, a scalar claim must *equal* one. An **empty list is no constraint**, which is the default everywhere, so an existing setup keeps behaving exactly as before.
 
-- **Admin-tools gate** (Event handler → *MCP* tab, `Required claim`/`Required value`): gates only the admin tools (`get_flow`, `deploy_flow`). Ordinary read/control tools stay available to any authenticated caller. Defaults to claim `groups`, value `admin`.
-- **Standalone-server gate** (a `hal2MCPServer` node in *Standalone* mode, `Required claim`/`Required value`): gates a whole standalone MCP server. Callers who fail the check still connect (`initialize` succeeds) but see no tools, and any `tools/call` is refused. Defaults to empty — all authenticated users allowed.
+On the Event handler's *MCP* tab, one **Access claim** (default `groups`) carries three lists, checked with **AND**:
 
-Both denials come back as an MCP tool result with `isError: true` and a human-readable reason, so the calling model is told *why* instead of getting a generic "tool execution failed".
+| Gate | Covers | Default |
+|---|---|---|
+| **Read tools** | `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `analyze_patterns` | empty — any authenticated caller |
+| **Write tools** | `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene` | empty — same as read |
+| **Admin tools** | `get_flow`, `deploy_flow` (and only when *Enable Node-RED admin tools* is on) | `admin` |
+
+The read list is the floor: a caller who fails it reaches nothing at all. Writes are checked **on top of** it, so `Read tools = family`, `Write tools = ops` gives the whole household visibility while only ops can switch anything. A tool that is in neither set — a future addition, or the undocumented `control_light` alias of `set_light` — is treated as a **write**, so an unclassified tool fails closed rather than slipping through.
+
+Two further gates layer on the custom-tool side:
+
+- **Standalone-server gate** (`hal2MCPServer` in *Standalone* mode, `Required claim`/`Required value`): gates a whole standalone MCP server and its own claim name, independent of the Event handler's.
+- **Per-tool gate** (`hal2MCPIn`, `Tool access`): narrows a single tool further, checked on top of its server's list.
+
+Callers who fail a gate still connect — `initialize` succeeds — but the tools they cannot use are **absent from `tools/list`**, so an assistant is never offered a tool it will then be refused. A direct call to a hidden tool comes back as an MCP tool result with `isError: true` and a human-readable reason, so the model is told *why* rather than getting a generic "tool execution failed".
+
+> The gates apply to the **MCP surface only**, where claims are cryptographically verified. The `hal2Api` node reads `msg.claims` off the message, which any flow can set, so gating it would be decoration rather than a boundary; it keeps its own local *Allow admin tools* checkbox instead.
+>
+> Claim names are matched as literal keys — a nested path such as `realm_access.roles` is not traversed. Fine for PocketID's flat `groups`; worth checking before pointing hal2 at Keycloak.
 
 ### Hostname filtering
 
