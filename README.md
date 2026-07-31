@@ -137,7 +137,139 @@ History powers two tools:
 - **`get_history`** — fetch logged values for an Item over a flexible time window: a rolling `hours` count, an explicit `from`/`to` range, or a point-in-time `at` lookup ("what was it at 08:00?"), with `offset`/`limit` paging.
 - **`analyze_patterns`** — scans the history to surface recurring routines, e.g. *"Living Room Light turns on around 07:30, 85% consistent"*, so you can spot automations worth creating.
 
+## Bayes node
+
+`hal2Bayes` estimates something you cannot measure directly — typically *"is this person
+home?"* — by weighing up several unreliable sensors instead of trusting any single one. A phone
+presence sensor that already reports "home" from the street corner is not enough on its own;
+combined with the front door opening and closing and movement in the hallway, it becomes
+convincing. The node is an anonymous estimator: it knows nothing about people, it just fuses
+evidence. Use one node per hypothesis (one per person) and wire its output onward like any
+other message — e.g. into a Scene-type sensor representing the person.
+
+### Rules
+
+Everything is a **rule**, built from steps. Each step names a source and a condition, then says
+*when* that condition has to hold. A source is normally a **thing** item, but it can also be a
+**flow**, **global** or **env** variable — for facts that live elsewhere in the flow, such as
+"the calendar says we are away" or "guest mode is on" — or a **time** window.
+
+- **now** — a condition, true at that instant (*and…*)
+- **now or soon** — the same, but it waits for the condition until the window runs out; for
+  sensors that report late (*and…*)
+- **on change** — an event: the condition must actually turn true, being already true does
+  not count (*then…*)
+- **on a full cycle** — a cycle: true and back to false within its limit, e.g. a door opening
+  and closing (*then…*)
+
+Timing sits on a second line under a step, only where it applies: *within N s of the previous
+step* is how long that step has to happen, and *stays on for at most N s* is how long a cycle may
+stay true — a door held open longer than that is not a pass-through, so the rule does not advance.
+
+A **time** source is a window of the day rather than a sensor: start and end in 24-hour format
+plus the weekdays it applies on. It may cross midnight (22:00–06:00), start is inclusive and end
+exclusive, and a window whose start equals its end is never active. The weekday is **the day it
+is right now** — with 22:00–06:00 on Mon–Fri, Tuesday 02:00 counts but Saturday 02:00 does not,
+even though that is Friday night. The value is simply "inside the window or not", so the
+condition reads *inside* / *outside* and one window covers both "during the night" and "outside
+working hours". Times follow the server's local clock, DST included.
+
+**flow, global, env and time can only be conditions** — *now* or *now or soon*. Only a
+thing is subscribed to, so these are read when the node evaluates rather than pushed when they
+change; an edge qualifier on one could only be sampled on the tick and would miss anything
+faster. The same polling means such a rule — including a time boundary — takes effect within one
+tick (30 s by default), not on the second. And `flow`/`global` survive a restart only when the
+context store is file-backed; the default is memory.
+
+A rule that is a single *now* step is **continuous** (*While…*): it pushes the estimate while its
+condition holds and stops the moment it does not. Any other rule is **momentary** (*When…
+then…*): the steps must happen in order, each event within its time window, and completing the
+last step gives a one-off push that then fades. An event that happened while the previous step
+was still in progress also counts, so motion while the door stood open is accepted when it
+closes.
+
+**Put the event first and the conditions after.** Trigger on what actually happens at a point
+in time — usually the door — and use a condition step to ask what was true at that moment:
+
+> *When the front door is true, on a full cycle — and iPhone Fredrik is true, now →
+> makes it true, decisive*
+
+Written this way the rule does not care whether the phone appeared thirty seconds or thirty
+minutes earlier, and it never fires for somebody else's arrival, because their phone is not
+here — the identity check falls out of the condition, with no special logic. If that sensor is
+slow to report, *now or soon* makes the step wait rather than fail. Only a step that needs the
+*change* itself — leaving — uses *on change*:
+
+> *When the front door on a full cycle, then iPhone Fredrik is false, on change, within
+> 5 min → makes it false, certain*
+
+### Strengths and the share scale
+
+Each rule pushes toward true or false with a word strength — **slight** (LR 1.5), **moderate**
+(3), **strong** (10), **decisive** (30), **certain** (400). The editor shows every rule as a
+*share of the way* from the prior to the on-threshold, and shares add exactly: 74 % + 35 % =
+109 % turns the output on. This is also how shared sensors are disambiguated without any
+special logic: give the door/motion arrival rule a share too small to cross the line alone, so
+it only matters together with the node's own strong indicator — someone else arriving contributes
+35 % to this node and nothing happens. A **certain** rule overrides history: firing it clears
+opposing evidence, and a stored certain statement is cleared by any later contradicting rule.
+
+### Weights that follow the reading
+
+The strength **scaled…** makes a rule's weight depend on the measured value rather than being
+constant. Give two points — *value 20 or less → weight 150 %*, *value 60 or more → weight 0 %* —
+and the weight is interpolated between them, clamped outside. A rule's **weight** is its share of
+the way to on, the same percentage the bars show: 100 % is exactly enough to flip the output when
+nothing opposes it. Soil moisture is the natural case: watering in direct sun is normally a bad
+idea, but critically dry soil should override it, which only works if the dryness rule grows
+heavier as the reading falls. This is the step from naive Bayes with binary features to logistic
+regression over a continuous one.
+
+Shares may exceed 100 % and may be negative; the sign lives in the shares, so the *makes it*
+dropdown is hidden for a scaled rule and one rule can push both ways across its range. Mind the
+arithmetic: 100 % reaches the threshold *exactly* from the prior, so any opposing evidence blocks
+it — overriding a moderate 35 % objection needs roughly 150 %. Single-step rules only, since with
+several steps there is no non-arbitrary answer to which value scales the weight.
+
+Two caveats when using the node this way. Irrigation is a **decision, not a hidden state** — there
+is no fact about whether watering "is needed" independent of preference; the machinery still fits,
+but `p` becomes a score rather than a probability. And several moisture sensors in one bed are
+**not independent evidence** — naive Bayes over-counts them and pins the estimate at the clamp, so
+aggregate them (min or mean) into a `global` and use one rule.
+
+### Fading and the latch
+
+Momentary pushes fade — **quick** (5 min half-life), **normal** (20 min), **slow** (1 h),
+**never** (the push stands until something contradicts it) or **custom…** for an explicit
+half-life; continuous rules simply stop when their condition does. Strength buys very little
+time here: each doubling of `ln(LR)` adds only one half-life, so if you want a push to last,
+change the fade rather than the strength. By default the output falls back to
+off as evidence disappears. The **lock** changes that: *only rules that make it false can turn
+it off* — silence, decay or a sensor dropping out will not (status shows `held`). Use it when
+the state cannot end unnoticed: nobody leaves the house without the door opening, so a phone
+rebooting indoors must not flip the estimate. An optional hour limit turns it off anyway after
+that long without supporting evidence. With the lock on, fading no longer makes the output fall
+back by itself — but it still decides whether a push is strong enough to turn the output *on*,
+and how long a "makes it false" rule stays able to turn it off: a false rule that fires while
+the estimate is still high can fade away before the estimate drops, and is then wasted.
+
+Advanced mode exposes the raw numbers (LR, half-life seconds, prior, thresholds, clamp) on the
+same rules — there is one data model, the modes only differ in what is shown. The estimate is
+persisted in node context and keeps fading by wall clock across restarts.
+
+Set **Topic** to put a `msg.topic` on both outputs — output 1 gets it as written, output 2 gets
+it with `/snapshot` appended. Leave it blank and no topic is set at all, as in the Event node.
+
+Output 1 carries the binary result (`payload`, `probability`, `changed`). By default it only
+emits when the result actually flips — a rule firing again while the node is already on sends
+nothing — but **Emit output 1** can be set to *every evaluation* when a downstream flow wants
+the state re-asserted continuously. Output 2 emits a snapshot (`p`, `logOdds`, `held`, active
+rules, terms, sequence state) on every evaluation, for tuning. `msg.topic` `reset` / `evidence`
+(`{ lr, halfLife? }`) are available as escape hatches.
+
 ## Other recent additions
+
+- **hal2Bayes — probabilistic binary-state estimation** (see [Bayes node](#bayes-node)).
 
 - **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, with automatic migration.
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.

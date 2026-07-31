@@ -1,0 +1,904 @@
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
+<script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-scale.js"></script>
+<script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-time.js"></script>
+
+<script type="text/x-red" data-template-name="hal2Bayes">
+    <div class="form-row">
+        <ul id="hal2bayes-tabs"></ul>
+    </div>
+    <div id="hal2bayes-tabs-content">
+
+        <div id="hal2bayes-tab-general" style="display:none">
+            <div class="form-row">
+                <label for="node-input-eventHandler" style="width:130px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+                <input type="text" id="node-input-eventHandler" style="width:calc(100% - 160px)" placeholder="Event handler">
+            </div>
+            <div class="form-row">
+                <label for="node-input-name" style="width:130px;"><i class="fa fa-tag"></i> Name</label>
+                <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 160px)">
+            </div>
+
+            <div class="form-row">
+                <label for="node-input-topic" style="width:130px;"><i class="fa fa-tasks"></i> Topic</label>
+                <input type="text" id="node-input-topic" placeholder="(leave blank to not set one)" style="width:calc(100% - 160px)">
+            </div>
+
+            <div class="form-row">
+                <label for="node-input-emitOn" style="width:130px;"><i class="fa fa-share"></i> Emit output 1</label>
+                <select id="node-input-emitOn" style="width:calc(100% - 160px)">
+                    <option value="change">only when the result changes</option>
+                    <option value="evaluation">on every evaluation</option>
+                </select>
+            </div>
+            <div class="form-tips">Output 1 normally stays quiet unless the true/false result actually
+            flips, so a rule firing again while the node is already on sends nothing. Switch to
+            <i>every evaluation</i> if a downstream flow wants the state re-asserted continuously;
+            <code>msg.changed</code> then tells you which messages were real transitions.
+            Output 2 (the snapshot) always follows every evaluation.</div>
+
+            <div class="form-row" style="margin-top:14px;">
+                <label for="node-input-latch" style="width:auto"><i class="fa fa-lock"></i>
+                    Only rules that make it false can turn this off</label>
+                <input type="checkbox" id="node-input-latch" style="display:inline-block; width:auto; vertical-align:top;">
+            </div>
+            <div class="form-row" style="margin-left:24px;">
+                <label for="node-input-maxHold" style="width:auto; color:#666;">but turn off anyway after</label>
+                <input type="number" id="node-input-maxHold" min="0" step="any" style="width:70px" placeholder="never">
+                <span style="color:#666;">hours without supporting evidence (blank = never)</span>
+            </div>
+            <div class="form-tips">Use the lock when the state cannot end unnoticed &mdash; someone cannot leave
+            without the door opening. Without it, the output falls back as soon as evidence fades or a
+            sensor drops out.</div>
+
+            <div class="form-row hal2bayes-adv" style="margin-top:14px;">
+                <label for="node-input-prior" style="width:130px;"><i class="fa fa-balance-scale"></i> Prior</label>
+                <input type="number" id="node-input-prior" min="0.001" max="0.999" step="any" style="width:80px">
+            </div>
+            <div class="form-row hal2bayes-adv">
+                <label for="node-input-pOn" style="width:130px;"><i class="fa fa-toggle-on"></i> On threshold</label>
+                <input type="number" id="node-input-pOn" min="0" max="1" step="any" style="width:80px">
+                <label for="node-input-pOff" style="width:110px; margin-left:16px;"><i class="fa fa-toggle-off"></i> Off threshold</label>
+                <input type="number" id="node-input-pOff" min="0" max="1" step="any" style="width:80px">
+            </div>
+            <div class="form-row hal2bayes-adv">
+                <label for="node-input-halfLife" style="width:130px;"><i class="fa fa-hourglass-half"></i> Half-life (s)</label>
+                <input type="number" id="node-input-halfLife" min="1" step="any" style="width:80px">
+                <label for="node-input-clamp" style="width:110px; margin-left:16px;"><i class="fa fa-compress"></i> Clamp</label>
+                <input type="number" id="node-input-clamp" min="1" max="20" step="any" style="width:80px">
+            </div>
+            <div class="form-row hal2bayes-adv">
+                <label for="node-input-tickInterval" style="width:130px;"><i class="fa fa-clock-o"></i> Tick (s)</label>
+                <input type="number" id="node-input-tickInterval" min="5" step="any" style="width:80px">
+                <label for="node-input-snapshotOnTick" style="width:auto; margin-left:16px;">
+                    <i class="fa fa-camera"></i> Snapshot every tick</label>
+                <input type="checkbox" id="node-input-snapshotOnTick" style="display:inline-block; width:auto; vertical-align:top;">
+            </div>
+            <div class="form-tips hal2bayes-adv">The estimate starts at <b>Prior</b> and is pushed by rules.
+            The output turns on at P &ge; <b>On threshold</b> and off first at P &le; <b>Off threshold</b>.
+            Momentary evidence fades with <b>Half-life</b> unless a rule overrides it.</div>
+
+            <div class="form-row" style="margin-top:18px; border-top:1px solid #ddd; padding-top:12px;">
+                <label for="node-input-advanced" style="width:auto"><i class="fa fa-sliders"></i> Advanced mode</label>
+                <input type="checkbox" id="node-input-advanced" style="display:inline-block; width:auto; vertical-align:top;">
+            </div>
+            <div class="form-tips hal2bayes-simple">Advanced mode exposes raw likelihood ratios, half-lives
+            and the model parameters. Your rules are kept either way.</div>
+        </div>
+
+        <div id="hal2bayes-tab-rules" style="display:none">
+            <div class="form-row node-input-rule-container-row">
+                <ol id="node-input-rule-container"></ol>
+            </div>
+            <div id="hal2bayes-summary" class="form-tips" style="margin-top:8px;"></div>
+        </div>
+
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Bayes">
+    <p>Estimates something you cannot measure directly &mdash; typically <i>"is this person home?"</i> &mdash;
+    by weighing up several unreliable sensors instead of trusting any single one. A phone presence
+    sensor that already reports "home" from the street corner is not enough on its own; combined with
+    the front door opening and closing and movement in the hallway, it becomes convincing. One node
+    estimates one thing, so use one node per person.</p>
+
+    <h3>Rules</h3>
+    <p>Everything is a <b>rule</b>, built from steps. Each step names a source and a condition, then
+    says <i>when</i> that condition has to hold. A source is normally a <b>thing</b> item, but it can
+    also be a <b>flow</b>, <b>global</b> or <b>env</b> variable &mdash; useful for facts that live
+    elsewhere in the flow, such as "the calendar says we are away" or "guest mode is on".</p>
+    <ul>
+        <li><b>now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
+        <li><b>now or soon</b> &mdash; the same, but if it is not true yet the step waits for it until
+            its window runs out; "soon" is exactly that <i>within N s</i>. Use it for sensors that
+            report late. Only offered after the first step, since it needs a previous step to be soon
+            after. Reads <i>and&hellip;</i></li>
+        <li><b>on change</b> &mdash; an event: the condition must actually turn true, being already
+            true does not count. Reads <i>then&hellip;</i></li>
+        <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
+            door opening and closing. Reads <i>then&hellip;</i></li>
+    </ul>
+    <p>Timing appears on a second line under a step, only where it applies: <i>within N s of the
+    previous step</i> is how long that step has to happen, and <i>stays on for at most N s</i> is how
+    long a cycle may stay true &mdash; a door held open longer than that is not a pass-through and the
+    rule does not advance.</p>
+    <p>A <b>time</b> source is a window of the day rather than a sensor: a start and end in
+    24-hour format plus the weekdays it applies on. It may cross midnight (22:00&ndash;06:00), the
+    start is inclusive and the end exclusive, and a window whose start equals its end is never
+    active. The weekday is simply <b>the day it is right now</b> &mdash; with 22:00&ndash;06:00 on
+    Mon&ndash;Fri, Tuesday 02:00 counts but Saturday 02:00 does not, even though that is Friday
+    night. Because the value is just "inside the window or not", the condition reads
+    <b>inside</b> / <b>outside</b>, so one window covers both "during the night" and "outside
+    working hours". Times follow the server's local clock, including daylight saving.</p>
+    <p><b>flow, global, env and time can only be conditions</b> &mdash; <i>now</i> or <i>now or soon</i>.
+    Only a thing is subscribed to, so these are read when the node evaluates rather than pushed
+    when they change; an edge qualifier on one could only be sampled on the tick and would miss
+    anything faster than that. The same polling means such a rule &mdash; including a time boundary
+    &mdash; takes effect within one tick (30 s by default), not on the second. Note also that <code>flow</code> and <code>global</code>
+    survive a restart only when the context store is file-backed &mdash; the default is memory, and a
+    continuous contribution silently vanishing after a redeploy is exactly what the lock exists for.</p>
+    <p>A rule that is a single <b>now</b> step is <b>continuous</b> (reads <i>While&hellip;</i>): it pushes
+    the estimate while its condition holds and stops the moment it does not. Any other rule is
+    <b>momentary</b> (<i>When&hellip;then&hellip;</i>): the steps must happen in order, each event within
+    its time window, and completing the last step gives a one-off push that then fades. An event that
+    happened while the previous step was still in progress also counts &mdash; motion while the door
+    stood open is accepted when it closes.</p>
+    <p><b>Put the event first and the conditions after.</b> Trigger on the thing that actually happens
+    at a point in time &mdash; usually a door &mdash; and use a condition step to ask what was true at
+    that moment: <i>"When the front door is true &#8231; on a full cycle &mdash; and iPhone Fredrik is
+    true &#8231; now &rarr; makes it true"</i>. Written that way the rule does not care whether the
+    phone appeared thirty seconds or thirty minutes earlier, and it never fires for somebody else's
+    arrival, because their phone is not here. If that sensor is slow to report, use <b>now or soon</b>
+    so the step waits instead of failing &mdash; "soon" being the step's own <i>within N s</i>. A step
+    that needs the change itself &mdash; leaving &mdash; uses <b>on change</b>: <i>"When the front door
+    is true &#8231; on a full cycle, then iPhone Fredrik is false &#8231; on change, within 5 min
+    &rarr; makes it false, certain"</i>.</p>
+
+    <h3>Strengths and the share scale</h3>
+    <p>Each rule pushes with a strength: <b>slight</b> (LR 1.5), <b>moderate</b> (3), <b>strong</b> (10),
+    <b>decisive</b> (30) or <b>certain</b> (400), toward true or toward false. The editor shows every
+    rule as a <i>share of the way</i> from the prior to the on-threshold &mdash; and shares add up
+    exactly, so 74&nbsp;% + 35&nbsp;% = 109&nbsp;% turns the output on. Rules below 100&nbsp;% cannot
+    turn it on alone; that is how shared sensors (a door everyone uses) are kept from triggering the
+    wrong node &mdash; give them a share that only crosses the line together with the node's own
+    strong indicator. A <b>certain</b> rule overrides accumulated history: when it fires it clears
+    opposing evidence, and a stored certain statement is cleared by any later contradicting rule.</p>
+
+    <h3>Weights that follow the reading</h3>
+    <p>The strength <b>scaled&hellip;</b> makes a rule's weight depend on the measured value instead
+    of being constant. Give two points &mdash; <i>value 20 or less &rarr; weight 150 %</i>,
+    <i>value 60 or more &rarr; weight 0 %</i> &mdash; and the weight is interpolated between them and
+    clamped outside. A rule's <b>weight</b> is its share of the way to on, the same percentage the
+    bars show: 100 % is exactly enough to flip the output when nothing opposes it. Soil moisture is the natural
+    example: watering in direct sun is normally a bad idea, but critically dry soil should override
+    it, which only works if the dryness rule grows heavier as the reading falls.</p>
+    <p>Shares may exceed 100 % and may be negative, and the sign lives in the shares &mdash; so the
+    <i>makes it</i> dropdown is hidden for a scaled rule, and one rule can push both ways across its
+    range. Note the arithmetic: 100 % reaches the threshold <i>exactly</i> from the prior, so any
+    opposing evidence blocks it. To override a moderate 35 % objection the dry end needs about
+    150 %. Available on single-step rules only, since with several steps there is no
+    non-arbitrary answer to which value should scale the weight. A reading that is not a number
+    makes the rule contribute nothing rather than erroring.</p>
+    <p>Two things worth knowing when using the node this way. Irrigation is a <b>decision, not a
+    hidden state</b> &mdash; there is no fact about whether watering "is needed" independent of your
+    preferences. The machinery still fits (weighted score, hysteresis, decay), but <code>p</code>
+    stops being a probability and becomes a score. And several moisture sensors in one bed are
+    <b>not independent evidence</b>: naive Bayes over-counts them and pins the estimate at the
+    clamp, so aggregate them (min or mean) into a <code>global</code> in a flow and use one rule.</p>
+
+    <h3>Fading and the latch</h3>
+    <p>Momentary pushes fade &mdash; <b>quick</b> (5 min half-life), <b>normal</b> (20 min),
+    <b>slow</b> (1 h), <b>never</b> (the push stands until something contradicts it), or
+    <b>custom&hellip;</b> for an explicit half-life in seconds. Continuous rules never fade; they simply
+    stop when their condition does. Note that strength buys very little time: each doubling of
+    <code>ln(LR)</code> only adds one half-life, so <i>certain</i> outlasts <i>decisive</i> by well
+    under one &mdash; if you want a push to last, change the fade, not the strength.</p>
+    <p>With the lock on, fading no longer makes the output fall back by itself, but it still decides
+    whether a push is still strong enough to turn the output <i>on</i>, and how long a
+    "makes it false" rule stays able to turn it off &mdash; a false rule that fires while the estimate
+    is still high can fade away before the estimate drops, and then it is wasted.</p>
+    By default the output falls back to off when evidence disappears. The <b>lock</b> on the General
+    tab changes that: <i>only rules that make it false can turn it off</i> &mdash; silence, decay or a
+    sensor dropping out will not (the status shows <code>held</code>). Use it when the state cannot end
+    unnoticed: nobody can leave the house without the door opening. The optional hour limit turns it
+    off anyway after that long without supporting evidence.</p>
+
+    <h3>Input</h3>
+    <p><code>msg.topic</code>: <code>reset</code> (back to the prior), <code>evidence</code>
+    (inject ad-hoc evidence, payload <code>{ lr, halfLife? }</code>). Any other message emits a
+    snapshot on output 2.</p>
+
+    <h3>Outputs</h3>
+    <p>Set <b>Topic</b> to put a <code>msg.topic</code> on both outputs &mdash; output 1 gets it as
+    written, output 2 gets it with <code>/snapshot</code> appended. Leave it blank and no topic is
+    set at all.</p>
+    <p><b>1:</b> the binary result &mdash; <code>payload</code> true/false, <code>probability</code>,
+    <code>changed</code>. By default this only emits when the result actually flips, so a rule firing
+    again while the node is already on sends nothing; set <b>Emit output 1</b> to <i>every evaluation</i>
+    to have the state re-asserted continuously instead. <b>2:</b> snapshot
+    <code>{ p, logOdds, binary, held, activeRules, terms, fsm }</code> on every sensor evaluation
+    (and every tick if enabled). Wire output 1 onward like any other message to record the result on
+    a Thing &mdash; the node has no side channel into the object model.</p>
+
+    <h3>Notes</h3>
+    <p>The estimate is persisted in node context (the event handler's context store), so it survives
+    restarts and keeps fading by wall clock while Node-RED is down. The node subscribes once per
+    distinct thing; many sensors across many things may require raising the event handler's max
+    listeners.</p>
+</script>
+
+<script type="text/javascript">
+    (function() {
+        var scale = window.hal2BayesScale;
+        var btime = window.hal2BayesTime;
+        var PATTERNS = { is: 'now', isOrBecomes: 'now or soon',
+                         becomes: 'on change', cycle: 'on a full cycle' };
+        var ALL_PATTERNS = ['is', 'isOrBecomes', 'becomes', 'cycle'];
+        // Rebuilds only when the option set actually differs, so a selection survives
+        // every refresh. `keep` is what the value should be if it is still offered.
+        function setPatternOptions(patSel, allowed, keep) {
+            var have = patSel.find('option').map(function() { return this.value; }).get().join(',');
+            if (have !== allowed.join(',')) {
+                patSel.empty();
+                allowed.forEach(function(v) { patSel.append($("<option></option>").val(v).text(PATTERNS[v])); });
+            }
+            if (allowed.indexOf(keep) >= 0) { patSel.val(keep); }
+            else if (keep === 'isOrBecomes' && allowed.indexOf('becomes') >= 0) { patSel.val('becomes'); }
+            else { patSel.val('is'); }
+        }
+
+        RED.nodes.registerType('hal2Bayes', {
+            category: 'Home Automation',
+            color: '#b3b3ff',
+            defaults: {
+                eventHandler:   { value: "Event handler", type: "hal2EventHandler", required: true },
+                name:           {},
+                advanced:       { value: false },
+                topic:          { value: "" },
+                prior:          { value: 0.2 },
+                pOn:            { value: 0.85 },
+                pOff:           { value: 0.30, validate: function(v) {
+                                      return Number(v) < Number($("#node-input-pOn").val() || this.pOn); } },
+                clamp:          { value: 6 },
+                halfLife:       { value: 1200 },
+                tickInterval:   { value: 30 },
+                rules:          { value: [] },
+                latch:          { value: false },
+                maxHold:        { value: "" },
+                emitOn:         { value: "change" },
+                snapshotOnTick: { value: false }
+            },
+            inputs: 1,
+            outputs: 2,
+            outputLabels: ["state change", "snapshot"],
+            icon: "font-awesome/fa-pie-chart",
+            label: function() { return this.name || "bayes"; },
+            paletteLabel: "bayes",
+
+            oneditprepare: function() {
+                var node = this;
+                var thingsList = halGetThings(RED, 'status');
+
+                var tabs = RED.tabs.create({
+                    id: 'hal2bayes-tabs',
+                    onchange: function(tab) {
+                        $('#hal2bayes-tabs-content').children().hide();
+                        $('#' + tab.id).show();
+                    }
+                });
+                tabs.addTab({ id: 'hal2bayes-tab-general', label: 'General' });
+                tabs.addTab({ id: 'hal2bayes-tab-rules',   label: 'Rules' });
+
+                // ── shared helpers ───────────────────────────────────────────
+                function fillThingSelect(sel, current) {
+                    sel.empty();
+                    sel.append($("<option></option>").val('').text('select…'));
+                    for (var t in thingsList) {
+                        sel.append($("<option></option>").val(thingsList[t].id).text(thingsList[t].name));
+                    }
+                    if (current) { sel.val(current); }
+                }
+
+                function fillItemSelect(sel, thingId, current) {
+                    sel.empty();
+                    var thing = null;
+                    try { thing = RED.nodes.node(thingId); } catch (e) {}
+                    var thingType = thing ? RED.nodes.node(thing.thingType) : null;
+                    if (thingType) {
+                        for (var d in thingType.items) {
+                            if (halStatusItem(thingType.items[d])) {
+                                sel.append($("<option></option>").val(thingType.items[d].id).text(thingType.items[d].name));
+                            }
+                        }
+                    }
+                    if (current) { sel.val(current); }
+                }
+
+                // Current model parameters (advanced fields double as the source of truth).
+                function params() {
+                    return {
+                        prior: Number($("#node-input-prior").val()) || 0.2,
+                        pOn:   Number($("#node-input-pOn").val()) || 0.85,
+                        pOff:  Number($("#node-input-pOff").val()) || 0.30,
+                        clamp: Number($("#node-input-clamp").val()) || 6,
+                        halfLifeS: Number($("#node-input-halfLife").val()) || 1200
+                    };
+                }
+
+                // Effective LR of a harvested rule (direction applied).
+                function effectiveLr(rule) {
+                    var lr = Number(rule.lr) > 0 ? Number(rule.lr) : scale.strengthLr(rule.strength);
+                    return rule.direction === 'false' ? 1 / lr : lr;
+                }
+
+                // Mirrors the runtime's per-source validity filter, so the summary counts
+                // exactly the rules the engine will run.
+                function stepValid(s) {
+                    if (!s) { return false; }
+                    if (s.src === 'time') { return btime.parseHHMM(s.start) !== null && btime.parseHHMM(s.end) !== null; }
+                    if (s.src === 'flow' || s.src === 'global' || s.src === 'env') { return !!s.prop; }
+                    return !!(s.thing && s.item);
+                }
+
+                function scaleSpec(rule) {
+                    var sc = rule.scale || {};
+                    return { fromValue: Number(sc.fromValue), fromShare: Number(sc.fromShare) / 100,
+                             toValue: Number(sc.toValue),     toShare: Number(sc.toShare) / 100 };
+                }
+                // The largest share the map can produce — what the bar and the summary report,
+                // since the editor has no access to the live reading.
+                function maxScaleShare(rule) {
+                    var spec = scaleSpec(rule);
+                    var a = scale.scaleShare(spec.fromValue, spec);
+                    var b = scale.scaleShare(spec.toValue, spec);
+                    if (a === null || b === null) { return 0; }
+                    return Math.abs(a) >= Math.abs(b) ? a : b;
+                }
+
+                function isContinuous(rule) {
+                    // A lone level check is the continuous case: "while X is true".
+                    return rule.steps.length === 1 && rule.steps[0].pattern === 'is';
+                }
+
+                function ruleHalfLifeS(rule) {
+                    if (rule.fade === 'custom') { return Number(rule.halfLife) > 0 ? Number(rule.halfLife) : 1200; }
+                    return scale.fadeSeconds(rule.fade);
+                }
+                function neverFades(rule) { return rule.fade === 'never'; }
+
+                function pct(x) { return Math.round(x * 100); }
+
+                function fmtDuration(ms) {
+                    if (ms === null) { return null; }
+                    var min = ms / 60e3;
+                    if (min < 90) { return '~' + Math.max(1, Math.round(min)) + ' min'; }
+                    return '~' + (min / 60).toFixed(1).replace(/\.0$/, '') + ' h';
+                }
+
+                // ── step row ─────────────────────────────────────────────────
+                // A step owns everything about itself — both input lines and its timing
+                // detail line — so harvesting never has to reach across siblings.
+                function addStepRow(stepsDiv, ruleContainer, step) {
+                    var stepDiv = $('<div/>', { class: "bayes-step", style: "margin-top:8px;" }).appendTo(stepsDiv);
+
+                    var flexRow = function() {
+                        return $('<div/>', { style: "display:flex; align-items:center;" }).appendTo(stepDiv);
+                    };
+                    var indent = function(row) {
+                        return $('<span/>', { style: "flex:0 0 50px;" }).appendTo(row);
+                    };
+
+                    // Line 1 — where the value comes from.
+                    var line1 = flexRow();
+                    $('<span/>', { class: "bs-lead", style: "flex:0 0 50px; font-weight:bold;" }).appendTo(line1);
+                    var srcSel = $('<select/>', { class: "bs-src", style: "flex:0 0 130px; min-width:0;" }).appendTo(line1);
+                    [['thing', 'thing'], ['flow', 'flow'], ['global', 'global'], ['env', 'env'], ['time', 'time']]
+                        .forEach(function(s) { srcSel.append($("<option></option>").val(s[0]).text(s[1])); });
+                    var thingWrap = $('<span/>', { class: "bs-thing-wrap",
+                        style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
+                    var thingSel = $('<select/>', { class: "bs-thing", style: "flex:5 1 0; min-width:0;" }).appendTo(thingWrap);
+                    var itemSel = $('<select/>', { class: "bs-item", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(thingWrap);
+                    var propWrap = $('<span/>', { class: "bs-prop-wrap",
+                        style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
+                    $('<input/>', { class: "bs-prop", type: "text", placeholder: "variable name", style: "width:100%;" })
+                        .appendTo(propWrap).val(step.prop || '');
+                    var timeWrap = $('<span/>', { class: "bs-time-wrap",
+                        style: "flex:3 1 0; min-width:0; display:flex; align-items:center; margin-left:4px;" }).appendTo(line1);
+                    $('<input/>', { class: "bs-start", type: "time", style: "flex:1 1 0; min-width:0;" })
+                        .appendTo(timeWrap).val(step.start || '22:00');
+                    $('<span/>', { style: "flex:0 0 auto; margin:0 4px; color:#888;" }).appendTo(timeWrap).html('&ndash;');
+                    $('<input/>', { class: "bs-end", type: "time", style: "flex:1 1 0; min-width:0;" })
+                        .appendTo(timeWrap).val(step.end || '06:00');
+                    $('<button type="button" class="red-ui-button red-ui-button-small bs-remove" style="flex:0 0 28px; margin-left:6px; padding:0;"><i class="fa fa-remove"></i></button>')
+                        .appendTo(line1)
+                        .on('click', function(e) {
+                            e.preventDefault();
+                            stepDiv.remove();
+                            refreshRuleView(ruleContainer);
+                        });
+
+                    // Line 2 — the condition, and when it has to hold.
+                    var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
+                    indent(line2);
+                    var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 130px; min-width:0;" }).appendTo(line2);
+                    halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                    var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
+                    // The width must be on the element's inline style: typedInput looks for one
+                    // there and, finding it, sizes both parts declaratively (input 100%, container
+                    // that width). Otherwise it measures outerWidth() at construction — which runs
+                    // while the Rules tab is still display:none, so the measurement is 0.
+                    var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
+                        .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
+                    valField.typedInput('value', step.value === undefined ? '' : step.value);
+                    // Line 3 — when the condition has to hold, plus the numbers that bound it.
+                    // Deliberately off the condition line: that one says *what*, this says
+                    // *when*, and read in sequence they became "When ... when it changes".
+                    // Same flex shape as the two lines above: the icon owns the 50 px lead
+                    // column where While/When/and/then sit, so the dropdown lines up with the
+                    // source and condition selects rather than sitting indented behind an icon.
+                    var timing = $('<div/>', { class: "bs-timing",
+                        style: "display:flex; align-items:center; flex-wrap:wrap; margin-top:4px; color:#888; font-size:0.9em;" })
+                        .appendTo(stepDiv);
+                    $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box;" })
+                        .append($('<i/>', { class: "fa fa-clock-o" })).appendTo(timing);
+                    var patSel = $('<select/>', { class: "bs-pattern", style: "flex:0 0 130px; min-width:0;" }).appendTo(timing);
+                    // Start with the full set so the saved value can be selected at all;
+                    // refreshRuleView narrows it once the source and position are known.
+                    setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
+                    $('<span/>', { class: "bs-pat-sep", style: "margin:0 8px;" }).appendTo(timing).text('·');
+                    // Read-back of the configured window, on its own line under the weekdays.
+                    $('<div/>', { class: "bs-days-hint",
+                        style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
+
+                    var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
+                    $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('within ');
+                    $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
+                        .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
+                    $('<span/>').appendTo(windowSpan).text(' s of the previous step');
+
+                    // A time step has no seconds to configure, so the timing line carries its
+                    // weekday toggles instead. Monday first for reading; the stored numbers are
+                    // getDay(), where 0 is Sunday.
+                    var daysSpan = $('<span/>', { class: "bs-days-span" }).appendTo(timing);
+                    $('<span/>', { class: "bs-days-sep" }).appendTo(daysSpan).text(' · ');
+                    var savedDays = Array.isArray(step.days) ? step.days.map(Number) : [0,1,2,3,4,5,6];
+                    btime.DAYS.forEach(function(d) {
+                        var on = savedDays.indexOf(d.d) !== -1;
+                        $('<button type="button" class="red-ui-button red-ui-button-small bs-day"/>')
+                            .attr('data-day', d.d).text(d.short)
+                            .css({ 'margin-right': '2px', 'min-width': '30px',
+                                   'font-weight': on ? 'bold' : 'normal', opacity: on ? 1 : 0.45 })
+                            .data('on', on)
+                            .appendTo(daysSpan)
+                            .on('click', function(e) {
+                                e.preventDefault();
+                                var b = $(this), now = !b.data('on');
+                                b.data('on', now).css({ 'font-weight': now ? 'bold' : 'normal', opacity: now ? 1 : 0.45 });
+                                refreshRuleView(ruleContainer);
+                            });
+                    });
+
+
+                    var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
+                    $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
+                    $('<span/>').appendTo(cycleSpan).text('on then off within ');
+                    $('<input/>', { class: "bs-cyclemax", type: "number", min: "1", step: "any", style: "width:55px;" })
+                        .appendTo(cycleSpan).val(step.cycleMax === undefined ? 180 : step.cycleMax);
+                    $('<span/>').appendTo(cycleSpan).text(' s');
+
+                    thingSel.change(function() {
+                        fillItemSelect(itemSel, thingSel.val(), (thingSel.val() === step.thing) ? step.item : null);
+                    });
+                    // Hide the wrapper, not just the widget, so its flex space collapses too.
+                    var opHandler = function() {
+                        var op = opSel.val();
+                        valWrap.toggle(op !== 'true' && op !== 'false');
+                    };
+                    opSel.change(opHandler);
+
+                    var srcHandler = function() {
+                        var src = srcSel.val();
+                        thingWrap.toggle(src === 'thing');
+                        propWrap.toggle(src !== 'thing' && src !== 'time');
+                        timeWrap.toggle(src === 'time');
+                        syncOperatorOptions();
+                    };
+                    // For a time step resolveState yields a boolean, so the existing
+                    // true/false operator is inside/outside — just worded for humans.
+                    function syncOperatorOptions() {
+                        var isTime = srcSel.val() === 'time';
+                        var current = opSel.val() || step.operator || 'true';
+                        if (isTime === opSel.data('isTime')) { return; }
+                        opSel.data('isTime', isTime).empty();
+                        if (isTime) {
+                            opSel.append($("<option></option>").val('true').text('is inside the window'));
+                            opSel.append($("<option></option>").val('false').text('is outside the window'));
+                            opSel.val(current === 'false' ? 'false' : 'true');
+                            opSel.css('flex', '1 1 0');          // value and qualifier are hidden here
+                        } else {
+                            opSel.css('flex', '0 0 130px');
+                            halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                            opSel.val(current);
+                        }
+                        opHandler();
+                    }
+                    srcSel.change(function() { srcHandler(); refreshRuleView(ruleContainer); });
+
+                    fillThingSelect(thingSel, step.thing);
+                    thingSel.trigger('change');
+                    opSel.val(step.operator || 'true');
+                    opHandler();
+
+                    var src = ['thing', 'flow', 'global', 'env'].indexOf(step.src) >= 0 ? step.src : 'thing';
+                    srcSel.val(src);
+                    patSel.val(step.pattern || 'is');
+                    srcHandler();
+                    // A saved edge qualifier on a polled source can never fire; say so rather
+                    // than silently swapping it.
+                    if (src !== 'thing' && (step.pattern === 'becomes' || step.pattern === 'cycle')) {
+                        RED.notify('hal2Bayes: a ' + src + ' step cannot detect changes — changed it to "now"', 'warning');
+                    }
+                    return stepDiv;
+                }
+
+                // Harvest one rule item from its DOM.
+                function harvestRule(container) {
+                    var rule = {
+                        id: container.find('.br-id').val(),
+                        steps: [],
+                        direction: container.find('.br-direction option:selected').val(),
+                        strength: container.find('.br-strength option:selected').val(),
+                        fade: container.find('.br-fade option:selected').val(),
+                        lr: container.find('.br-lr').val(),
+                        scale: {
+                            fromValue: container.find('.br-fromValue').val(),
+                            fromShare: container.find('.br-fromShare').val(),
+                            toValue:   container.find('.br-toValue').val(),
+                            toShare:   container.find('.br-toShare').val()
+                        },
+                        // Only a custom fade stores a raw half-life; the named rates own it otherwise.
+                        halfLife: container.find('.br-fade option:selected').val() === 'custom'
+                            ? container.find('.br-halflife').val() : ''
+                    };
+                    container.find('.bayes-step').each(function() {
+                        var el = $(this);
+                        var src = el.find('.bs-src option:selected').val();
+                        var step = {
+                            src:      src,
+                            thing:    el.find('.bs-thing option:selected').val(),
+                            item:     el.find('.bs-item option:selected').val(),
+                            prop:     el.find('.bs-prop').val(),
+                            operator: el.find('.bs-op option:selected').val(),
+                            value:    el.find('.bs-val').typedInput('value'),
+                            valueType: el.find('.bs-val').typedInput('type'),
+                            pattern:  el.find('.bs-pattern option:selected').val(),
+                            cycleMax: el.find('.bs-cyclemax').val(),
+                            window:   el.find('.bs-window').val()
+                        };
+                        // The window fields only mean something on a time step.
+                        if (src === 'time') {
+                            step.start = el.find('.bs-start').val();
+                            step.end = el.find('.bs-end').val();
+                            step.days = el.find('.bs-day').filter(function() { return $(this).data('on'); })
+                                .map(function() { return Number($(this).attr('data-day')); }).get();
+                        }
+                        rule.steps.push(step);
+                    });
+                    return rule;
+                }
+
+                // Recompute the lead words, field visibility, bar and captions of one rule.
+                function refreshRuleView(container) {
+                    var rule = harvestRule(container);
+                    var cont = isContinuous(rule);
+                    var p = params();
+
+                    container.find('.bayes-step').each(function(i) {
+                        var el = $(this);
+                        el.find('.bs-remove, .bs-endpad').toggle(rule.steps.length > 1);
+
+                        // Timing line: only the parts that actually apply, and only when
+                        // at least one of them does.
+                        var timing = el.find('.bs-timing');
+                        var src = el.find('.bs-src').val();
+                        var isTime = src === 'time';
+
+                        var allowed = isTime ? ['is']
+                                    : src === 'thing' ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
+                                    : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
+                        var patSel = el.find('.bs-pattern');
+                        setPatternOptions(patSel, allowed, patSel.val());
+                        patSel.toggle(allowed.length > 1);
+                        el.find('.bs-val-wrap').toggle(!isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0);
+
+                        var pat = patSel.val();
+                        // A condition reads "and …"; an event reads "then …".
+                        var isCond = (pat === 'is' || pat === 'isOrBecomes');
+                        el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
+                        var showWindow = i > 0 && pat !== 'is';
+                        var showCycle = (pat === 'cycle');
+                        timing.find('.bs-window-span').toggle(showWindow);
+                        timing.find('.bs-cycle-span').toggle(showCycle);
+                        timing.find('.bs-cycle-sep').toggle(showWindow && showCycle);
+                        timing.find('.bs-days-span').toggle(isTime);
+                        timing.find('.bs-days-sep').toggle(isTime && showWindow);
+                        // The dot only earns its place when something follows the qualifier.
+                        timing.find('.bs-pat-sep').toggle(allowed.length > 1 && (showWindow || showCycle || isTime));
+                        timing.toggle(allowed.length > 1 || showWindow || showCycle || isTime);
+
+                        // Pin down what bounds the step, so "soon" is never left undefined.
+                        timing.find('.bs-window-lead').text(pat === 'isOrBecomes'
+                            ? '"soon" = within '
+                            : 'within ');
+
+                        // Live read-back so a wrong window or day selection is obvious at once.
+                        el.find('.bs-days-hint').toggle(isTime);
+                        if (isTime) {
+                            var spec = { start: el.find('.bs-start').val(), end: el.find('.bs-end').val(),
+                                         days: el.find('.bs-day').filter(function() { return $(this).data('on'); })
+                                                 .map(function() { return Number($(this).attr('data-day')); }).get() };
+                            var inside = btime.inWindow(new Date(), spec);
+                            var wantInside = el.find('.bs-op').val() !== 'false';
+                            var matches = (inside === wantInside);
+                            el.find('.bs-days-hint')
+                                .text(btime.describe(spec) + ' — ' +
+                                      (matches ? 'matches right now' : 'does not match right now'))
+                                .css('color', matches ? '#4b8' : '#999');
+                        }
+                    });
+
+                    // A level check cannot start a sequence — nothing would trigger it.
+                    var deadTrigger = rule.steps.length > 1 &&
+                        (rule.steps[0].pattern === 'is' || rule.steps[0].pattern === 'isOrBecomes');
+                    container.find('.br-warning')
+                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "on change" or "on a full cycle".' : '')
+                        .toggle(deadTrigger);
+
+                    var scaled = (rule.strength === 'scaled' && rule.steps.length === 1);
+                    var lr = effectiveLr(rule);
+                    var share = scaled ? maxScaleShare(rule) : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                    var sPct = pct(share);
+
+                    container.find('.br-scale-span').toggle(scaled);
+                    container.find('.br-direction').toggle(!scaled);   // the sign lives in the shares
+                    if (scaled) {
+                        var spec = scaleSpec(rule);
+                        // Whichever value is the lower one gets "or less".
+                        var fromLower = Number(spec.fromValue) <= Number(spec.toValue);
+                        container.find('.br-fromWord').text(fromLower ? ' or less' : ' or more');
+                        container.find('.br-toWord').text(fromLower ? ' or more' : ' or less');
+                        var broken = scale.scaleShare(Number(spec.fromValue), spec) === null;
+                        container.find('.br-scale-hint')
+                            .text(broken ? 'the two values must differ' : '')
+                            .css('color', '#a60').toggle(broken);
+                    }
+
+                    var bar = container.find('.br-bar-inner');
+                    bar.css({ width: Math.min(100, Math.abs(share) * 100) + '%',
+                              background: share >= 0 ? '#4b8' : '#c66' });
+
+                    var capt = scaled
+                        ? 'up to ' + sPct + ' %' + (share >= 1 ? ' — enough alone' : ' of the way to on')
+                        : (sPct >= 0
+                            ? sPct + ' % of the way to on' + (share >= 1 ? ' — enough on its own' : '')
+                            : sPct + ' % (pushes toward off)');
+                    container.find('.br-share-caption').text(capt);
+
+                    var custom = Number(rule.lr) > 0;
+                    container.find('.br-strength').prop('disabled', custom)
+                        .attr('title', custom ? 'overridden by the raw LR field' : '');
+
+                    var decay;
+                    if (cont) {
+                        decay = 'holds while true';
+                    } else if (neverFades(rule)) {
+                        decay = 'does not fade — this push stands until something contradicts it';
+                    } else {
+                        var hlMin = ruleHalfLifeS(rule) / 60;
+                        decay = Math.abs(sPct) + ' % now → ' + Math.abs(Math.round(sPct / 2)) + ' % after ' +
+                                Math.round(hlMin) + ' min → ' + Math.abs(Math.round(sPct / 4)) + ' % after ' +
+                                Math.round(2 * hlMin) + ' min';
+                    }
+                    container.find('.br-decay-caption').text(decay);
+                    container.find('.br-fade-span').toggle(!cont);
+                    container.find('.br-custom-span').toggle(rule.fade === 'custom');
+
+                    refreshSummary();
+                }
+
+                function refreshAllRules() {
+                    $("#node-input-rule-container").children().each(function() { refreshRuleView($(this)); });
+                }
+
+                // ── summary under the list ───────────────────────────────────
+                function refreshSummary() {
+                    var p = params();
+                    var totalPos = 0, anyAlone = false, anyScaled = false, momentaryTerms = [];
+                    $("#node-input-rule-container").children().each(function() {
+                        var rule = harvestRule($(this));
+                        if (!rule.steps.length || !stepValid(rule.steps[0])) { return; }
+                        var scaledRule = (rule.strength === 'scaled' && rule.steps.length === 1);
+                        var lr = effectiveLr(rule);
+                        var share = scaledRule ? maxScaleShare(rule)
+                                               : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                        if (scaledRule) { anyScaled = true; }
+                        if (share > 0) {
+                            totalPos += share;
+                            if (share >= 1) { anyAlone = true; }
+                            if (!isContinuous(rule)) {
+                                momentaryTerms.push({ l0: Math.log(lr), halfLifeMs: ruleHalfLifeS(rule) * 1000 });
+                            }
+                        }
+                    });
+
+                    var lines = [];
+                    lines.push('<b>Together: ' + (anyScaled ? 'up to ' : '') + pct(totalPos) + ' %</b> → ' +
+                        (totalPos >= 1 ? 'turns on.' : 'not enough to turn on.') + ' ' +
+                        (anyAlone ? 'At least one rule is enough on its own.' : 'No single rule is enough on its own.'));
+
+                    if ($("#node-input-latch").is(':checked')) {
+                        var hold = $("#node-input-maxHold").val();
+                        lines.push('Once on, the output stays on until a "makes it false" rule fires' +
+                            (Number(hold) > 0 ? ' (or after ' + hold + ' h without supporting evidence).' : '.'));
+                    } else {
+                        var ms = scale.offAfterMs(momentaryTerms, p.prior, p.pOff, p.clamp);
+                        lines.push(ms === null
+                            ? 'The output never falls back on its own — only a "makes it false" rule can turn it off.'
+                            : (ms === 0
+                                ? 'If all evidence stops, the output turns off immediately.'
+                                : 'If all evidence stops now, the output turns off after ' + fmtDuration(ms) + '.'));
+                    }
+                    $("#hal2bayes-summary").html(lines.join('<br>'));
+                }
+
+                // ── rule list ────────────────────────────────────────────────
+                $("#node-input-rule-container").editableList({
+                    addItem: function(container, i, opt) {
+                        // Adopt anything that carries steps, even without an id — configs
+                        // saved before the id survived the round trip must not be discarded.
+                        var rule = (opt && (opt.id || (opt.steps && opt.steps.length))) ? opt : {
+                            steps: [{ thing: '', item: '', operator: 'true', value: '', valueType: 'str',
+                                      pattern: 'is', cycleMax: 180, window: 120 }],
+                            direction: 'true', strength: 'moderate', fade: 'normal', lr: '', halfLife: ''
+                        };
+                        if (!rule.id) { rule.id = halCreateId(); }
+                        // editableList hands us a <div> inside its <li>, so .data() here is
+                        // invisible to an .each() over the list's children. Keep the id in a
+                        // hidden field, which .find() reaches from either level.
+                        $('<input/>', { type: 'hidden', class: "br-id" }).appendTo(container).val(rule.id);
+                        container.css({ overflow: 'hidden' });
+
+                        var stepsDiv = $('<div/>', { class: "bayes-steps" }).appendTo(container);
+                        (rule.steps || []).forEach(function(s) { addStepRow(stepsDiv, container, s); });
+
+                        $('<button type="button" class="red-ui-button red-ui-button-small" style="margin-top:6px; margin-left:50px;"><i class="fa fa-plus"></i> step</button>')
+                            .appendTo(container)
+                            .on('click', function(e) {
+                                e.preventDefault();
+                                addStepRow(stepsDiv, container, { operator: 'true', pattern: 'is', cycleMax: 180, window: 120 });
+                                refreshRuleView(container);
+                            });
+
+                        var outRow = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                        $('<span/>', { style: "display:inline-block; width:50px; color:#888; text-align:right; padding-right:8px; box-sizing:border-box;" })
+                            .appendTo(outRow).text('→');
+                        $('<span/>', { style: "margin-right:6px;" }).appendTo(outRow).text('makes it');
+                        var dirSel = $('<select/>', { class: "br-direction", style: "width:70px;" }).appendTo(outRow);
+                        dirSel.append($("<option></option>").val('true').text('true'));
+                        dirSel.append($("<option></option>").val('false').text('false'));
+                        var strSel = $('<select/>', { class: "br-strength", style: "width:100px; margin-left:6px;" }).appendTo(outRow);
+                        scale.STRENGTHS.forEach(function(s) { strSel.append($("<option></option>").val(s.v).text(s.v)); });
+                        strSel.append($("<option></option>").val('scaled').text('scaled…'));
+                        var fadeSpan = $('<span/>', { class: "br-fade-span" }).appendTo(outRow);
+                        $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(fadeSpan).text('fades');
+                        var fadeSel = $('<select/>', { class: "br-fade", style: "width:90px; margin-left:4px;" }).appendTo(fadeSpan);
+                        scale.FADES.forEach(function(f) { fadeSel.append($("<option></option>").val(f.v).text(f.v)); });
+                        fadeSel.append($("<option></option>").val('custom').text('custom…'));
+                        var customSpan = $('<span/>', { class: "br-custom-span" }).appendTo(fadeSpan);
+                        $('<input/>', { class: "br-halflife", type: "number", min: "1", step: "any",
+                            placeholder: "half-life", style: "width:80px; margin-left:6px;" })
+                            .appendTo(customSpan).val(rule.halfLife);
+                        $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
+
+                        var sc = rule.scale || {};
+                        var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(container);
+                        // Each row states its own meaning — "value 20 or less → weight 100 %" —
+                        // so no column header is needed and the clamping sits where it applies.
+                        // "value" and "weight" name the two roles; the % scale itself is
+                        // explained once in the help text. The or-less/or-more word is set by
+                        // comparison in refreshRuleView, so the rows stay true whichever order
+                        // the values are entered in.
+                        [['fromValue', 'fromShare', 'br-fromWord', sc.fromValue, sc.fromShare],
+                         ['toValue',   'toShare',   'br-toWord',   sc.toValue,   sc.toShare]].forEach(function(pt, i) {
+                            var row = $('<div/>', { style: "margin-top:3px;" }).appendTo(scaleRow);
+                            $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(row);
+                            $('<span/>', { style: "color:#888;" }).appendTo(row).text('value ');
+                            $('<input/>', { class: "br-" + pt[0], type: "number", step: "any", style: "width:70px;" })
+                                .appendTo(row).val(pt[3] === undefined ? (i ? 60 : 20) : pt[3]);
+                            $('<span/>', { class: pt[2], style: "display:inline-block; width:58px; color:#888;" })
+                                .appendTo(row).text(i ? ' or more' : ' or less');
+                            $('<span/>', { style: "margin-right:6px; color:#888;" }).appendTo(row).html('&rarr;');
+                            $('<span/>', { style: "margin-right:4px; color:#888;" }).appendTo(row).text('weight');
+                            $('<input/>', { class: "br-" + pt[1], type: "number", step: "any", style: "width:70px;" })
+                                .appendTo(row).val(pt[4] === undefined ? (i ? 0 : 100) : pt[4]);
+                            $('<span/>', { style: "margin-left:4px; color:#888;" }).appendTo(row).text('%');
+                        });
+                        $('<div/>', { style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" })
+                            .appendTo(scaleRow).text('linear in between');
+                        var scaleHint = $('<div/>', { class: "br-scale-hint",
+                            style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" }).appendTo(scaleRow);
+
+                        var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px;" }).appendTo(container);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(advRow);
+                        $('<span/>', { style: "color:#888;" }).appendTo(advRow).text('LR');
+                        $('<input/>', { class: "br-lr", type: "number", min: "0.001", step: "any", placeholder: "auto", style: "width:80px; margin-left:4px;" })
+                            .appendTo(advRow).val(rule.lr);
+
+                        var barRow = $('<div/>', { style: "margin-top:6px;" }).appendTo(container);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(barRow);
+                        var barOuter = $('<span/>', { class: "br-bar-outer",
+                            style: "display:inline-block; width:120px; height:10px; border:1px solid #bbb; border-radius:3px; vertical-align:middle; overflow:hidden;" }).appendTo(barRow);
+                        $('<span/>', { class: "br-bar-inner", style: "display:block; height:100%;" }).appendTo(barOuter);
+                        $('<span/>', { class: "br-share-caption", style: "margin-left:8px; color:#555;" }).appendTo(barRow);
+
+                        var decayRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(container);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(decayRow);
+                        $('<span/>', { class: "br-decay-caption", style: "color:#999; font-size:0.9em;" }).appendTo(decayRow);
+
+                        var warnRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(container);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(warnRow);
+                        $('<span/>', { class: "br-warning", style: "color:#a60; font-size:0.9em;" }).appendTo(warnRow).hide();
+
+                        dirSel.val(rule.direction || 'true');
+                        strSel.val(rule.strength || 'moderate');
+                        // A stored half-life means the rule was authored with a custom fade.
+                        fadeSel.val(Number(rule.halfLife) > 0 ? 'custom' : (rule.fade || 'normal'));
+
+                        container.on('change input', function() { refreshRuleView(container); });
+                        refreshRuleView(container);
+                        $('.hal2bayes-adv', container).toggle($("#node-input-advanced").is(':checked'));
+                    },
+                    removable: true,
+                    sortable: true,
+                    height: 'auto',
+                    addButton: "rule"
+                });
+                (node.rules || []).forEach(function(rule) {
+                    $("#node-input-rule-container").editableList('addItem', rule);
+                });
+                // Removing a rule must update the summary too.
+                $("#node-input-rule-container").on('click', '.red-ui-editableList-item-remove', function() {
+                    setTimeout(refreshSummary, 0);
+                });
+
+                // ── mode switching + live recompute ──────────────────────────
+                function applyMode() {
+                    var adv = $("#node-input-advanced").is(':checked');
+                    $('.hal2bayes-adv').toggle(adv);
+                    $('.hal2bayes-simple').toggle(!adv);
+                    refreshAllRules();   // fade/half-life spans depend on visibility state
+                }
+                $("#node-input-advanced").change(applyMode);
+                applyMode();
+
+                $("#node-input-prior, #node-input-pOn, #node-input-pOff, #node-input-clamp, #node-input-halfLife, #node-input-latch, #node-input-maxHold")
+                    .on('change input', refreshAllRules);
+
+                // oneditsave must read the rows through exactly this code path — the editor
+                // has already lost data once to a second, drifting copy of the harvest.
+                node.__harvestRules = function() {
+                    return $("#node-input-rule-container").children().map(function() {
+                        return harvestRule($(this));
+                    }).get();
+                };
+            },
+
+            oneditsave: function() {
+                var node = this;
+                node.rules = node.__harvestRules ? node.__harvestRules() : (node.rules || []);
+                delete node.__harvestRules;
+            }
+        });
+    })();
+</script>
