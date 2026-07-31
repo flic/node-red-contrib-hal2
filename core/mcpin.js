@@ -23,7 +23,10 @@ module.exports = function (RED) {
             schema = { type: 'object', properties: {} };
         }
 
-        mcpServer.registerMCPTool(toolName, config.description, schema, timeoutSec);
+        // Per-tool gate: a comma-separated any-of list against the server's claim, on top of
+        // the server-wide list. Empty means the tool adds no constraint of its own.
+        mcpServer.registerMCPTool(toolName, config.description, schema, timeoutSec,
+            (config.requiredValue || '').trim(), node.id);
 
         const exposeClaims = config.exposeClaims === true;
 
@@ -43,7 +46,7 @@ module.exports = function (RED) {
         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
 
         node.on('close', function () {
-            mcpServer.unregisterMCPTool(toolName);
+            mcpServer.unregisterMCPTool(toolName, node.id);
             mcpServer.removeListener('mcp_tool_' + toolName, node.listener);
         });
     }
