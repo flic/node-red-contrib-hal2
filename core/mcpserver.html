@@ -32,7 +32,10 @@
         <input type="text" id="node-config-input-requiredValue" placeholder="(empty = any authenticated user)" style="width:calc(100% - 105px)">
     </div>
     <div class="form-tips" id="row-required-tip" style="margin-left:105px; margin-bottom:8px;">
-        <small>The JWT claim (default <code>groups</code>) must contain the value for this server's tools to be callable. Leave the value empty to allow all authenticated users.</small>
+        <small>The caller's JWT claim (default <code>groups</code>) must contain <b>at least one</b> of the
+        comma-separated values for this server's tools to be listed or callable. Leave the value empty
+        to allow all authenticated users. Individual <code>hal2MCPIn</code> nodes can narrow this further
+        with their own <b>Tool access</b> list, which is checked on top of this one.</small>
     </div>
 </script>
 
@@ -52,10 +55,11 @@
     endpoint. Multiple standalone <code>hal2MCPServer</code> nodes can share one Event handler,
     each with a different path.</p>
     <p>Standalone mode also exposes an optional <b>Required claim</b>/<b>Required value</b> gate:
-    when a value is set, only callers whose token carries that claim/value can see or call this
-    server's tools — everyone else connects but sees none. This is separate from (and layered on
-    top of) the Event handler's own admin-tools gate, and only affects this one standalone
-    server, not the shared embedded endpoint.</p>
+    when a value is set, only callers whose token carries one of those claim values can see or call
+    this server's tools — everyone else connects but sees none. The value is a comma-separated
+    any-of list, and each <code>hal2MCPIn</code> tool can add a narrower list of its own that is
+    checked on top of it. This gate only affects this one standalone server, not the shared
+    embedded endpoint or its read/write gates.</p>
     <p>See the <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README</a>
     for a worked example (<code>examples/jellyfin-mcp.json</code>).</p>
 </script>

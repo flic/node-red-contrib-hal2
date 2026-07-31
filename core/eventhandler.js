@@ -7,9 +7,10 @@ const { createMcpAuth } = require('./mcp-auth');
 const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
 
 const {
-    MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES,
+    MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories
 } = require('./mcp-tools');
+const { createToolGate, claimAllows } = require('../lib/claim-gate');
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
@@ -85,8 +86,11 @@ module.exports = function(RED) {
 
         // ── Dynamic MCP tool registry (used by hal2MCPIn / hal2MCPOut) ─────────
 
-        node.mcpRegisteredTools = {};
-        node.mcpPendingCalls    = {};
+        // Null-prototype: tool names arrive from remote callers in tools/call, and a plain
+        // {} resolves names like "__proto__" or "constructor" through the prototype chain —
+        // past the "Unknown tool" check and into a listener-less 30 s hang.
+        node.mcpRegisteredTools = Object.create(null);
+        node.mcpPendingCalls    = Object.create(null);
 
         // ── Shared function library lookup helpers ────────────────────────────
 
@@ -97,12 +101,29 @@ module.exports = function(RED) {
             return (node.egressLibrary || []).find(f => f.id === id);
         };
 
-        node.registerMCPTool = function (toolName, description, schema, timeoutSec) {
-            node.mcpRegisteredTools[toolName] = { description, schema, timeoutMs: (timeoutSec || 30) * 1000 };
+        node.registerMCPTool = function (toolName, description, schema, timeoutSec, requiredValue, ownerId) {
+            // Duplicate names are a silent conflict: the registry entry is overwritten but
+            // BOTH hal2MCPIn listeners keep firing, so one call runs two flows and whichever
+            // hal2MCPOut answers first wins. Say so rather than debug it in production.
+            const existing = node.mcpRegisteredTools[toolName];
+            if (existing && existing.ownerId !== ownerId) {
+                node.warn('MCP tool "' + toolName + '" is registered by more than one hal2MCPIn node — '
+                    + 'each call will run every one of those flows, with unpredictable results. '
+                    + 'Rename the tools so each name is unique.');
+            }
+            node.mcpRegisteredTools[toolName] = {
+                description, schema, timeoutMs: (timeoutSec || 30) * 1000,
+                requiredValue: requiredValue || '', ownerId
+            };
             node.log('MCP tool registered: ' + toolName);
         };
 
-        node.unregisterMCPTool = function (toolName) {
+        node.unregisterMCPTool = function (toolName, ownerId) {
+            // Only the registering node may remove its entry — when two hal2MCPIn nodes
+            // collide on a name, deleting the loser must not tear down the survivor.
+            const entry = node.mcpRegisteredTools[toolName];
+            if (!entry) { return; }
+            if (ownerId !== undefined && entry.ownerId !== undefined && entry.ownerId !== ownerId) { return; }
             delete node.mcpRegisteredTools[toolName];
             node.log('MCP tool unregistered: ' + toolName);
         };
@@ -483,12 +504,37 @@ module.exports = function(RED) {
             const adminPort     = Number(config.adminPort || 1880);
             const mcpScopesStr  = (config.mcpScopes || 'openid profile email').trim();
             const mcpScopesArr  = mcpScopesStr.split(/\s+/).filter(Boolean);
-            const adminClaim    = (config.adminRequiredClaim || 'groups').trim();
+            const gateClaim     = (config.adminRequiredClaim || 'groups').trim();
             // Default 'admin' only when never set (undefined). Empty string is respected
             // as "allow any authenticated user" per the UI help text.
             const adminValue    = (config.adminRequiredValue === undefined ? 'admin' : config.adminRequiredValue).trim();
+            // Read and write default to empty — no constraint — so an existing install
+            // behaves exactly as before until the fields are filled in.
+            const readValue     = (config.readRequiredValue  || '').trim();
+            const writeValue    = (config.writeRequiredValue || '').trim();
 
-            const isAdmin = claims => common.claimSatisfied(claims, adminClaim, adminValue);
+            // Admin keeps its own check inside dispatchAdminTools, where it also guards the
+            // hal2Api path — only the matcher changes, so a single value still behaves as
+            // before while comma-separated lists now work too.
+            const isAdmin = claims => claimAllows(claims, gateClaim, adminValue);
+
+            // Read/write authorization for the MCP surface. Built once per request from
+            // verified claims and handed to callTool in opts — deliberately not derived from
+            // `claims` inside callTool, because hal2Api supplies unverified msg.claims and
+            // must not be able to self-grant. No opts.gate means no read/write gating, which
+            // is exactly the local-flow case.
+            function buildGate(claims) {
+                const gate = createToolGate({ claims, claimName: gateClaim, serverValue: readValue });
+                return {
+                    // Every tool must clear the read list; writes must clear both.
+                    allows(toolName) {
+                        if (!gate.serverGranted) { return false; }
+                        return toolClass(toolName) === 'write' ? gate.allows(writeValue) : true;
+                    },
+                    // Dynamic hal2MCPIn tools carry their own list instead of a class.
+                    allowsValue: list => gate.allows(list)
+                };
+            }
 
             // ── Admin API helper ───────────────────────────────────────────────
 
@@ -500,9 +546,16 @@ module.exports = function(RED) {
 
             // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
             // See core/mcp-auth.js. External deps injected so the module stays testable.
+            // Groups granted to the local debug token (comma-separated, default 'admin'), so gates
+            // with other values can be tested locally. Default only when never set — an explicitly
+            // emptied field means a debug user with no groups at all.
+            const localDebugGroups = (config.localDebugGroups === undefined ? 'admin' : config.localDebugGroups)
+                .split(',').map(s => s.trim()).filter(Boolean);
+
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
+                localDebugGroups,
                 httpGet,
                 log:  msg => node.log(msg),
                 warn: msg => node.warn(msg)
@@ -1505,6 +1558,21 @@ module.exports = function(RED) {
                 return toolOk(JSON.stringify(notConfigured));
             }
 
+            // Read/write gating, only when the caller supplied a gate — i.e. the MCP route,
+            // where the claims behind it were actually verified. Admin tools carry their own
+            // check inside dispatchAdminTools and are skipped here.
+            if (opts.gate && !MCP_ADMIN_TOOL_NAMES.has(toolName)) {
+                const dynamic = node.mcpRegisteredTools[toolName];
+                const allowed = dynamic
+                    ? opts.gate.allowsValue(dynamic.requiredValue)
+                    : opts.gate.allows(toolName);
+                if (!allowed) {
+                    node.status({ fill: 'red', shape: 'ring', text: 'forbidden' });
+                    return rpcErr(-32000, 'Access denied: the "' + toolName + '" tool requires a permission '
+                        + 'your token does not have. This is a permission restriction, not a tool error.');
+                }
+            }
+
             let r;
             r = await dispatchReadTools(toolName, args, claims, opts);    if (r !== undefined) return r;
             r = await dispatchControlTools(toolName, args, claims, opts); if (r !== undefined) return r;
@@ -1624,6 +1692,9 @@ module.exports = function(RED) {
                 const claims = await requireBearer(req, res);
                 if (!claims) return;
 
+                // One authorization decision per request, from claims this route verified.
+                const gate = buildGate(claims);
+
                 const body   = req.body || {};
                 const id     = body.id     !== undefined ? body.id : null;
                 const method = body.method || null;
@@ -1647,7 +1718,7 @@ module.exports = function(RED) {
                                           'scene status can change at any time. When in doubt, call get_all_states ' +
                                           'or the relevant tool again before answering. ' +
                                           'Available tools: ' + [
-                                              ...MCP_TOOLS.filter(t => !getNotConfiguredError(t.name)),
+                                              ...MCP_TOOLS.filter(t => !getNotConfiguredError(t.name) && gate.allows(t.name)),
                                               ...(adminEnabled && isAdmin(claims) ? MCP_TOOLS_ADMIN : [])
                                           ].map(t => t.name).join(', ') + '.'
                     });
@@ -1659,9 +1730,12 @@ module.exports = function(RED) {
 
                 // ── tools/list ────────────────────────────────────────────────
                 if (method === 'tools/list') {
-                    const tools = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name));
+                    // Filtered rather than listed-then-refused: a tool the caller cannot use
+                    // should not appear, or the model wastes turns discovering it is barred.
+                    const tools = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name) && gate.allows(t.name));
                     if (adminEnabled && isAdmin(claims)) tools.push(...MCP_TOOLS_ADMIN);
                     for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
+                        if (!gate.allowsValue(t.requiredValue)) { continue; }
                         const s = t.schema;
                         const inputSchema = (s && s.type === 'object')
                             ? s
@@ -1674,7 +1748,8 @@ module.exports = function(RED) {
                 // ── tools/call ────────────────────────────────────────────────
                 if (method === 'tools/call') {
                     node.status({ fill: 'blue', shape: 'dot', text: params.name });
-                    const out = await node.callTool(params.name, params.arguments || {}, claims, { adminEnabled: adminEnabled });
+                    const out = await node.callTool(params.name, params.arguments || {}, claims,
+                        { adminEnabled: adminEnabled, gate: gate });
                     node.status({ fill: out.ok ? 'green' : 'red', shape: 'dot', text: out.ok ? 'ready' : 'error' });
                     if (out.ok && out.content) return respond({ content: out.content });
                     if (out.ok)                return toolOk(out.text);

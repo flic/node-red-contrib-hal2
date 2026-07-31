@@ -27,6 +27,18 @@
         <label for="node-input-timeout"><i class="fa fa-clock-o"></i> Timeout</label>
         <input type="number" id="node-input-timeout" style="width:80px" min="1" value="30"> seconds
     </div>
+    <hr style="margin:12px 0">
+
+    <div class="form-row">
+        <label for="node-input-requiredValue"><i class="fa fa-check"></i> Tool access</label>
+        <input type="text" id="node-input-requiredValue" placeholder="(empty = no extra restriction)" style="width:calc(100% - 105px)">
+    </div>
+    <div class="form-tips" style="margin-left:105px; margin-bottom:8px;">
+        <small>Per-tool access gate. Comma-separated values of the MCP Server node's <b>Required claim</b> (<span id="hal2-mcp-in-claim-name"><code>groups</code></span>) — the caller's claim must contain <b>at least one</b> of them for this tool to be listed or callable. Applied <b>on top of</b> that server's own <b>Required value</b> list, not instead of it: callers must clear both.</small>
+    </div>
+
+    <hr style="margin:12px 0">
+
     <div class="form-row">
         <label for="node-input-exposeClaims" style="width:auto"><i class="fa fa-id-card-o"></i> Expose JWT claims</label>
         <input type="checkbox" id="node-input-exposeClaims" style="width:23px; margin:0">
@@ -78,6 +90,7 @@
             inputSchema : { value: '' },
             topic       : { value: '' },
             timeout     : { value: 30 },
+            requiredValue: { value: '' },
             exposeClaims: { value: false }
         },
         inputs    : 0,
@@ -86,6 +99,16 @@
         paletteLabel: 'MCP In',
         label     : function () { return this.name || this.toolName || 'MCP In'; },
         oneditprepare: function () {
+            // Show the selected server's actual claim name in the Tool access tip — the values
+            // typed here are values *of that claim*, and it is configured on a different node.
+            function updateClaimName() {
+                var server = RED.nodes.node($('#node-input-mcpServer').val());
+                var claim  = (server && server.requiredClaim) || 'groups';
+                $('#hal2-mcp-in-claim-name').html($('<code>').text(claim));
+            }
+            $('#node-input-mcpServer').on('change', updateClaimName);
+            updateClaimName();
+
             if (!this.inputSchema) {
                 $('#node-input-inputSchema').val(JSON.stringify({
                     type: 'object',

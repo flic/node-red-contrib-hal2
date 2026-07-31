@@ -5,7 +5,7 @@
 const fs   = require('fs');
 const path = require('path');
 const {
-    MCP_TOOLS, MCP_TOOLS_ADMIN, TOOL_HARDWARE_REQUIREMENTS
+    MCP_TOOLS, MCP_TOOLS_ADMIN, TOOL_HARDWARE_REQUIREMENTS, toolClass
 } = require('../core/mcp-tools');
 
 function sampleValue(prop) {
@@ -47,7 +47,9 @@ function exampleRequest(tool) {
 }
 
 function section(tool, isAdmin) {
-    let md = `### \`${tool.name}\`${isAdmin ? ' 🔒 (admin)' : ''}\n\n`;
+    const cls = isAdmin ? 'admin' : toolClass(tool.name);
+    const badge = { read: '👁 (read)', write: '✏️ (write)', admin: '🔒 (admin)' }[cls];
+    let md = `### \`${tool.name}\` ${badge}\n\n`;
     md += tool.description.trim() + '\n\n';
     const hw = TOOL_HARDWARE_REQUIREMENTS[tool.name];
     if (hw) md += `> **Requires hardware:** at least one item of type ${hw.map(t => '`' + t + '`').join(', ')} at this location.\n\n`;
@@ -75,6 +77,10 @@ function build() {
     md += '```json\n{ "ok": true, "result": /* tool output */ }\n```\n\n';
     md += 'On failure:\n\n```json\n{ "ok": false, "error": { "code": -32601, "message": "…" } }\n```\n\n';
     md += 'Most tools return a JSON object in `result`. A few admin tools return plain text.\n\n';
+    md += 'Each tool below is tagged 👁 **read**, ✏️ **write** or 🔒 **admin**. Those classes are what the ';
+    md += 'MCP server\'s [access gates](../README.md#access-control) act on, so a token can be allowed to ';
+    md += 'observe the house without being allowed to change it. They are informational here: the hal2Api ';
+    md += 'node is a local flow node and gates only its admin tools, via its own checkbox.\n\n';
     md += '## Tools\n\n' + toc + '\n\n';
     for (const t of MCP_TOOLS)       md += section(t, false);
     md += '## Admin tools\n\n';

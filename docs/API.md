@@ -28,6 +28,8 @@ On failure:
 
 Most tools return a JSON object in `result`. A few admin tools return plain text.
 
+Each tool below is tagged 👁 **read**, ✏️ **write** or 🔒 **admin**. Those classes are what the MCP server's [access gates](../README.md#access-control) act on, so a token can be allowed to observe the house without being allowed to change it. They are informational here: the hal2Api node is a local flow node and gates only its admin tools, via its own checkbox.
+
 ## Tools
 
 - [`get_all_states`](#getallstates)
@@ -47,7 +49,7 @@ Most tools return a JSON object in `result`. A few admin tools return plain text
 - [`get_flow`](#getflow)
 - [`deploy_flow`](#deployflow)
 
-### `get_all_states`
+### `get_all_states` 👁 (read)
 
 Returns the current state of all devices/things connected to this event handler. The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. Use fields="items" for a compact per-device item index (thing_id, thing_name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. Use fields="full" to include all items with item_id, item_name, ha_type and current value. Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. Each device has an alive field (true/false) — if false the device is offline. Only items with a ha_type are included in full mode. Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Pool Sensor" notes: "pool water temperature"). Each device also includes a categories field listing which control categories it falls into (climate, spa, light, fan, cover, scene), derived from its items — use this to identify what kind of device it is at a glance. ha_type accepts both literal item types (e.g. "light", "temperature") and category aliases that expand to their underlying types — e.g. "climate" matches devices with target temperature / ac mode / fan mode / swing mode. Supported aliases: climate, spa, light, fan, cover, scene. Use tag to limit results to devices/items tagged with a specific keyword. Supports optional pagination via offset and limit. The response includes total.
 
@@ -67,7 +69,7 @@ Returns the current state of all devices/things connected to this event handler.
 { "tool": "get_all_states", "args": { "fields": "summary", "ha_type": "…" } }
 ```
 
-### `get_state`
+### `get_state` 👁 (read)
 
 Returns the complete state for a specific device. Use this to fetch full details for one device by its thing_id. Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. Response includes notes and tags on both Thing and Item level when configured. Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. Optionally provide item_id to return only a single item value — the item is a measurement/control within the device, not the device name. If item_id is wrong, the error response lists available_items for that thing so you can pick the right one.
 
@@ -85,7 +87,7 @@ Returns the complete state for a specific device. Use this to fetch full details
 { "tool": "get_state", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `get_history`
+### `get_history` 👁 (read)
 
 Returns logged historical values for a specific device item — temperature and other sensor readings over time, time series for a graph/chart, trends, statistics, activity. Use this whenever the user asks about history, statistics, trends, activity over time, how often something happened, when it last changed, or similar time-based questions. Items that support history are marked with history:true in get_all_states. NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Sjövatten Sensor" contains an item named "Temperatur"), so a thing name will not match an item name. If you know the device but not the exact item, pass ha_type (e.g. ha_type="temperature") and the server resolves the item for you. If a device has several items of the same ha_type (e.g. an indoor and an outdoor temperature), combine ha_type with tag (e.g. tag="ute") to pick the right one — items and their tags are listed in available_items when the match is ambiguous. If item resolution fails, the error response includes available_items (item_id, item_name, ha_type, history) for that thing — pick from it, no full get_all_states dump needed. Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. Time window — use one of these forms: (1) hours: number of hours back from now (default: 24); (2) from + to: explicit ISO datetime strings or epoch ms, e.g. from="2026-05-01T00:00:00" to="2026-05-02T00:00:00"; (3) from only: from that point until now; (4) at: returns the single most recent record at or before that moment — useful for "what was the value at time X?". Use offset and limit to page through large result sets (default limit: 500). The response includes total so you know how many calls are needed. DOWNSAMPLING: for long ranges of a NUMERIC item (e.g. a week of temperature for a graph), set bucket to "minute", "hour" or "day" (or bucket_seconds for a custom interval). The server then aggregates per time bucket and returns a compact "buckets" array — each entry { start, count, avg, min, max } (avg/min/max rounded to numeric_precision; bucket start is local time, e.g. a "day" is local midnight) — instead of all raw samples. Prefer this over fetching raw data and averaging yourself. Buckets with no data are omitted. Aggregation is numeric-only; for non-numeric items (on/off, mode) use bucket="raw" (the default).
 
@@ -115,7 +117,7 @@ Returns logged historical values for a specific device item — temperature and 
 { "tool": "get_history", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `control_device`
+### `control_device` ✏️ (write)
 
 Send a command to a specific device item. Use thing_id and item_id from get_all_states. The item is the control WITHIN the device (e.g. an "On" item), not the device name. If the item_id is wrong or read-only, the error response lists available_items (item_id, item_name, ha_type, read_only) for that thing — pick a controllable one from it.
 
@@ -133,7 +135,7 @@ Send a command to a specific device item. Use thing_id and item_id from get_all_
 { "tool": "control_device", "args": { "thing_id": "…", "item_id": "…", "value": "…" } }
 ```
 
-### `control_fan`
+### `control_fan` ✏️ (write)
 
 Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensitive). Speed 0 = off, 1 = low, 2 = medium, 3 = high. Current speed is available via get_all_states.
 
@@ -153,7 +155,7 @@ Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensi
 { "tool": "control_fan", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `get_scenes`
+### `get_scenes` 👁 (read)
 
 Returns all scenes with their current status (active/inactive) and last_change (ISO 8601 UTC) — when the scene was last activated or deactivated. Use this to answer "is scene X active?", "which scenes are active right now?" or "when was scene Y last activated?".
 
@@ -171,7 +173,7 @@ Returns all scenes with their current status (active/inactive) and last_change (
 { "tool": "get_scenes", "args": { "name": "…" } }
 ```
 
-### `activate_scene`
+### `activate_scene` ✏️ (write)
 
 Activate or deactivate a scene by name or ID. Use get_scenes to find available scenes.
 
@@ -191,7 +193,7 @@ Activate or deactivate a scene by name or ID. Use get_scenes to find available s
 { "tool": "activate_scene", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `control_cover`
+### `control_cover` ✏️ (write)
 
 Control curtains, blinds or shutters. Identify by thing_id or thing_name (partial, case-insensitive). Use position to set an exact opening level, or open/close as a shortcut. Current position is available via get_all_states.
 
@@ -212,7 +214,7 @@ Control curtains, blinds or shutters. Identify by thing_id or thing_name (partia
 { "tool": "control_cover", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `control_spa`
+### `control_spa` ✏️ (write)
 
 Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-insensitive). Current status (water temperature, heater state etc.) is available via get_all_states. All control parameters are optional — only provided ones are sent.
 
@@ -235,7 +237,7 @@ Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-inse
 { "tool": "control_spa", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `control_climate`
+### `control_climate` ✏️ (write)
 
 Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, case-insensitive). Current status is available via get_all_states. All parameters are optional — only provided ones are sent.
 
@@ -258,7 +260,7 @@ Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, cas
 { "tool": "control_climate", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `get_presence`
+### `get_presence` 👁 (read)
 
 Returns presence information for all people/persons tracked in the system. Shows who is home, who is away, and which room each person is in. Use this to answer questions like "is anyone home?", "where is Alice?", "who is home right now?", "when did Bob come home?", "how long has Alice been away?". Each person includes home_since/away_since (ISO timestamp of last change) and home_for_minutes/away_for_minutes (duration in current state). When home, also includes room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up tools (get_history, set_light, etc.) can be called without an extra lookup. A summary block provides aggregated counts and name lists.
 
@@ -272,7 +274,7 @@ _No parameters._
 { "tool": "get_presence", "args": {  } }
 ```
 
-### `get_alerts`
+### `get_alerts` 👁 (read)
 
 Returns water leak sensor status, devices with low battery, and offline devices in one call. Use this to answer "is there a water leak?", "which sensors have low battery?", "are any devices offline?", "what needs attention?" or similar questions about sensor alerts. Each entry always includes last_change (ISO 8601 UTC, null if unknown) — for water sensors this is when the wet/dry state changed, for low-battery items when the level last changed, and for offline devices when they went offline.
 
@@ -288,7 +290,7 @@ Returns water leak sensor status, devices with low battery, and offline devices 
 { "tool": "get_alerts", "args": { "battery_threshold": 0 } }
 ```
 
-### `set_light`
+### `set_light` ✏️ (write)
 
 Control a specific light or lamp. Identify the device by thing_id OR thing_name. thing_name supports partial, case-insensitive match against the thing name OR against item labels (the label field in get_all_states items). Labels are friendly names assigned per-device, e.g. a double switch named "Kitchen Double Switch" may have items labelled "Kitchen Ceiling Light" and "Kitchen Counter Light" — searching "counter" will target only that relay. You can turn it on/off and/or set brightness/color_temp/color in one call.
 
@@ -311,7 +313,7 @@ Control a specific light or lamp. Identify the device by thing_id OR thing_name.
 { "tool": "set_light", "args": { "thing_id": "…", "thing_name": "…" } }
 ```
 
-### `analyze_patterns`
+### `analyze_patterns` 👁 (read)
 
 Analyzes the history database to detect recurring behavioral patterns — e.g. "Living Room Light turns ON around 07:30, 85% consistent". Detects state transitions (actual changes), groups them into time-of-day windows, and returns suggestions sorted by consistency score. Also reports stale items (no activity in 30+ days). By default, state changes caused by hal2 itself are excluded so existing automations are not re-suggested as patterns. Requires history to be enabled on the event handler. Use when the user asks about automating routines or finding patterns in device usage.
 

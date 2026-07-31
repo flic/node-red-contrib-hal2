@@ -337,10 +337,39 @@ const MCP_TOOLS_ADMIN = [
 
 const MCP_ADMIN_TOOL_NAMES = new Set(MCP_TOOLS_ADMIN.map(t => t.name));
 
+// Which built-in tools only observe, and which change the house. The split cannot be
+// derived from the dispatch functions in eventhandler.js — get_scenes and get_alerts are
+// read-only but are handled inside dispatchControlTools — so it has to be stated here.
+const MCP_READ_TOOL_NAMES = new Set([
+    'get_all_states', 'get_state', 'get_history',
+    'get_scenes', 'get_presence', 'get_alerts', 'analyze_patterns'
+]);
+
+const MCP_WRITE_TOOL_NAMES = new Set([
+    'set_light',
+    // control_light is an undocumented alias of set_light accepted by the dispatcher but
+    // absent from MCP_TOOLS. Leaving it out would be a clean bypass of the write gate.
+    'control_light',
+    'control_device', 'control_fan', 'control_cover', 'control_spa', 'control_climate',
+    'activate_scene'
+]);
+
+// Which gate a built-in tool answers to. Anything unclassified counts as a write, so a tool
+// added to the catalog without being classified is held to the stricter gate rather than
+// slipping through ungated; test/mcp-tools.test.js turns the omission into a build failure.
+function toolClass(name) {
+    if (MCP_ADMIN_TOOL_NAMES.has(name)) { return 'admin'; }
+    if (MCP_READ_TOOL_NAMES.has(name))  { return 'read'; }
+    return 'write';
+}
+
 module.exports = {
     MCP_TOOLS,
     MCP_TOOLS_ADMIN,
     MCP_ADMIN_TOOL_NAMES,
+    MCP_READ_TOOL_NAMES,
+    MCP_WRITE_TOOL_NAMES,
+    toolClass,
     TOOL_HARDWARE_REQUIREMENTS,
     HA_TYPE_GROUPS,
     expandHaTypeFilter,

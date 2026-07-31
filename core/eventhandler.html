@@ -153,8 +153,40 @@
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
+                    <label for="node-config-input-localDebugGroups" style="width:150px"><i class="fa fa-users"></i> Debug groups</label>
+                    <input type="text" id="node-config-input-localDebugGroups" placeholder="admin" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Comma-separated <code>groups</code> claim granted to the debug token's user (default <code>admin</code>), so the access gates below can be exercised locally without a real identity provider. Only meaningful when the access claim below is <code>groups</code>.</small>
+                </div>
+                <div class="form-row">
                     <label for="node-config-input-tokenCacheTTL" style="width:150px"><i class="fa fa-clock-o"></i> Token cache TTL</label>
                     <input type="number" id="node-config-input-tokenCacheTTL" style="width:80px" min="30" value="300"> seconds
+                </div>
+                <hr style="margin:12px 0">
+
+                <div class="form-row">
+                    <label for="node-config-input-adminRequiredClaim" style="width:150px"><i class="fa fa-user-secret"></i> Access claim</label>
+                    <input type="text" id="node-config-input-adminRequiredClaim" placeholder="groups" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-readRequiredValue" style="width:150px"><i class="fa fa-eye"></i> Read tools</label>
+                    <input type="text" id="node-config-input-readRequiredValue" placeholder="(empty = any authenticated user)" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-row">
+                    <label for="node-config-input-writeRequiredValue" style="width:150px"><i class="fa fa-bolt"></i> Write tools</label>
+                    <input type="text" id="node-config-input-writeRequiredValue" placeholder="(empty = same as read)" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>One claim (a dotted path such as <code>realm_access.roles</code> reaches a nested one),
+                    one comma-separated <b>any-of</b> list per class, combined with <b>AND</b>.
+                    <b>Read tools</b> observe (<code>get_state</code>, <code>get_history</code>, <code>get_presence</code>…);
+                    <b>write tools</b> change the house (<code>set_light</code>, <code>control_cover</code>,
+                    <code>activate_scene</code>…). A write also has to clear the read list, so
+                    read&nbsp;=&nbsp;<code>family</code> and write&nbsp;=&nbsp;<code>ops</code> lets the family look
+                    but only ops act. Both empty is the default and leaves every tool open to any authenticated
+                    caller. Applies to the MCP endpoint only — the hal2Api node is a local flow node and is not
+                    gated by these.</small>
                 </div>
                 <hr style="margin:12px 0">
 
@@ -173,20 +205,19 @@
                         <input type="number" id="node-config-input-adminPort" style="width:80px" min="1" max="65535" value="1880">
                     </div>
                     <div class="form-row">
-                        <label for="node-config-input-adminRequiredClaim" style="width:150px"><i class="fa fa-user-secret"></i> Required claim</label>
-                        <input type="text" id="node-config-input-adminRequiredClaim" placeholder="groups" style="width:calc(100% - 185px)">
-                    </div>
-                    <div class="form-row">
-                        <label for="node-config-input-adminRequiredValue" style="width:150px"><i class="fa fa-check"></i> Required value</label>
+                        <label for="node-config-input-adminRequiredValue" style="width:150px"><i class="fa fa-check"></i> Admin tools</label>
                         <input type="text" id="node-config-input-adminRequiredValue" placeholder="admin" style="width:calc(100% - 185px)">
                     </div>
                     <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                        <small>The JWT claim (default <code>groups</code>) must contain the value (default <code>admin</code>) for the admin tools to be callable. Leave the value empty to allow all authenticated users.</small>
+                        <small>A comma-separated any-of list against the <b>Access claim</b> above, defaulting to
+                        <code>admin</code>. Leave it empty to allow any authenticated user. Unlike the read and write
+                        lists this one also guards the hal2Api node, which must present claims to reach admin tools
+                        at all.</small>
                     </div>
                     <div class="form-row" style="background:#fff8e1; border:1px solid #ffe082; border-radius:4px; padding:8px 12px; margin-top:4px;">
                         <i class="fa fa-info-circle" style="color:#f9a825;"></i>
                         <span style="font-size:12px; margin-left:6px;">
-                            Enabled admin tools: <strong>get_flows</strong>, <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
+                            Enabled admin tools: <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
                             These call the Node-RED admin API on localhost:&lt;port&gt;.
                         </span>
                     </div>
@@ -232,8 +263,10 @@
     <li><strong>MCP server</strong>: an embedded, OAuth-protected <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a>
     server that exposes the device tool catalog to AI assistants such as Claude. Works with any
     standard OIDC identity provider (endpoints auto-discovered), carries a per-location identifier,
-    and supports a local debug token. Admin tools (<code>get_flow</code>/<code>deploy_flow</code>) are
-    opt-in.</li>
+    and supports a local debug token. Callers can be gated per tool class — one claim, an any-of
+    value list each for read tools, write tools and the opt-in admin tools
+    (<code>get_flow</code>/<code>deploy_flow</code>) — so a token may be allowed to observe the house
+    without being allowed to change it.</li>
     <li><strong>Heartbeat</strong>: per-thing liveness tracking surfaced as the <code>alive</code>
     flag in <code>get_all_states</code>.</li>
 
@@ -295,8 +328,11 @@
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },
             adminPort:         { value: 1880 },
+            localDebugGroups:  { value: 'admin' },
             adminRequiredClaim:{ value: 'groups' },
             adminRequiredValue:{ value: 'admin' },
+            readRequiredValue: { value: '' },
+            writeRequiredValue:{ value: '' },
             // Shared function libraries
             ingressLibrary:    { value: [], required: false },
             egressLibrary:     { value: [], required: false }

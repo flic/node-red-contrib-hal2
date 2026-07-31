@@ -1,12 +1,18 @@
 const crypto = require('crypto');
 const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
-const { claimSatisfied } = require('../lib/common');
+const { handleRpc } = require('../lib/mcp-rpc');
 
-function removeRoute(RED, path) {
+// Remove only THIS node's registration for the path. Several standalone servers may share a
+// path when hostname filtering splits them by Host header, so matching on path alone would
+// let a partial deploy of one node silently strip its siblings' routes. Ownership is read off
+// the tagged hostFilter middleware each chain starts with; untagged layers are left alone.
+function removeRoute(RED, path, ownerId) {
     if (!RED.httpNode || !RED.httpNode._router) return;
     RED.httpNode._router.stack = RED.httpNode._router.stack.filter(layer => {
         if (!layer.route) return true;
-        return !(layer.route.path === path && layer.route.methods['post']);
+        if (layer.route.path !== path || !layer.route.methods['post']) return true;
+        return !(layer.route.stack || []).some(l =>
+            l.handle && l.handle._mcpOwner !== undefined && l.handle._mcpOwner === ownerId);
     });
 }
 
@@ -34,11 +40,11 @@ module.exports = function (RED) {
         // Tools appear on the shared /mcp endpoint alongside built-in tools.
 
         if (config.mode === 'embedded') {
-            node.registerMCPTool = (name, description, schema, timeoutSec) =>
-                eventHandler.registerMCPTool(name, description, schema, timeoutSec);
+            node.registerMCPTool = (name, description, schema, timeoutSec, requiredValue, ownerId) =>
+                eventHandler.registerMCPTool(name, description, schema, timeoutSec, requiredValue, ownerId);
 
-            node.unregisterMCPTool = name =>
-                eventHandler.unregisterMCPTool(name);
+            node.unregisterMCPTool = (name, ownerId) =>
+                eventHandler.unregisterMCPTool(name, ownerId);
 
             node.resolveMCPCall = (callId, content) =>
                 eventHandler.resolveMCPCall(callId, content);
@@ -62,14 +68,28 @@ module.exports = function (RED) {
         // ── Standalone mode ───────────────────────────────────────────────────
         // Registers its own POST /mcp/<path> route. Shares auth with EventHandler.
 
-        node.mcpRegisteredTools = {};
-        node.mcpPendingCalls    = {};
+        // Null-prototype: names arrive from remote callers, and a plain {} resolves
+        // "__proto__" or "constructor" through the prototype chain past the unknown-tool check.
+        node.mcpRegisteredTools = Object.create(null);
+        node.mcpPendingCalls    = Object.create(null);
 
-        node.registerMCPTool = function (name, description, schema, timeoutSec) {
-            node.mcpRegisteredTools[name] = { description, schema, timeoutMs: timeoutSec * 1000 };
+        node.registerMCPTool = function (name, description, schema, timeoutSec, requiredValue, ownerId) {
+            const existing = node.mcpRegisteredTools[name];
+            if (existing && existing.ownerId !== ownerId) {
+                node.warn('MCP tool "' + name + '" is registered by more than one hal2MCPIn node on this '
+                    + 'server — each call will run every one of those flows, with unpredictable results. '
+                    + 'Rename the tools so each name is unique.');
+            }
+            node.mcpRegisteredTools[name] = {
+                description, schema, timeoutMs: timeoutSec * 1000,
+                requiredValue: requiredValue || '', ownerId
+            };
         };
 
-        node.unregisterMCPTool = function (name) {
+        node.unregisterMCPTool = function (name, ownerId) {
+            const entry = node.mcpRegisteredTools[name];
+            if (!entry) { return; }
+            if (ownerId !== undefined && entry.ownerId !== undefined && entry.ownerId !== ownerId) { return; }
             delete node.mcpRegisteredTools[name];
         };
 
@@ -94,8 +114,6 @@ module.exports = function (RED) {
         // Default '' (allow all) only when never set. Empty string stays "any authenticated user".
         const requiredValue = (config.requiredValue === undefined ? '' : config.requiredValue).trim();
 
-        const hasAccess = claims => claimSatisfied(claims, requiredClaim, requiredValue);
-
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 
         // Same hardening as the EventHandler's /mcp route (see lib/httpGuards.js).
@@ -105,88 +123,42 @@ module.exports = function (RED) {
         // shares its hostname split. Empty (feature off, or single-host) → matches on path only.
         const expectedHost = eventHandler.mcpExpectedHost || '';
 
-        RED.httpNode.post(mcpPath, hostFilter(expectedHost), rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
+        // The whole decision surface — initialize, tools/list, tools/call, ping, and the
+        // gates over them — lives in lib/mcp-rpc.js, shared with node-red-contrib-mcp-server
+        // and unit-tested there. This handler is glue: authenticate, dispatch, write.
+        const rpcDeps = {
+            serverName, serverVersion: '1.0.0', instructions,
+            requiredClaim, requiredValue,
+            // A standalone server exposes only flow-defined tools; the built-in catalog and
+            // its admin tools belong to the Event handler's embedded endpoint.
+            adminToolsEnabled: false,
+            adminTools: { TOOLS: [], TOOL_NAMES: new Set(), callTool: async () => '' },
+            tools: node.mcpRegisteredTools,
+            // Hands the call to the flow and waits for the matching hal2MCPOut, or times out.
+            callTool: (name, timeoutMs, args, claims) => new Promise((resolve, reject) => {
+                const callId = crypto.randomBytes(16).toString('hex');
+                const timer  = setTimeout(() => {
+                    delete node.mcpPendingCalls[callId];
+                    reject(new Error('timeout'));
+                }, timeoutMs);
+                node.mcpPendingCalls[callId] = { resolve, reject, timer };
+                node.emit('mcp_tool_' + name, { args, _mcpCallId: callId, _mcpClaims: claims });
+            }),
+            status: s => node.status(s)
+        };
+
+        const guard = hostFilter(expectedHost);
+        // Tag the first middleware so removeRoute can tell this node's chain from a sibling's.
+        guard._mcpOwner = node.id;
+
+        RED.httpNode.post(mcpPath, guard, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
             const claims = await eventHandler.requireBearer(req, res);
             if (!claims) return;
 
-            const allowed = hasAccess(claims);
-
-            const body   = req.body || {};
-            const id     = body.id     !== undefined ? body.id : null;
-            const method = body.method || null;
-            const params = body.params || {};
-
-            const respond = result => res.status(200).json({ jsonrpc: '2.0', id, result });
-            const rpcErr  = (c, m)  => res.status(200).json({ jsonrpc: '2.0', id, error: { code: c, message: m } });
-            const toolOk  = text    => respond({ content: [{ type: 'text', text }] });
-
-            if (method === 'initialize') {
-                node.status({ fill: 'green', shape: 'dot', text: 'connected' });
-                res.set('Cache-Control', 'no-store');
-                // Don't leak tool names to callers who lack the required claim.
-                const toolNames = allowed ? Object.keys(node.mcpRegisteredTools).join(', ') : '';
-                return respond({
-                    protocolVersion : '2024-11-05',
-                    capabilities    : { tools: {} },
-                    serverInfo      : { name: serverName, version: '1.0.0' },
-                    instructions    : (instructions ? instructions + ' ' : '') +
-                                      (toolNames ? 'Available tools: ' + toolNames + '.' : '')
-                });
-            }
-
-            if (method === 'notifications/initialized') {
-                return res.status(204).send('');
-            }
-
-            if (method === 'tools/list') {
-                if (!allowed) return respond({ tools: [] });
-                const tools = [];
-                for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
-                    const s = t.schema;
-                    const inputSchema = (s && s.type === 'object') ? s : { type: 'object', properties: s || {} };
-                    tools.push({ name, description: t.description, inputSchema });
-                }
-                return respond({ tools });
-            }
-
-            if (method === 'tools/call') {
-                // Return the denial as a tool result (isError) rather than a JSON-RPC protocol
-                // error — clients surface a result's text to the model, but collapse a protocol
-                // error into a generic "tool execution failed" with no reason.
-                if (!allowed) return respond({
-                    content: [{ type: 'text', text: 'Access denied: your account lacks the required permission to use this server.' }],
-                    isError: true
-                });
-                const toolName = params.name;
-                const args     = params.arguments || {};
-                node.status({ fill: 'blue', shape: 'dot', text: toolName });
-
-                if (node.mcpRegisteredTools[toolName]) {
-                    try {
-                        const callId    = crypto.randomBytes(16).toString('hex');
-                        const timeoutMs = node.mcpRegisteredTools[toolName].timeoutMs || 30000;
-                        const result    = await new Promise((resolve, reject) => {
-                            const timer = setTimeout(() => {
-                                delete node.mcpPendingCalls[callId];
-                                reject(new Error('timeout'));
-                            }, timeoutMs);
-                            node.mcpPendingCalls[callId] = { resolve, reject, timer };
-                            node.emit('mcp_tool_' + toolName, { args, _mcpCallId: callId, _mcpClaims: claims });
-                        });
-                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                        return Array.isArray(result)
-                            ? respond({ content: result })
-                            : toolOk(result);
-                    } catch (e) {
-                        node.status({ fill: 'red', shape: 'dot', text: 'timeout' });
-                        return toolOk(JSON.stringify({ error: e.message === 'timeout' ? 'Tool timed out: ' + toolName : e.message }));
-                    }
-                }
-
-                return rpcErr(-32601, 'Unknown tool: ' + toolName);
-            }
-
-            return rpcErr(-32601, 'Unknown method: ' + (method || 'null'));
+            const out = await handleRpc(req.body, claims, rpcDeps);
+            if (out.headers) res.set(out.headers);
+            res.status(out.status);
+            return out.body !== undefined ? res.json(out.body) : res.send('');
         });
 
         node.status({ fill: 'green', shape: 'dot', text: mcpPath });
@@ -197,7 +169,7 @@ module.exports = function (RED) {
                 pending.reject(new Error('MCP server closing'));
             }
             node.mcpPendingCalls = {};
-            removeRoute(RED, mcpPath);
+            removeRoute(RED, mcpPath, node.id);
         });
     }
 
