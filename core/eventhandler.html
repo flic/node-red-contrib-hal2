@@ -391,7 +391,7 @@
                     var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
                     var rowType    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowValue   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
-                    var rowValueTip= $('<div/>', { style: "margin-top:4px; margin-left:115px; color:#888; font-size:12px;" }).appendTo(rowDetails);
+                    var rowValueTip= $('<div/>', { style: "margin-top:4px; margin-left:115px; margin-right:10px; color:#888; font-size:12px; white-space:normal; line-height:1.4;" }).appendTo(rowDetails);
                     var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowNotes   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
 
@@ -493,7 +493,7 @@
                         message += '<br><b>Value</b><br>';
                         message += fnNow
                             ? window.hal2GroupAggregate.label(fnNow) +
-                              '<br>Readable by Value, Gate, Event and Bayes nodes.<br>'
+                              '<br>Readable by Value, Gate, Event and Bayes nodes. Offline members are left out.<br>'
                             : 'No value — this group can be commanded but not read.<br>';
 
                         message += '<br><b>Used in</b>';
@@ -551,9 +551,10 @@
                     });
                     haTypeProperty.val(currentHaType);
 
-                    // How many members carry state. A command-only group has nothing to
-                    // aggregate, so the field is offered but disabled rather than hidden —
-                    // the empty select would otherwise look like a bug.
+                    // How many members currently carry state. Only ever reported, never used
+                    // to gate the field: a group is created before anything joins it, so
+                    // disabling the choice until it has members would make it unreachable at
+                    // exactly the moment you want to set it.
                     var stateMembers = (function() {
                         var n = 0;
                         var gid = idProperty.val();
@@ -595,17 +596,13 @@
                     valueProperty.val(window.hal2GroupAggregate.isFunction(group.aggregate) ? group.aggregate : '');
 
                     var syncValueRow = function() {
-                        if (stateMembers === 0) {
-                            valueProperty.val('').prop('disabled', true);
-                            rowValueTip.text('No members with a state — a command-only group has nothing to aggregate.');
-                            return;
-                        }
-                        valueProperty.prop('disabled', false);
                         if (!valueProperty.val()) {
                             rowValueTip.text('Without a value the group can only be commanded, not read or watched.');
+                        } else if (stateMembers === 0) {
+                            rowValueTip.text('No members with a state yet — add some from the Thing editor.');
                         } else {
                             rowValueTip.text('Computed from ' + stateMembers + ' member' + (stateMembers === 1 ? '' : 's') +
-                                ' with a state; members whose thing is offline are left out.');
+                                ' with a state. Offline members are left out.');
                         }
                     };
                     valueProperty.change(syncValueRow);

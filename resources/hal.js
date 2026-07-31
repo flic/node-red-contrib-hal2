@@ -81,8 +81,23 @@ function halGetGroups(RED, eventHandlerId, filter) {
     // that can be read by Value/Gate/Event/Bayes. Expressed once here so every node that
     // offers a group as a source applies the same rule. Legacy hal2Group nodes never have
     // one, so they are command-only until migrated.
+    // A specific handler when one is given and resolves; otherwise every handler in the
+    // flow. Nodes that only gained an Event handler field recently (Value, Gate) carry an
+    // empty one on existing instances, and a group id is unique across handlers anyway —
+    // returning nothing there would silently offer an empty list instead of the real groups.
     var eh = eventHandlerId ? RED.nodes.node(eventHandlerId) : null;
-    var groupsList = (eh && Array.isArray(eh.groups)) ? eh.groups.slice() : [];
+    var groupsList = [];
+    if (eh && Array.isArray(eh.groups)) {
+        groupsList = eh.groups.slice();
+    } else if (typeof RED.nodes.eachConfig === 'function') {
+        // eachConfig, not filterNodes: the latter only walks flow nodes, and an Event
+        // handler is a config node — it would find nothing at all.
+        RED.nodes.eachConfig(function (cfg) {
+            if (cfg && cfg.type === 'hal2EventHandler' && Array.isArray(cfg.groups)) {
+                groupsList = groupsList.concat(cfg.groups);
+            }
+        });
+    }
 
     var seen = {};
     for (var i in groupsList) { seen[groupsList[i].id] = true; }
@@ -97,8 +112,10 @@ function halGetGroups(RED, eventHandlerId, filter) {
     }
 
     if (filter === 'value') {
+        var ga = (typeof window !== 'undefined') && window.hal2GroupAggregate;
         groupsList = groupsList.filter(function(x) {
-            return x && x.aggregate && window.hal2GroupAggregate.isFunction(x.aggregate);
+            if (!x || !x.aggregate) { return false; }
+            return ga ? ga.isFunction(x.aggregate) : true;
         });
     }
 

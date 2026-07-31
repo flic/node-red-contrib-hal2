@@ -221,6 +221,9 @@
                     $("#div-type").hide();
                     $("#node-input-action").val('get');
                     $("#node-input-thing").children().remove();
+                    if (groupsList.length === 0) {
+                        $("<option value=''>- no groups with a value -</option>").appendTo("#node-input-thing");
+                    }
                     for (var d in groupsList) {
                         $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>")
                             .appendTo("#node-input-thing");
@@ -234,7 +237,12 @@
                     $("#thing-filter-button").show();
                     $("#node-input-thing").children().remove();
                     $("#thing-filter").trigger('change');
-                    if (savedTypeSel !== 'hal2Group') { $("#node-input-thing").val(savedThing); }
+                    if (savedTypeSel !== 'hal2Group' && savedThing) {
+                        $("#node-input-thing").val(savedThing);
+                    }
+                    if ($("#node-input-thing").val() === null && thingsList.length) {
+                        $("#node-input-thing").val(thingsList[0].id);
+                    }
                 }
                 $("#node-input-action").prop('disabled', group);
                 $("#node-input-thing").trigger('change');
@@ -298,7 +306,9 @@
 
                 //get all items and sort them alphabetically
                 let thing = RED.nodes.node($("#node-input-thing").val());
+                if (!thing) { $("#row-notes").hide(); return; }
                 let thingType = RED.nodes.node(thing.thingType);
+                if (!thingType) { $("#row-notes").hide(); return; }
                 // Show notes
                 if (thing.notes) {
                     $("#row-notes").show();
@@ -392,8 +402,9 @@
                     var thingType = RED.nodes.node($("#node-input-thingType").val());
                 } else {
                     var thing = RED.nodes.node($("#node-input-thing").val());
-                    var thingType = RED.nodes.node(thing.thingType);
+                    var thingType = thing ? RED.nodes.node(thing.thingType) : null;
                 }
+                if (!thingType || !thingType.items) { updateHistoryVisibility(); return; }
                 var item = $("#node-input-item").val();
                 for (let d in thingType.items) {
                     if (thingType.items[d].id == item) {

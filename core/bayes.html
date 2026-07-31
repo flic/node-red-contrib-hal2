@@ -414,7 +414,7 @@
                         groupSel.append($("<option></option>").val(g.id).text(g.name));
                     });
                     if (!groupsList.length) {
-                        groupSel.append($("<option></option>").val('').text('no groups with a value'));
+                        groupSel.append($("<option></option>").val('').text('- no groups with a value -'));
                     }
                     groupSel.val(step.group || (groupsList[0] && groupsList[0].id) || '');
                     var propWrap = $('<span/>', { class: "bs-prop-wrap",

@@ -53,7 +53,7 @@ Give a group a **Value** and it stops being write-only: it gains a state of its 
 Four rules decide what goes into the calculation:
 
 - **Only members with a state.** A command-only Item has nothing to contribute, and the Value field is disabled for a group that has no stateful members at all.
-- **Only members whose Thing is alive.** A device that has dropped off the network is left out rather than voting with the value it had before it went quiet — so `any true` goes false when the last reachable lamp disappears, instead of reporting a light that may well be dark.
+- **No offline members.** A device that has dropped off the network is left out rather than voting with the value it had before it went quiet — so `any true` goes false when the last reachable lamp disappears, instead of reporting a light that may well be dark.
 - **Only values of the right kind.** The numeric functions skip anything that is not a number (a boolean member never counts as 1), and the boolean functions are strict about `true` / `false` — hal2 normalises `ON`/`1` in the ThingType's ingress function, so by the time a state reaches a group it is a real boolean or it is not one at all.
 - **Nothing eligible means no value.** A group with no live member reporting reads as *undefined*, not `0` or `false`, so a silent group can never be mistaken for a real "off" in a Gate.
 

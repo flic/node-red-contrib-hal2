@@ -248,6 +248,11 @@
                         $("#thing-filter-button").hide();
                         $("#thing-filter-div").hide();
                         $("#node-input-thing").children().remove();
+                        if (groupsList.length === 0) {
+                            // Say why rather than showing an empty box: a group is only
+                            // offered here once it has been given a Value.
+                            $("<option value=''>- no groups with a value -</option>").appendTo("#node-input-thing");
+                        }
                         for (let d in groupsList) {
                             $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>").appendTo("#node-input-thing");
                         }
