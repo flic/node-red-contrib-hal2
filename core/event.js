@@ -130,6 +130,16 @@ module.exports = function(RED) {
             if (node.topic != '') {
                 msg.topic = node.topic;
             }
+            // A group is not a node: its context travels on the event itself, so pass it
+            // through whatever the output type is rather than looking anything up.
+            if (node.typeSel === 'hal2Group') {
+                if (event && event.group)  { msg.group  = event.group; }
+                if (event && event.member) { msg.member = event.member; }
+                node.send(msg);
+                node.debug('Event: Group '+thingid);
+                showState();
+                return;
+            }
             const thing = RED.nodes.getNode(thingid);
             if (thing && thing.thingType && thing.thingType.items) {
                 const itm = thing.thingType.items.find(i => i.id === itemid);
@@ -150,8 +160,8 @@ module.exports = function(RED) {
 
         if (node.eventHandler) {
             node.listener = function(thingtypeid, thingid, itemid, event) {
-                // For group sources the engine re-emits with the real member item id,
-                // so the item filter is bypassed — any member change triggers the event.
+                // A group emits under its own id with its own aggregated state, so the item
+                // filter does not apply — the group is the item.
                 if (node.typeSel != 'hal2Group' && itemid != node.item) { return; }
                 if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }

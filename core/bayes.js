@@ -52,23 +52,26 @@ module.exports = function(RED) {
                     ? sec(r.halfLife, 1200)
                     : scale.fadeSeconds(r.fade) * 1000;
                 const steps = (r.steps || []).map((s, si) => {
-                    const src = ['thing', 'flow', 'global', 'env', 'time'].indexOf(s.src) >= 0 ? s.src : 'thing';
+                    const src = ['thing', 'group', 'flow', 'global', 'env', 'time'].indexOf(s.src) >= 0 ? s.src : 'thing';
                     let pattern = ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is';
                     // Polled sources have no change event, so an edge on them could only be
-                    // sampled on the tick and would be missed outright between two ticks.
-                    if (src !== 'thing' && (pattern === 'cycle' || pattern === 'becomes')) {
+                    // sampled on the tick and would be missed outright between two ticks. A
+                    // group is not polled — it emits on the bus exactly like a thing — so it
+                    // keeps every pattern.
+                    const polled = src !== 'thing' && src !== 'group';
+                    if (polled && (pattern === 'cycle' || pattern === 'becomes')) {
                         node.warn('A ' + src + ' step cannot detect changes — treating it as a condition');
                         pattern = 'is';
                     }
                     // Nothing can drive a polled source at the head of a rule: there is no
                     // subscription to wake it and no previous step to be "soon" after, so
                     // 'isOrBecomes' there would never fire at all.
-                    if (src !== 'thing' && si === 0 && pattern === 'isOrBecomes') { pattern = 'is'; }
+                    if (polled && si === 0 && pattern === 'isOrBecomes') { pattern = 'is'; }
                     // Waiting for the clock to cross into a window is never useful, so a time
                     // step is always a plain condition wherever it sits.
                     if (src === 'time') { pattern = 'is'; }
                     return {
-                        src, thing: s.thing, item: s.item, prop: s.prop,
+                        src, thing: s.thing, item: s.item, group: s.group, prop: s.prop,
                         start: s.start, end: s.end,
                         days: Array.isArray(s.days) ? s.days.map(Number) : undefined,
                         operator: s.operator, value: s.value, valueType: s.valueType || 'str',
@@ -78,6 +81,7 @@ module.exports = function(RED) {
                     };
                 }).filter(s => {
                     if (s.src === 'thing') { return s.thing && s.item; }
+                    if (s.src === 'group') { return !!s.group; }
                     if (s.src === 'time')  { return bayesTime.parseHHMM(s.start) !== null &&
                                                     bayesTime.parseHHMM(s.end) !== null; }
                     return s.prop;
@@ -113,6 +117,13 @@ module.exports = function(RED) {
         // why they are restricted to condition steps (see the pattern guard above).
         function resolveState(step) {
             switch (step.src) {
+                // The group engine keeps the aggregate; undefined when no live member is
+                // reporting, which the estimator already treats as "no evidence".
+                case 'group': {
+                    const rec = node.eventHandler && typeof node.eventHandler.getGroupState === 'function'
+                        ? node.eventHandler.getGroupState(step.group) : null;
+                    return rec ? rec.state : undefined;
+                }
                 case 'flow':   return node.context().flow.get(step.prop);
                 case 'global': return node.context().global.get(step.prop);
                 case 'env':    return process.env[step.prop];
@@ -162,9 +173,14 @@ module.exports = function(RED) {
         const byThing = {};
         cfg.rules.forEach(rule => {
             rule.steps.forEach((step, i) => {
-                if (step.src !== 'thing') { return; }   // polled sources are read, not subscribed
-                const t = (byThing[step.thing] = byThing[step.thing] || {});
-                (t[step.item] = t[step.item] || []).push({ ruleId: rule.id, stepIndex: i });
+                // Polled sources are read, not subscribed. A group emits on the bus under its
+                // own id and carries one value, so it subscribes exactly like a thing whose
+                // item id happens to be the group id.
+                if (step.src !== 'thing' && step.src !== 'group') { return; }
+                const id   = step.src === 'group' ? step.group : step.thing;
+                const item = step.src === 'group' ? step.group : step.item;
+                const t = (byThing[id] = byThing[id] || {});
+                (t[item] = t[item] || []).push({ ruleId: rule.id, stepIndex: i });
             });
         });
         const subscriptions = [];

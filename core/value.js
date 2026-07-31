@@ -1,6 +1,8 @@
 module.exports = function(RED) {
     function hal2Value(config) {
         RED.nodes.createNode(this,config);
+        this.eventHandler = RED.nodes.getNode(config.eventHandler);
+        this.typeSel = config.typeSel;
         this.action = config.action;
         this.thing = config.thing;
         this.thingType = config.thingType;
@@ -61,7 +63,46 @@ module.exports = function(RED) {
             }
         }
 
+        // A group's value is computed by the Event handler's group engine from its members;
+        // there is nothing to write to, so this path is read-only (use hal2Action to command
+        // a group). `thing` carries the group id, exactly as hal2Event stores one.
+        function sendGroupValue(msg) {
+            if (!node.eventHandler || typeof node.eventHandler.getGroupState !== 'function') {
+                node.error('No event handler configured — a group source needs one');
+                return;
+            }
+            var rec = node.eventHandler.getGroupState(node.thing);
+            if (!rec) {
+                node.error('Group '+node.thing+' has no value — give it one on the Event handler\'s Groups tab');
+                return;
+            }
+            // No live member has a state: nothing to report, which is the same silence a
+            // thing item with no value gives rather than a made-up 0 or false.
+            if (rec.state === undefined) {
+                node.status({ fill:'grey', shape:'ring', text:'no value ('+rec.live+'/'+rec.members+' live)' });
+                return;
+            }
+            node.status({ fill:'green', shape:'dot',
+                          text: rec.state + ' ('+rec.live+'/'+rec.members+')' });
+
+            var oProp = RED.util.normalisePropertyExpression(node.outputValue);
+            switch (node.outputType) {
+                case 'flow':   node.context().flow.set(oProp[0], rec.state); break;
+                case 'global': node.context().global.set(oProp[0], rec.state); break;
+                default:       RED.util.setMessageProperty(msg, node.outputValue, rec.state, true);
+            }
+            if (node.outputInfo) {
+                msg.group = {
+                    id: node.thing, name: rec.name, function: rec.fn,
+                    members: rec.members, live: rec.live,
+                    last_update: rec.last_update, last_change: rec.last_change
+                };
+            }
+            node.send(msg);
+        }
+
         node.on('input', function(msg) {
+            if (node.typeSel === 'hal2Group') { return sendGroupValue(msg); }
             var thing;
             if (node.thing == '0') {
                 if ((typeof msg.thing !== 'undefined') && (typeof msg.thing.id !== 'undefined')) {

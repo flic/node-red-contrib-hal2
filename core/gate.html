@@ -6,6 +6,10 @@
         <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
     <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
         <ol id="node-input-rule-container"</ol>
     </div>
     <div class="form-row">
@@ -24,7 +28,9 @@
 <script type="text/x-red" data-help-name="hal2Gate">
     <p>The Gate node is used to redirect the flow depending on if certain <i>Item</i> conditions are met.</p>
     <li><strong>Name</strong>: Node name.</li> 
-    <li><strong>Rules</strong>: Add one or more conditions to be met.</li>
+    <li><strong>Event handler</strong>: Only needed when a rule reads a <i>Group</i>; it is where group values live.</li>
+    <li><strong>Rules</strong>: Add one or more conditions to be met. A rule's source can be a Thing, a Thing set by <code>msg.thing.id</code>, or a <i>Group</i> that has been given a <b>Value</b> on the Event handler's Groups tab. A group carries one aggregated value, so it needs no Item.</li>
+    <li><strong>No value</strong>: A rule whose source cannot be read — a missing Thing, or a group where no live member is reporting — does not match, rather than comparing against a stale or invented value.</li>
     <li><strong>TSU</strong>: Time since last update (in seconds)</li>
     <li><strong>TSC</strong>: Time since last change (in seconds)</li>
     <li><strong>Set <code>msg.payload</code> to result</strong>: Sends true or false.</li>
@@ -36,6 +42,9 @@
         color: '#b3b3ff',
         defaults: {
             name:       {},
+            // Optional: only a Group rule needs it, and requiring it would flag every
+            // existing Gate node as invalid.
+            eventHandler: { value: "", type: "hal2EventHandler", required: false },
             rules:      {},
             checkall:   { value: "true" },
             if:         {},
@@ -58,8 +67,13 @@
             ]);
 
             var thingsList = halGetThings(RED,'status');
+            var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
+            // Membership test for the rule rows: a group id is not a node, so this is the
+            // only way to tell the two kinds of entry in the source select apart.
+            var groupIds = {};
+            for (var gi in groupsList) { groupIds[groupsList[gi].id] = true; }
             //No thing nodes have been created
-            if(thingsList.length===0){
+            if(thingsList.length===0 && groupsList.length===0){
                 $("<li>No things found</li>").appendTo("#node-input-rule-container");
                 return;
             }
@@ -127,9 +141,22 @@
                     var itemsField = $('<select/>',{class:"node-input-rule-item",style:"width:calc(100% - 110px)"}).appendTo(rowItem);
                     var itemNotesField = $('<textarea/>',{style:"width:calc(100% - 110px);background-color:#ffe;"}).appendTo(rowItemNotes);
 
+                    var isGroupRule = function() { return groupIds[thingsField.val()] === true; };
+
                     thingsField.change(function() {
                         var thing;
                         var thingType;
+                        // A group has one value and no items, so the item row is what the
+                        // group id goes into — the same place a thing's item id would.
+                        if (isGroupRule()) {
+                            rowTypes.hide(); rowNotes.hide(); rowItem.hide(); rowItemNotes.hide();
+                            rowFilter.hide(); thingsFilter.hide();
+                            itemsField.children().remove();
+                            itemsField.append($("<option></option>").val(thingsField.val()).text(thingsField.val()));
+                            itemsField.val(thingsField.val());
+                            return;
+                        }
+                        rowItem.show();
                         if (thingsField.val() == 'dynamic') {
                             rowTypes.show();
                             rowNotes.hide();
@@ -201,6 +228,7 @@
 
                     itemsField.change(function() {
                         rowItemNotes.hide();
+                        if (isGroupRule()) { return; }
                         var thing = RED.nodes.node(thingsField.val());
                         var thingType = RED.nodes.node(thing.thingType);
                         var item = itemsField.val();
@@ -217,10 +245,15 @@
 
                     //Add things
                     thingsField.append($("<option></option>").val('dynamic').text('Thing - set by msg.thing.id -'));
+                    // Groups sit in the same select as things: a rule reads one value either
+                    // way, and the source list stays one list.
+                    for (var d in groupsList) {
+                        thingsField.append($("<option></option>").val(groupsList[d].id).text('Group - ' + groupsList[d].name));
+                    }
                     for (var d in thingsList) {
                         thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
                     }
-                    thingsField.val(thingsList[0].id);
+                    thingsField.val(thingsList.length ? thingsList[0].id : 'dynamic');
                     
 
                     //Add thingTypes
@@ -332,6 +365,9 @@
             }            
         },
         oneditsave: function() {
+            var savedGroups = {};
+            halGetGroups(RED, $("#node-input-eventHandler").val(), 'value')
+                .forEach(function(g) { savedGroups[g.id] = true; });
             var rules = $("#node-input-rule-container").children();
             var ruleset;
             var node = this;
@@ -347,6 +383,7 @@
                 var type  = rule.find(".node-input-rule-value").typedInput('type');
 
                 var r = {thing:thing, thingtype:thingtype, item:item, operator:operator, value:value, type:type};
+                if (savedGroups[thing]) { r.category = 'hal2Group'; }
                 node.rules.push(r);
             });
 

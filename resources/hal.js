@@ -70,12 +70,17 @@ function halGetThings(RED,filter) {
     return filteredThingsList;
 }
 
-function halGetGroups(RED, eventHandlerId) {
+function halGetGroups(RED, eventHandlerId, filter) {
     // Groups live in the EventHandler registry (config node). For back-compat we also
     // surface any legacy hal2Group nodes still in the flow (the runtime folds these in
     // too, by node id), so existing Action/Event references keep resolving until
     // tools/migrate-groups.js is run. Registry wins on id collision.
-    // Returns [{ id, name, haType, notes, ratelimit }] sorted by name.
+    // Returns [{ id, name, haType, notes, ratelimit, aggregate }] sorted by name.
+    //
+    // filter 'value' keeps only groups that have a value function configured — the ones
+    // that can be read by Value/Gate/Event/Bayes. Expressed once here so every node that
+    // offers a group as a source applies the same rule. Legacy hal2Group nodes never have
+    // one, so they are command-only until migrated.
     var eh = eventHandlerId ? RED.nodes.node(eventHandlerId) : null;
     var groupsList = (eh && Array.isArray(eh.groups)) ? eh.groups.slice() : [];
 
@@ -87,8 +92,14 @@ function halGetGroups(RED, eventHandlerId) {
         var g = legacy[l];
         if (seen[g.id]) { continue; }
         if (eventHandlerId && g.eventHandler !== eventHandlerId) { continue; }
-        groupsList.push({ id: g.id, name: g.name, haType: 'other', notes: '', ratelimit: Number(g.ratelimit) || 0 });
+        groupsList.push({ id: g.id, name: g.name, haType: 'other', notes: '', ratelimit: Number(g.ratelimit) || 0, aggregate: '' });
         seen[g.id] = true;
+    }
+
+    if (filter === 'value') {
+        groupsList = groupsList.filter(function(x) {
+            return x && x.aggregate && window.hal2GroupAggregate.isFunction(x.aggregate);
+        });
     }
 
     groupsList.sort(function(a, b) {
