@@ -80,7 +80,7 @@ Callers who fail a gate still connect — `initialize` succeeds — but the tool
 
 > The gates apply to the **MCP surface only**, where claims are cryptographically verified. The `hal2Api` node reads `msg.claims` off the message, which any flow can set, so gating it would be decoration rather than a boundary; it keeps its own local *Allow admin tools* checkbox instead.
 >
-> Claim names are matched as literal keys — a nested path such as `realm_access.roles` is not traversed. Fine for PocketID's flat `groups`; worth checking before pointing hal2 at Keycloak.
+> **Nested claims** are addressed with a dotted path, for providers that don't put roles at the top level of the token: `realm_access.roles` reads Keycloak's realm roles, and any depth works. A key that exists literally always wins, so PocketID's flat `groups` is unaffected. Only strings and arrays of strings match — pointing the claim at a container object grants nothing rather than matching by accident.
 
 ### Hostname filtering
 

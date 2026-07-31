@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { grants, claimAllows, createToolGate, visibleTools } = require('../lib/claim-gate');
+const { readClaim, grants, claimAllows, createToolGate, visibleTools } = require('../lib/claim-gate');
 
 describe('lib/claim-gate grants', function () {
     it('grants nothing for an empty or absent list', function () {
@@ -42,9 +42,64 @@ describe('lib/claim-gate grants', function () {
         assert.strictEqual(grants({ groups: [''] }, 'groups', 'a,,b'), false);
     });
 
+    it('matches a nested claim addressed by a dotted path', function () {
+        const keycloak = { realm_access: { roles: ['ops'] } };
+        assert.strictEqual(grants(keycloak, 'realm_access.roles', 'ops'), true);
+        assert.strictEqual(grants(keycloak, 'realm_access.roles', 'admin'), false);
+        assert.strictEqual(grants({ nested: { role: 'ops' } }, 'nested.role', 'ops'), true);
+        // The container object itself is not a match for anything.
+        assert.strictEqual(grants(keycloak, 'realm_access', 'ops'), false);
+    });
+
+    it('grants nothing for a claim that is neither string nor array', function () {
+        assert.strictEqual(grants({ n: 5 }, 'n', '5'), false);
+        assert.strictEqual(grants({ b: true }, 'b', 'true'), false);
+        assert.strictEqual(grants({ o: { a: 1 } }, 'o', '[object Object]'), false);
+    });
+
     it('keeps values containing spaces intact — only commas separate', function () {
         assert.strictEqual(grants({ groups: ['power users'] }, 'groups', 'power users'), true);
         assert.strictEqual(grants({ groups: ['power'] }, 'groups', 'power users'), false);
+    });
+});
+
+describe('lib/claim-gate readClaim', function () {
+    const KEYCLOAK = { sub: 'x', realm_access: { roles: ['ops', 'default-roles'] } };
+
+    it('reads a top-level claim', function () {
+        assert.deepStrictEqual(readClaim({ groups: ['a'] }, 'groups'), ['a']);
+        assert.strictEqual(readClaim({ role: 'admin' }, 'role'), 'admin');
+    });
+
+    it('walks a dotted path when there is no literal key', function () {
+        assert.deepStrictEqual(readClaim(KEYCLOAK, 'realm_access.roles'), ['ops', 'default-roles']);
+        assert.strictEqual(readClaim({ a: { b: { c: 'deep' } } }, 'a.b.c'), 'deep');
+    });
+
+    it('prefers a literal key over the path reading of the same name', function () {
+        // A provider that really does emit a key with a dot in it must keep working, and an
+        // existing gate configured against one must not start resolving somewhere else.
+        const both = { 'realm_access.roles': ['literal'], realm_access: { roles: ['nested'] } };
+        assert.deepStrictEqual(readClaim(both, 'realm_access.roles'), ['literal']);
+    });
+
+    it('returns undefined for a path that goes nowhere', function () {
+        assert.strictEqual(readClaim(KEYCLOAK, 'realm_access.missing'), undefined);
+        assert.strictEqual(readClaim(KEYCLOAK, 'missing.roles'), undefined);
+        assert.strictEqual(readClaim({ a: ['x'] }, 'a.b'), undefined);       // no array indexing
+        assert.strictEqual(readClaim({ a: 'str' }, 'a.length'), undefined);  // no string props
+    });
+
+    it('does not walk the prototype chain', function () {
+        assert.strictEqual(readClaim({}, 'constructor.name'), undefined);
+        assert.strictEqual(readClaim({ a: {} }, 'a.__proto__'), undefined);
+        assert.strictEqual(readClaim({}, 'toString'), undefined);
+    });
+
+    it('handles absent claims and empty names', function () {
+        assert.strictEqual(readClaim(null, 'groups'), undefined);
+        assert.strictEqual(readClaim({ groups: [] }, ''), undefined);
+        assert.strictEqual(readClaim({ groups: [] }, null), undefined);
     });
 });
 

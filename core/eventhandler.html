@@ -178,7 +178,8 @@
                     <input type="text" id="node-config-input-writeRequiredValue" placeholder="(empty = same as read)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>One claim, one comma-separated <b>any-of</b> list per class, combined with <b>AND</b>.
+                    <small>One claim (a dotted path such as <code>realm_access.roles</code> reaches a nested one),
+                    one comma-separated <b>any-of</b> list per class, combined with <b>AND</b>.
                     <b>Read tools</b> observe (<code>get_state</code>, <code>get_history</code>, <code>get_presence</code>…);
                     <b>write tools</b> change the house (<code>set_light</code>, <code>control_cover</code>,
                     <code>activate_scene</code>…). A write also has to clear the read list, so
