@@ -222,10 +222,29 @@
     <p><b>1:</b> the binary result &mdash; <code>payload</code> true/false, <code>probability</code>,
     <code>changed</code>. By default this only emits when the result actually flips, so a rule firing
     again while the node is already on sends nothing; set <b>Emit output 1</b> to <i>every evaluation</i>
-    to have the state re-asserted continuously instead. <b>2:</b> snapshot
-    <code>{ p, logOdds, binary, held, activeRules, terms, fsm }</code> on every sensor evaluation
-    (and every tick if enabled). Wire output 1 onward like any other message to record the result on
-    a Thing &mdash; the node has no side channel into the object model.</p>
+    to have the state re-asserted continuously instead. <b>2:</b> the snapshot,
+    <code>{ p, logOdds, share, binary, held, rules }</code>, on every sensor evaluation (and every
+    tick if enabled). Wire output 1 onward like any other message to record the result on a Thing
+    &mdash; the node has no side channel into the object model.</p>
+    <p><b>rules</b> lists <i>every</i> rule on every snapshot, not only the ones firing &mdash; while
+    tuning, the question is usually why a rule is <em>not</em> contributing. Each entry carries a
+    <code>label</code> read off its own steps, the <code>value</code> its source holds right now, its
+    <code>share</code> of the way to the on-threshold (the same percentage the bars above use, and it
+    adds up: the contributing shares sum to the snapshot's <code>share</code>), and a
+    <code>status</code>:</p>
+    <ul>
+        <li><b>contributing</b> &mdash; a level rule whose condition holds; its weight is in the
+            estimate now</li>
+        <li><b>fading</b> &mdash; fired earlier; <code>age</code> and <code>halfLife</code> in seconds
+            say how far it has decayed</li>
+        <li><b>waiting</b> &mdash; a sequence partway through: <code>step</code> of <code>steps</code>,
+            with <code>deadline</code> seconds left of its window</li>
+        <li><b>armed</b> &mdash; a sequence at its first step, waiting to be triggered</li>
+        <li><b>condition-false</b> &mdash; evaluated and did not match; <code>value</code> shows what
+            it read</li>
+        <li><b>no-value</b> &mdash; the reading is missing, or unusable for a scaled weight</li>
+        <li><b>injected</b> &mdash; ad-hoc evidence from <code>msg.topic = "evidence"</code></li>
+    </ul>
 
     <h3>Notes</h3>
     <p>The estimate is persisted in node context (the event handler's context store), so it survives

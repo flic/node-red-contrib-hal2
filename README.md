@@ -306,9 +306,45 @@ it with `/snapshot` appended. Leave it blank and no topic is set at all, as in t
 Output 1 carries the binary result (`payload`, `probability`, `changed`). By default it only
 emits when the result actually flips — a rule firing again while the node is already on sends
 nothing — but **Emit output 1** can be set to *every evaluation* when a downstream flow wants
-the state re-asserted continuously. Output 2 emits a snapshot (`p`, `logOdds`, `held`, active
-rules, terms, sequence state) on every evaluation, for tuning. `msg.topic` `reset` / `evidence`
-(`{ lr, halfLife? }`) are available as escape hatches.
+the state re-asserted continuously. `msg.topic` `reset` / `evidence` (`{ lr, halfLife? }`) are
+available as escape hatches.
+
+### Explaining the estimate
+
+Output 2 emits a snapshot on every evaluation, built for tuning: it says not just what the
+estimate is but which rules produced it.
+
+```json
+{ "p": 0.86, "logOdds": 1.86, "share": 108.4, "binary": true, "held": false,
+  "rules": [
+    { "id": "r1", "label": "While Hall Rörelse · Motion is true",
+      "status": "contributing", "share": 73.8, "logOdds": 2.303, "value": true },
+    { "id": "r2", "label": "When Ytterdörr · Contact is true on a full cycle and Hall Rörelse · Motion is true",
+      "status": "waiting", "share": 0, "logOdds": 0, "step": 2, "steps": 2, "deadline": 47 },
+    { "id": "r3", "label": "While Kontor Sensor · Temperature > 25",
+      "status": "condition-false", "share": 0, "logOdds": 0, "value": 23.4 }
+  ] }
+```
+
+**Every configured rule is listed, every time** — the question while tuning is usually why a rule
+is *not* firing, and a list of the ones that are cannot answer it. `status` says which case a rule
+is in:
+
+| `status` | Meaning |
+|---|---|
+| `contributing` | a level rule whose condition holds; its weight is in the estimate now |
+| `fading` | a rule that fired earlier — `age` and `halfLife` (seconds) say how far it has decayed |
+| `waiting` | a sequence partway through: `step` of `steps`, with `deadline` seconds left |
+| `armed` | a sequence at its first step, waiting to be triggered |
+| `condition-false` | evaluated and did not match — `value` is what it read |
+| `no-value` | the reading is missing, or unusable for a scaled weight |
+| `injected` | ad-hoc evidence from `msg.topic = "evidence"`, which has no rule behind it |
+
+`share` is the contribution as a percentage of the way from the prior to the on-threshold — the
+same unit the rule bars and the summary use in the editor, so what you tuned is what you read back.
+Shares add, so the contributing ones sum to the top-level `share`, and anything at or above 100 %
+reaches the threshold on its own. `label` is derived from the rule's steps, phrased as the editor
+phrases them; `logOdds` is the same contribution in the estimator's own units.
 
 ## Other recent additions
 

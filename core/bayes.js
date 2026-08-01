@@ -2,6 +2,7 @@ module.exports = function(RED) {
     const { createBayes } = require('../lib/bayes');
     const scale = require('../resources/bayes-scale');
     const bayesTime = require('../resources/bayes-time');
+    const bayesLabel = require('../resources/bayes-label');
 
     function hal2Bayes(config) {
         RED.nodes.createNode(this, config);
@@ -93,6 +94,40 @@ module.exports = function(RED) {
             }).filter(r => r.steps.length > 0)
         };
 
+        // ---- rule labels ----
+        // The snapshot names rules rather than showing ids, and only this layer can turn a
+        // thing id into "Kontor Sensor". The phrasing itself lives in resources/bayes-label.js
+        // so the editor can adopt the same wording later.
+        function stepNames(step) {
+            switch (step.src) {
+                case 'group': {
+                    const rec = node.eventHandler && typeof node.eventHandler.getGroupState === 'function'
+                        ? node.eventHandler.getGroupState(step.group) : null;
+                    return { source: (rec && rec.name) || step.group };
+                }
+                case 'flow':   return { source: 'flow.' + step.prop };
+                case 'global': return { source: 'global.' + step.prop };
+                case 'env':    return { source: 'env.' + step.prop };
+                case 'time':   return { window: bayesTime.describe(step) };
+                default: {
+                    const thing = RED.nodes.getNode(step.thing);
+                    if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) {
+                        return { source: step.thing };
+                    }
+                    const item = thing.thingType.items.find(i => i.id === step.item);
+                    return { source: thing.name + (item ? ' · ' + item.name : '') };
+                }
+            }
+        }
+        function labelRules() {
+            for (const rule of cfg.rules) {
+                rule.label = bayesLabel.describeRule(rule, rule.steps.map(stepNames));
+            }
+        }
+        // Once now, in case this node is deployed on its own and everything it refers to is
+        // already up, and again on flows:started when a full deploy has registered the things.
+        labelRules();
+
         // Like hal2Event: a blank topic leaves msg.topic alone rather than inventing one.
         const topic          = config.topic || '';
         const withTopic      = (msg, suffix) => {
@@ -147,8 +182,8 @@ module.exports = function(RED) {
         function snapshotPayload(result) {
             return {
                 p: Number(result.p.toFixed(4)), logOdds: Number(result.logOdds.toFixed(4)),
-                binary: result.binary, held: result.held,
-                activeRules: result.activeRules, terms: result.terms, fsm: result.fsm
+                share: result.share, binary: result.binary, held: result.held,
+                rules: result.rules
             };
         }
 
@@ -202,8 +237,9 @@ module.exports = function(RED) {
             run(snapshotOnTick);
         }, tickMs);
 
-        // Initial evaluation once all nodes are registered (things resolvable).
-        const onStarted = function() { run(false); };
+        // Initial evaluation once all nodes are registered (things resolvable) — which is also
+        // the first moment the labels can name anything.
+        const onStarted = function() { labelRules(); run(false); };
         RED.events.on('flows:started', onStarted);
 
         // ---- msg input: escape hatches ----
