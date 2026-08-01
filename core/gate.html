@@ -106,6 +106,13 @@
 
                     //Add rows
                     var rowName = $('<div/>').appendTo(container);
+                    // Directly under the source select, as in the other nodes. The label column
+                    // is 80px (border-box, padding included) and the fields are
+                    // calc(100% - 110px), so this lines up with them exactly; max-width has to
+                    // go because form-tips caps itself at 450px.
+                    var rowGroupTip = $('<div/>', { class: "form-tips",
+                        style: "margin-top:8px; margin-left:80px; width:calc(100% - 110px); max-width:none; box-sizing:border-box; white-space:normal;" })
+                        .appendTo(container).hide();
                     var rowTypes = $('<div/>',{style:"margin-top:8px;"})
                         .appendTo(container)
                         .hide()  
@@ -120,13 +127,6 @@
                         .appendTo(container)
                         .hide()
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
-                    // The label column is 80px (border-box, padding included) and the fields
-                    // are calc(100% - 110px), so this lines the tip up with them exactly.
-                    // max-width has to go: form-tips caps itself at 450px, which is what pulled
-                    // the right edge in short of the field above.
-                    var rowGroupTip = $('<div/>', { class: "form-tips",
-                        style: "margin-top:8px; margin-left:80px; width:calc(100% - 110px); max-width:none; box-sizing:border-box; white-space:normal;" })
-                        .appendTo(container).hide();
 
                     //Add labels
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
