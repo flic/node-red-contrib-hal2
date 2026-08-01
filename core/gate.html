@@ -9,6 +9,10 @@
         <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
         <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
     </div>
+    <div class="form-tips" style="margin-left:105px; margin-bottom:8px;">
+        <small>Only needed when a rule reads a <b>Group</b>. A Thing points at its own Event handler,
+        but a group is not a node &mdash; its value lives in the handler's group registry.</small>
+    </div>
     <div class="form-row">
         <ol id="node-input-rule-container"</ol>
     </div>
@@ -44,7 +48,16 @@
             name:       {},
             // Optional: only a Group rule needs it, and requiring it would flag every
             // existing Gate node as invalid.
-            eventHandler: { value: "", type: "hal2EventHandler", required: false },
+            eventHandler: {
+                value: "", type: "hal2EventHandler", required: false,
+                // Needed only once a rule reads a group. Rules are harvested on save, so this
+                // judges the saved ruleset — a group rule added and left without a handler is
+                // flagged as soon as the dialog closes.
+                validate: function (v) {
+                    var needed = (this.rules || []).some(function (r) { return r && r.category === 'hal2Group'; });
+                    return !needed || (!!v && v !== '_ADD_');
+                }
+            },
             rules:      {},
             checkall:   { value: "true" },
             if:         {},

@@ -5,16 +5,20 @@
         <p>No items found. Start by creating some Things.</p>
     </div>
     <div class="form-row" id="div-main">
-        <div class="form-row" id="row-event-handler">
-            <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
-            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
-        </div>
         <div class="form-row">
             <label for="node-input-typeSel" style="width:95px; padding-right:10px;"><i class="fa fa-folder"></i> Category</label>
             <select id="node-input-typeSel" style="width:calc(100% - 170px)">
                 <option value='hal2Thing'>Thing</option>
                 <option value='hal2Group'>Group</option>
             </select>
+        </div>
+        <div class="form-row" id="row-event-handler">
+            <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
+        </div>
+        <div class="form-tips" id="row-eh-tip" style="margin-left:105px; margin-bottom:8px;">
+            <small>A Thing points at its own Event handler, but a group is not a node &mdash; its value
+            lives in the handler's group registry, so this node has to be told which handler owns it.</small>
         </div>
         <div class="form-row">
             <label for="node-input-action" style="width:95px; padding-right:10px;"><i class="fa fa-exchange"></i> Action</label>
@@ -23,9 +27,8 @@
                 <option value='set'>Set value</option>
             </select>
         </div>
-        <div class="form-row" id="row-group-tip" style="width:100%">
-            <label style="width:95px; padding-right:10px;">&nbsp;</label>
-            <span id="group-tip" style="color:#888; font-size:12px;"></span>
+        <div class="form-tips" id="row-group-tip" style="margin-left:105px; margin-bottom:8px;">
+            <small id="group-tip"></small>
         </div>
         <div class="form-row" id="row-thing">
             <label for="node-input-thing" id="label-node-input-thing" style="width:95px; padding-right:10px;" class="fa fa-microchip"> Thing</label>
@@ -123,7 +126,8 @@
 
 <script type="text/x-red" data-help-name="hal2Value">
     <p>The Value node is used to either query a specific <i>Item</i> and send the <i>Item</i> value on to the next node, or to update an <i>Item</i> value. In the latter case the ingress function as well as all topic filters are bypassed, the value is updated directly as is. Events are triggered as usual.</p>
-    <li><strong>Category</strong>: Read a single <i>Thing</i>'s Item, or a <i>Group</i>'s own value. A group's value is computed from its members by the Event handler — average, any true, count true and so on — so it is <b>read-only</b>: use an Action node to command a group. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be selected, and reading one needs that Event handler set on this node.</li>
+    <li><strong>Category</strong>: Read a single <i>Thing</i>'s Item, or a <i>Group</i>'s own value. A group's value is computed from its members by the Event handler — average, any true, count true and so on — so it is <b>read-only</b>: use an Action node to command a group. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be selected.</li>
+    <li><strong>Event handler</strong>: Shown for a <i>Group</i> only. A Thing carries a reference to its own handler, so this node can reach the bus through it; a group is not a node, and its value lives in the handler's group registry — so the handler that owns the group has to be named here.</li>
     <li><strong>Action</strong>: Get value from <i>Item</i> or set value to <i>Item</i>.</li>
     <li><strong>Item</strong>: Select the <i>Item</i>.</li>
     <li><strong>Property</strong>: Source or destination for <i>Item</i> value.</li>
@@ -139,7 +143,22 @@
             name:           {},
             // Optional: only a Group source needs it, and requiring it would flag every
             // existing Value node as invalid.
-            eventHandler:   { value: "", type: "hal2EventHandler", required: false },
+            eventHandler:   {
+                value: "", type: "hal2EventHandler", required: false,
+                // Only a group source needs one, so requiring it outright would flag every
+                // existing Value node. While the dialog is open the live Category wins; on
+                // the canvas (deploy-time validation, no dialog) the saved one does.
+                validate: function (v) {
+                    // #row-eh-tip exists only in this node's template, so it is what tells us
+                    // the open dialog is ours — hal2Event has a #node-input-typeSel too, and
+                    // reading that one would judge this node by another node's form.
+                    var mine  = $("#row-eh-tip").length > 0;
+                    var group = mine ? $("#node-input-typeSel").val() === 'hal2Group'
+                                     : this.typeSel === 'hal2Group';
+                    if (!group) { return true; }
+                    return !!v && v !== '_ADD_';
+                }
+            },
             typeSel:        { value: 'hal2Thing' },
             action:         {},
             // For a Group source `thing` carries the group id and `item` mirrors it, exactly
@@ -212,6 +231,8 @@
             $("#node-input-typeSel").change(function() {
                 var group = isGroup();
                 $("#row-thing").toggle(!group);
+                $("#row-event-handler").toggle(group);
+                $("#row-eh-tip").toggle(group);
                 $("#row-group-tip").toggle(group);
                 $("#div-item").toggle(!group);
                 if (group) {
