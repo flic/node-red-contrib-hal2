@@ -12,6 +12,7 @@ const {
 } = require('./mcp-tools');
 const { createToolGate, claimAllows } = require('../lib/claim-gate');
 const groupAggregate = require('../resources/group-aggregate');
+const groupTools = require('../lib/group-tools');
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
@@ -348,6 +349,19 @@ module.exports = function(RED) {
             return node.groupState[groupId];
         };
 
+        // The registry as the MCP tools need it: every group, including the command-only ones
+        // that have no state record at all. Membership only changes on deploy, so wireGroups
+        // fills this in once; liveness is read per call from the state record, which tracks it.
+        node.groupInfo = [];
+        node.getGroups = function () { return node.groupInfo; };
+        // groupId → send(payload) → { queued, skipped }. Rebuilt by wireGroups on every deploy.
+        node.groupCommanders = {};
+        // groupId → read(fn) → { value, live, members }. The configured function is only a
+        // default: the same members answer different questions depending on which function is
+        // asked for — "any true" says whether a lamp is on, "all true" says whether the command
+        // to turn them all on worked. Both are one read away from the same group.
+        node.groupReaders = {};
+
         // groupId -> { ratelimit, aggregate, name, legacy } merged from the registry and any
         // legacy hal2Group nodes belonging to this handler. The registry wins on collision
         // (i.e. once a group has been migrated, its hal2Group node is ignored). Legacy nodes
@@ -360,6 +374,9 @@ module.exports = function(RED) {
                     ratelimit: Number(g.ratelimit) || 0,
                     aggregate: groupAggregate.isFunction(g.aggregate) ? g.aggregate : null,
                     name: g.name || g.id,
+                    haType: g.haType || '',
+                    notes: g.notes || '',
+                    tags: Array.isArray(g.tags) ? g.tags : [],
                     legacy: false
                 });
             }
@@ -370,6 +387,9 @@ module.exports = function(RED) {
                     ratelimit: Number(cfg.ratelimit) || 0,
                     aggregate: null,
                     name: cfg.name || cfg.id,
+                    haType: '',
+                    notes: '',
+                    tags: [],
                     legacy: true
                 });
             });
@@ -480,34 +500,80 @@ module.exports = function(RED) {
             return rec;
         }
 
+        // How many of a group's members carry state, and how many accept commands. The two
+        // are different sets and either can be empty: a sensor group is readable and cannot be
+        // commanded, a scene group the reverse. Everything the MCP tools say about a group
+        // rests on keeping them apart.
+        function memberCapabilities(groupMembers) {
+            let stateMembers = 0, commandMembers = 0;
+            for (const m of groupMembers) {
+                const thing = RED.nodes.getNode(m.thing);
+                if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) continue;
+                const item = thing.thingType.items.find(it => it.id === m.item);
+                if (!item) continue;
+                if (m.item !== HEARTBEAT_ITEM && statusCapableItem(item)) { stateMembers += 1; }
+                if (commandCapableItem(item)) { commandMembers += 1; }
+            }
+            return { stateMembers, commandMembers };
+        }
+
         function wireGroups() {
             unwireGroups();   // idempotent — safe to re-run on every flows:started
             const members = buildGroupMembers();
             const defs    = buildGroupDefs();
             const valueGroups = [];
+            const info = [];
+            node.groupCommanders = {};
+            node.groupReaders = {};
             let legacyCount = 0;
             for (const [groupId, def] of defs) {
                 const groupMembers = members.get(groupId) || [];
                 const ratelimit    = def.ratelimit;
                 if (def.legacy) legacyCount += 1;
 
+                const caps = memberCapabilities(groupMembers);
+                info.push({
+                    id: groupId, name: def.name, haType: def.haType, notes: def.notes,
+                    tags: def.tags, aggregate: def.aggregate, ratelimit: ratelimit,
+                    stateMembers: caps.stateMembers, commandMembers: caps.commandMembers
+                });
+
                 // Command: broadcast to all command-capable members, rate limited. The
                 // throttle queue is persistent per group, so the pace holds across bursts —
                 // two rapid group commands share one rate limit instead of racing.
                 const throttle = common.createThrottledQueue(ratelimit,
                     m => node.publishCommand(m.thing, m.item, m.payload));
-                const commandListener = function (itemid, payload) {
+                // One implementation for both ways in — the bus listener below and the MCP
+                // tool — so the count the tool reports is the queue that was actually built,
+                // not an estimate from the member list. Members are resolved at send time
+                // because a thing can have gone away since the last deploy.
+                const runCommand = function (payload) {
                     const queue = [];
+                    let skipped = 0;
                     for (const m of groupMembers) {
                         const thing = RED.nodes.getNode(m.thing);
-                        if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) continue;
+                        if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) { skipped += 1; continue; }
                         const item = thing.thingType.items.find(it => it.id === m.item);
-                        if (!item || !commandCapableItem(item)) continue;
+                        if (!item || !commandCapableItem(item)) { skipped += 1; continue; }
                         queue.push({ thing: m.thing, item: m.item, payload: payload });
                     }
-                    if (queue.length === 0) return;
-                    throttle.push(queue);
+                    if (queue.length) { throttle.push(queue); }
+                    return { queued: queue.length, skipped: skipped };
                 };
+                node.groupCommanders[groupId] = runCommand;
+                node.groupReaders[groupId] = function (fn) {
+                    const { samples, eligible } = groupSamples(groupMembers);
+                    return {
+                        value    : groupAggregate.aggregate(fn, samples),
+                        live     : samples.length,
+                        members  : eligible,
+                        used     : groupAggregate.usableCount(fn, samples),
+                        kinds    : groupAggregate.sampleKinds(samples),
+                        suitable : groupAggregate.suitableFunctions(samples)
+                    };
+                };
+
+                const commandListener = function (itemid, payload) { runCommand(payload); };
                 node.subscribe('command', groupId, commandListener);
                 node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener, throttle: throttle });
 
@@ -545,6 +611,7 @@ module.exports = function(RED) {
                 if (!defs.has(id) || !defs.get(id).aggregate) { delete node.groupState[id]; }
             }
             persistGroupState();
+            node.groupInfo = info;
             node.debug('Group engine wired ' + defs.size + ' group(s)');
             if (valueGroups.length) {
                 node.log('Group values: ' + valueGroups.join(', '));
@@ -770,6 +837,31 @@ module.exports = function(RED) {
                 return devices;
             }
 
+            // Every group as the tools report it, newest registry state each call so a value
+            // is never stale. Sorted by name to match how the device list reads.
+            function listGroups(args) {
+                const a = args || {};
+                const infos = (typeof node.getGroups === 'function') ? node.getGroups() : [];
+                return infos
+                    .filter(info => groupTools.matchesFilters(info, a, expandHaTypeFilter))
+                    .map(info => {
+                        // A function asked for on this call is computed from the members now.
+                        // It changes nothing: the configured function is what the flow nodes
+                        // use and what the group keeps reporting.
+                        let computed = null;
+                        if (a.function && node.groupReaders[info.id]) {
+                            computed = node.groupReaders[info.id](a.function);
+                            computed.fn = a.function;
+                            // A function that fits none of the members is not a value of
+                            // false or zero — it is a question that does not apply here.
+                            const bad = groupTools.functionMismatch(info, a.function, computed.kinds, computed.suitable);
+                            if (bad) { return bad; }
+                        }
+                        return groupTools.groupEntry(info, node.getGroupState(info.id), msToIso, computed);
+                    })
+                    .sort((a2, b2) => String(a2.name || '').localeCompare(String(b2.name || '')));
+            }
+
             function hasAnyHaType(wantedTypes) {
                 const wanted = new Set(wantedTypes.map(s => s.toLowerCase()));
                 for (const thing of getAllStates()) {
@@ -781,6 +873,25 @@ module.exports = function(RED) {
             }
 
             function getNotConfiguredError(toolName) {
+                // The group tools are gated on configuration, not hardware: there is nothing to
+                // advertise at a location that has no groups, and nothing to command at one
+                // whose groups are all read-only.
+                if (toolName === 'get_groups' || toolName === 'control_group') {
+                    const infos = (typeof node.getGroups === 'function') ? node.getGroups() : [];
+                    const ok = toolName === 'get_groups'
+                        ? infos.some(g => g.stateMembers > 0)
+                        : infos.some(g => g.commandMembers > 0);
+                    if (ok) return null;
+                    return {
+                        error   : 'not_configured',
+                        tool    : toolName,
+                        message : toolName === 'get_groups'
+                            ? 'No group at this location (' + (config.locationName || 'unnamed') +
+                              ') has members that carry a state.'
+                            : 'No group at this location (' + (config.locationName || 'unnamed') +
+                              ') has members that accept commands.'
+                    };
+                }
                 const reqs = TOOL_HARDWARE_REQUIREMENTS[toolName];
                 if (!reqs) return null;
                 if (hasAnyHaType(reqs)) return null;
@@ -907,6 +1018,12 @@ module.exports = function(RED) {
 
                         const result = { total, offset, devices: paged };
                         if (limit !== undefined) result.limit = limit;
+                        // Groups alongside the devices, so orientation takes one call: without
+                        // this a model can only find them by reading a description closely
+                        // enough to call get_groups. Filtered by the same ha_type/tag as the
+                        // devices, or a filtered call would answer with unfiltered groups.
+                        const groups = listGroups({ ha_type: args.ha_type, tag: args.tag });
+                        if (groups.length) result.groups = groups;
                         if (config.locationName) result.location = config.locationName;
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify(result, null, 2));
@@ -948,6 +1065,30 @@ module.exports = function(RED) {
                             }, null, 2));
                         }
                         return toolOk(JSON.stringify(device, null, 2));
+                    }
+
+                    // get_groups
+                    if (toolName === 'get_groups') {
+                        if (args.function && !groupAggregate.isFunction(args.function)) {
+                            return toolOk(JSON.stringify({
+                                error     : 'Unknown function "' + args.function + '"',
+                                functions : groupAggregate.FUNCTIONS.map(f => f.v)
+                            }));
+                        }
+                        const groups = listGroups(args);
+                        // Every match refused: the reply is the refusal, not a list containing
+                        // one. This is the shape the single-group case deserves, and it is also
+                        // the honest answer to "anyTrue across my sensors".
+                        const refusals = groups.filter(g => g.error);
+                        if (groups.length && refusals.length === groups.length) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(groups.length === 1 ? groups[0]
+                                : { error: 'No matching group can answer "' + args.function + '"', groups }, null, 2));
+                        }
+                        const result = { total: groups.length, groups };
+                        if (config.locationName) result.location = config.locationName;
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify(result, null, 2));
                     }
 
                     // get_presence
@@ -1288,6 +1429,46 @@ module.exports = function(RED) {
                         return toolOk(JSON.stringify(result));
                     }
 
+                    // control_group — one command, fanned out to every commandable member by
+                    // the group engine's own throttle. The group's value is not written here:
+                    // it is derived, and follows from what the members report back.
+                    if (toolName === 'control_group') {
+                        const groups = (typeof node.getGroups === 'function') ? node.getGroups() : [];
+                        const found = groupTools.resolveGroup(groups, args);
+                        if (found.error) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(found.error));
+                        }
+                        if (args.value === undefined) {
+                            return toolOk(JSON.stringify({ error: 'Provide value' }));
+                        }
+                        const refusal = groupTools.commandRefusal(found.group, groups);
+                        if (refusal) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(refusal));
+                        }
+                        const send = node.groupCommanders[found.group.id];
+                        const sent = send ? send(args.value)
+                                          : { queued: 0, skipped: found.group.commandMembers };
+                        node.status({ fill: 'green', shape: 'dot', text: 'ready' });
+                        return toolOk(JSON.stringify({
+                            ok        : true,
+                            group_id  : found.group.id,
+                            name      : found.group.name,
+                            value     : args.value,
+                            commanded : sent.queued,
+                            skipped   : sent.skipped,
+                            // Delivery is fire-and-forget onto the event bus and paced by the
+                            // rate limit, so there is nothing to report per member — saying so
+                            // is better than an empty failures list that looks like a promise.
+                            delivery  : 'queued'
+                                        + (found.group.ratelimit
+                                           ? ', members paced ' + found.group.ratelimit + ' ms apart'
+                                           : '')
+                                        + '. No per-member result is available; read the group again to see the effect.'
+                        }));
+                    }
+
                     // set_light / control_light
                     if (toolName === 'set_light' || toolName === 'control_light') {
                         node.debug('set_light called, args=' + JSON.stringify(args));
@@ -1466,8 +1647,8 @@ module.exports = function(RED) {
                         let itemId = args.item_id;
 
                         // Resolve by ha_type and/or tag when the device is known but the exact item
-                        // isn't (e.g. thing_name="Sjövatten" + ha_type="temperature", or a sauna
-                        // sensor with two temperatures → ha_type="temperature" + tag="ute").
+                        // isn't (e.g. thing_name="Lake Water" + ha_type="temperature", or a sauna
+                        // sensor with two temperatures → ha_type="temperature" + tag="outdoor").
                         if (!itemId && !args.item_name && (args.ha_type || args.tag)) {
                             let matches = ttItems;
                             if (args.ha_type) {

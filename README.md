@@ -37,7 +37,7 @@ Control and observe several Things at once with **Groups**. A group's identity �
 
 ### A group's own value
 
-Give a group a **Value** and it stops being write-only: it gains a state of its own, computed from its members, that **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's. *Temperatur inne → average* is one number for the whole house; *Alla lampor → any true* is one boolean for "is anything on".
+Give a group a **Value** and it stops being write-only: it gains a state of its own, computed from its members, that **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's. *Indoor temperature → average* is one number for the whole house; *All lights → any true* is one boolean for "is anything on".
 
 | Function | Result |
 |---|---|
@@ -63,6 +63,45 @@ A group has a **HAType** that sets the command contract for its members. Compati
 
 A group without a Value stays exactly what it was: a command target, invisible to the reading nodes.
 
+### Groups over MCP
+
+Groups are exposed to assistants as their own pair of tools rather than as parameters on the device
+ones, because a group is not a device: it has no items, and reading it is not the inverse of writing
+it. **`get_groups`** returns every group with its value and how that value was computed;
+**`control_group`** sends one command to every member that can accept one, paced by the group's rate
+limit. `get_all_states` carries the same group list alongside `devices`, so orientation takes one
+call.
+
+The asymmetry is the thing to hold on to, and the tools say it in as many words: reading a group
+uses its **state-capable** members, commanding it uses its **command-capable** ones, and either set
+can be empty. A sensor group reads and cannot be commanded; a scene group is the reverse.
+Commanding never writes the value — the value follows from what the members report back.
+
+**The function is not fixed.** `get_groups` takes a `function` argument that computes a different
+one from the same members for that call only, which is what makes a group answer more than one
+question: *any true* asks "is a lamp on?", *all true* asks "did the command to turn them all on
+work?", *count true* asks "how many are on?" — one group, three questions. The configured Value
+stays the group's own, is what the flow nodes read, and is what `get_all_states` reports; the reply
+names `configured_function` whenever the two differ, so an ad-hoc reading is never mistaken for the
+setting.
+
+A function that does not apply is **refused rather than answered**: asking a temperature group
+whether all its members are true comes back as an error naming what the members hold and listing
+the functions that fit. It does not come back as `false`, which is a claim about the group rather
+than about the question. Partial coverage is a different matter and is answered: on a mixed group
+*average* uses the dimmers and ignores the on/off members, so the reply carries `used` beside
+`live` and a mean over 10 of 39 members can be read as what it is.
+
+This also means a group is readable **as soon as it has members that carry state**, whether or not
+anyone has picked a Value for it. Command groups usually do: switchable devices report back. They
+show up with `readable: true` and a member count and no value, which is the invitation to ask for a
+function.
+
+Give a group **Tags** and **Notes** on the Groups tab and both reach the assistant. This is worth
+doing: the name is usually all it has to go on, and "All lights" does not say whether the outdoor
+lights are in it. A note does, and `get_groups` takes a `tag` filter so the assistant can ask for
+exactly the set it means.
+
 Groups replace the old standalone `hal2Group` node. Existing flows keep working — the Event handler folds legacy group nodes in automatically, though they are command-only until migrated — but you should run `node tools/migrate-groups.js <flows.json>` to make the move permanent and then remove the deprecated nodes. The migration preserves group ids, so existing Action/Event references keep resolving untouched.
 
 ## AI & external control
@@ -75,8 +114,8 @@ The **hal2EventHandler** config node can run an embedded **MCP (Model Context Pr
 
 It ships with a catalog of built-in tools:
 
-- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `analyze_patterns`
-- **Write** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`
+- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `get_groups`, `analyze_patterns`
+- **Write** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`, `control_group`
 - **Admin** (opt-in) — `get_flow`, `deploy_flow`
 
 Those three classes are also the unit of [access control](#access-control): a token can be allowed to read the house without being allowed to change it.
@@ -91,8 +130,8 @@ On the Event handler's *MCP* tab, one **Access claim** (default `groups`) carrie
 
 | Gate | Covers | Default |
 |---|---|---|
-| **Read tools** | `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `analyze_patterns` | empty — any authenticated caller |
-| **Write tools** | `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene` | empty — same as read |
+| **Read tools** | `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `get_groups`, `analyze_patterns` | empty — any authenticated caller |
+| **Write tools** | `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`, `control_group` | empty — same as read |
 | **Admin tools** | `get_flow`, `deploy_flow` (and only when *Enable Node-RED admin tools* is on) | `admin` |
 
 The read list is the floor: a caller who fails it reaches nothing at all. Writes are checked **on top of** it, so `Read tools = family`, `Write tools = ops` gives the whole household visibility while only ops can switch anything. A tool that is in neither set — a future addition, or the undocumented `control_light` alias of `set_light` — is treated as a **write**, so an unclassified tool fails closed rather than slipping through.
@@ -330,11 +369,11 @@ correct whenever you do look. Only the reporting is on demand.
 ```json
 { "p": 0.86, "logOdds": 1.86, "share": 108.4, "binary": true, "held": false,
   "rules": [
-    { "id": "r1", "label": "While Hall Rörelse · Motion is true",
+    { "id": "r1", "label": "While Hallway Sensor · Motion is true",
       "status": "contributing", "share": 73.8, "logOdds": 2.303, "value": true },
-    { "id": "r2", "label": "When Ytterdörr · Contact is true on a full cycle and Hall Rörelse · Motion is true",
+    { "id": "r2", "label": "When Front Door · Contact is true on a full cycle and Hallway Sensor · Motion is true",
       "status": "waiting", "share": 0, "logOdds": 0, "step": 2, "steps": 2, "deadline": 47 },
-    { "id": "r3", "label": "While Kontor Sensor · Temperature > 25",
+    { "id": "r3", "label": "While Office Sensor · Temperature > 25",
       "status": "condition-false", "share": 0, "logOdds": 0, "value": 23.4 }
   ] }
 ```

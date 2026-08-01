@@ -393,6 +393,7 @@
                     var rowValue   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowValueTip= $('<div/>', { style: "margin-top:4px; margin-left:115px; margin-right:10px; color:#888; font-size:12px; white-space:normal; line-height:1.4;" }).appendTo(rowDetails);
                     var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    var rowTags    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowNotes   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
 
                     var expandButton = $('<span/>', { style: "margin-left:5px; margin-right:10px" })
@@ -420,6 +421,8 @@
                         .appendTo(rowValue).append(' Value');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-clock-o" })
                         .appendTo(rowRate).append(' Rate limit');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-tags" })
+                        .appendTo(rowTags).append(' Tags');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;vertical-align:top;", class: "fa fa-file" })
                         .appendTo(rowNotes).append(' Notes');
 
@@ -612,6 +615,13 @@
                         .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);
                     $('<span/>', { style: "margin-left:6px;color:#888;" }).text('ms between member commands').appendTo(rowRate);
 
+                    // Tags and notes are what tell an assistant what the group actually covers —
+                    // "All lights" does not say whether the outdoor lights are in it. Both reach
+                    // MCP, so they are documentation with a reader, not just a memo to yourself.
+                    var tagsProperty = $('<input/>', { type: "text", placeholder: "comma,separated,tags",
+                        style: "width:calc(100% - 125px)", class: "node-config-eh-group-tags-property" })
+                        .appendTo(rowTags).val(Array.isArray(group.tags) ? group.tags.join(', ') : (group.tags || ''));
+
                     var notesProperty = $('<textarea/>', { style: "width:calc(100% - 125px);background-color:#ffe;", class: "node-config-eh-group-notes-property" })
                         .appendTo(rowNotes).val(group.notes || '');
 
@@ -774,6 +784,7 @@
                         name:      name,
                         haType:    item.find(".node-config-eh-group-hatype-property").val(),
                         aggregate: item.find(".node-config-eh-group-aggregate-property").val() || '',
+                        tags:      halParseTags(item.find(".node-config-eh-group-tags-property").val()),
                         ratelimit: Number(item.find(".node-config-eh-group-ratelimit-property").val()) || 0,
                         notes:     item.find(".node-config-eh-group-notes-property").val() || ''
                     });

@@ -30,3 +30,31 @@ describe('hal.js halNumericOperator', function () {
         }
     });
 });
+
+describe('hal.js halParseTags', function () {
+    // Copied into this realm before comparing: an array built inside the vm sandbox carries
+    // that context's Array.prototype, and deepStrictEqual compares prototypes.
+    const tags = v => [...sandbox.halParseTags(v)];
+
+    it('splits a comma-separated field and trims', function () {
+        assert.deepStrictEqual(tags('inne, klimat ,  varm'), ['inne', 'klimat', 'varm']);
+        assert.deepStrictEqual(tags('one'), ['one']);
+    });
+
+    it('yields an empty array for an empty field', function () {
+        // Not ['']: an empty tag would match a tag filter for the empty string, so every
+        // untagged group would answer a query nobody meant to make.
+        assert.deepStrictEqual(tags(''), []);
+        assert.deepStrictEqual(tags('   '), []);
+        assert.deepStrictEqual(tags(undefined), []);
+        assert.deepStrictEqual(tags(',,'), []);
+    });
+
+    it('keeps tags containing spaces intact', function () {
+        assert.deepStrictEqual(tags('power users, ute'), ['power users', 'ute']);
+    });
+
+    it('accepts an array back unchanged, so a stored value round-trips', function () {
+        assert.deepStrictEqual(tags(['a', ' b ', '']), ['a', 'b']);
+    });
+});

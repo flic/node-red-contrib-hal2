@@ -163,6 +163,42 @@
         return undefined;
     }
 
+    // How many of these samples a function would actually use. 'latest' takes anything that has
+    // reported; the numeric and boolean families each take only their own kind. Zero means the
+    // question cannot be asked of these members at all — asking a temperature group whether all
+    // its members are true is not a query that returns false, it is a query that does not apply.
+    function usableCount(fn, samples) {
+        samples = Array.isArray(samples) ? samples : [];
+        if (fn === 'latest') {
+            var n = 0;
+            for (var i = 0; i < samples.length; i++) { if (samples[i].state !== undefined) { n++; } }
+            return n;
+        }
+        var kind = kindOf(fn);
+        if (kind === 'number')  { return numbers(samples).length; }
+        if (kind === 'boolean') { return booleans(samples).length; }
+        return 0;
+    }
+
+    // The functions that would return something for these members, in catalog order — what to
+    // offer instead when the one asked for does not apply.
+    function suitableFunctions(samples) {
+        var out = [];
+        for (var i = 0; i < FUNCTIONS.length; i++) {
+            if (usableCount(FUNCTIONS[i].v, samples) > 0) { out.push(FUNCTIONS[i].v); }
+        }
+        return out;
+    }
+
+    // What these members look like, for saying why a function does not fit.
+    function sampleKinds(samples) {
+        return {
+            numbers  : numbers(samples).length,
+            booleans : booleans(samples).length,
+            reporting: usableCount('latest', samples)
+        };
+    }
+
     // One step of a group's state record, mirroring what hal2Thing.updateState does to a
     // thing item (core/thing.js:218-231) — because hal2Event's change filters compare
     // state against laststate and must behave identically for both.
@@ -186,6 +222,9 @@
     return {
         FUNCTIONS: FUNCTIONS,
         aggregate: aggregate,
+        usableCount: usableCount,
+        suitableFunctions: suitableFunctions,
+        sampleKinds: sampleKinds,
         nextRecord: nextRecord,
         suggestFor: suggestFor,
         kindOf: kindOf,

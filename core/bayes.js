@@ -96,7 +96,7 @@ module.exports = function(RED) {
 
         // ---- rule labels ----
         // The snapshot names rules rather than showing ids, and only this layer can turn a
-        // thing id into "Kontor Sensor". The phrasing itself lives in resources/bayes-label.js
+        // thing id into "Office Sensor". The phrasing itself lives in resources/bayes-label.js
         // so the editor can adopt the same wording later.
         function stepNames(step) {
             switch (step.src) {

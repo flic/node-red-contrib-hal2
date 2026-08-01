@@ -398,7 +398,7 @@
         oneditsave: function () {
             var node = this;
 
-            node.tags = ($("#node-input-tags").val() || '').split(',').map(t => t.trim()).filter(Boolean);
+            node.tags = halParseTags($("#node-input-tags").val());
 
             // Group membership — one {item, group} per editableList row
             node.groups = [];

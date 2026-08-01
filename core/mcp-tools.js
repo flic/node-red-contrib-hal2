@@ -56,9 +56,9 @@ const MCP_TOOLS = [
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
-                      'NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Sjövatten Sensor" contains an item named "Temperatur"), so a thing name will not match an item name. ' +
+                      'NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Lake Water Sensor" contains an item named "Temperature"), so a thing name will not match an item name. ' +
                       'If you know the device but not the exact item, pass ha_type (e.g. ha_type="temperature") and the server resolves the item for you. ' +
-                      'If a device has several items of the same ha_type (e.g. an indoor and an outdoor temperature), combine ha_type with tag (e.g. tag="ute") to pick the right one — items and their tags are listed in available_items when the match is ambiguous. ' +
+                      'If a device has several items of the same ha_type (e.g. an indoor and an outdoor temperature), combine ha_type with tag (e.g. tag="outdoor") to pick the right one — items and their tags are listed in available_items when the match is ambiguous. ' +
                       'If item resolution fails, the error response includes available_items (item_id, item_name, ha_type, history) for that thing — pick from it, no full get_all_states dump needed. ' +
                       'Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. ' +
                       'Time window — use one of these forms: ' +
@@ -79,9 +79,9 @@ const MCP_TOOLS = [
                 thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to thing_id)' },
                 item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
-                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperatur"), not the device name.' },
+                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name.' },
                 ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
-                tag        : { type: 'string',  description: 'Disambiguate items of the same ha_type within the thing by tag (e.g. ha_type="temperature" + tag="ute"). Can also be used alone. Item tags appear in available_items.' },
+                tag        : { type: 'string',  description: 'Disambiguate items of the same ha_type within the thing by tag (e.g. ha_type="temperature" + tag="outdoor"). Can also be used alone. Item tags appear in available_items.' },
                 hours      : { type: 'number',  description: 'Hours back from now (default: 24). Ignored if from/to/at are provided.', minimum: 1 },
                 from       : { type: 'string',  description: 'Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string' },
                 to         : { type: 'string',  description: 'End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted.' },
@@ -222,6 +222,50 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'get_groups',
+        description : 'Returns the groups configured at this location, with their current value. ' +
+                      'A GROUP IS NOT A DEVICE: it is a named set of items drawn from several devices, and it has no items of its own — so it takes no item_id and does not appear in get_state. ' +
+                      'Its value is COMPUTED from its members by the function shown — latest, min, max, average, median, sum, range (highest minus lowest), any true, all true, any false, all false, count true, count false, percent true (0-100) — and members whose device is offline are left out, so a group value can change with nothing having been switched. ' +
+                      'Prefer a group over reading its members one by one whenever the user speaks about a set as one thing: "is anything on?", "how warm is it indoors?", "how many windows are open?". Use get_state instead when they mean one specific device. ' +
+                      'THE FUNCTION IS NOT FIXED: pass function to compute a different one from the same members on this call. That is the point — "any true" answers "is a lamp on?", "all true" answers "did the turn-them-on command work?", "count true" answers "how many are on?", over exactly the same group. It changes nothing: the configured function is what the group keeps reporting, and configured_function appears in the reply when the two differ. ' +
+                      'A function that does not apply to the members is REFUSED, not answered: asking a temperature group whether all its members are true comes back as an error naming what the members hold and listing suitable_functions — it does not come back as false. ' +
+                      'On a mixed group a function may cover only part of it (average over a light group uses the dimmers and ignores the on/off members); the reply then carries used alongside live, and a value computed from a minority of the members should be read as such. ' +
+                      'A group with members but no configured function has no standing value and no function field — pass function to read it. members > 0 is what says it is worth asking. ' +
+                      'readable:true means the group has members that carry a state, so it can be read. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. ' +
+                      'members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. ' +
+                      'notes and tags say what the group actually covers, which the name usually does not ("All lights" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                group_id   : { type: 'string', description: 'Exact group ID — returns just that group, for re-reading one you already know' },
+                function   : { type: 'string', description: 'Compute this function instead of the group\'s configured one, for this call only: latest, min, max, average, median, sum, range, anyTrue, allTrue, anyFalse, allFalse, countTrue, countFalse, percentTrue',
+                               enum: ['latest', 'min', 'max', 'average', 'median', 'sum', 'range', 'anyTrue', 'allTrue', 'anyFalse', 'allFalse', 'countTrue', 'countFalse', 'percentTrue'] },
+                group_name : { type: 'string', description: 'Optional partial, case-insensitive filter on group name' },
+                ha_type    : { type: 'string', description: 'Filter to groups of this ha_type. Accepts the same category aliases as get_all_states (climate, spa, light, fan, cover, scene), so ha_type="light" also matches dimmer groups' },
+                tag        : { type: 'string', description: 'Filter to groups tagged with this value (case-insensitive, exact match)' }
+            }
+        }
+    },
+    {
+        name        : 'control_group',
+        description : 'Sends one command to every member of a group that can accept one — one call instead of one per device. Use get_groups to find groups and see which are controllable. ' +
+                      'COMMANDING A GROUP COMMANDS ITS MEMBERS. The group\'s own value is derived and is never written: it follows from what the members report back afterwards, so read it again rather than assuming the command set it. ' +
+                      'Members that only report (sensors) are skipped, so the number of members commanded can be lower than the member count in get_groups. Members are paced by the group\'s rate limit, so a large group takes a moment to finish. ' +
+                      'The value must suit the group\'s ha_type: on/off (or true/false) for a light or switch group, 0-100 for a dimmer or cover group, a number for a setpoint group. Groups of a structured type (e.g. colour) take whatever value that type expects, so the parameter is deliberately untyped. ' +
+                      'RETURNS { ok, group_id, name, value, commanded, skipped, delivery }: commanded is how many members the command was queued to, skipped how many were passed over because they only report or could not be resolved. ' +
+                      'There is NO per-member success or failure — commands are fire-and-forget onto the event bus and paced by the rate limit, so most members have not been sent yet when the call returns. A non-zero commanded means the command was accepted and queued, not that any device has acted on it. To confirm the effect, read the group again with get_groups; do not treat the reply as confirmation and do not re-send on the assumption that nothing happened. ' +
+                      'To control a single device instead, use set_light or control_device.',
+        inputSchema : {
+            type       : 'object',
+            required   : ['value'],
+            properties : {
+                group_id   : { type: 'string', description: 'Exact group ID (from get_groups)' },
+                group_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to group_id)' },
+                value      : { description: 'Value to send to every commandable member — "on"/"off", true/false, or a number' }
+            }
+        }
+    },
+    {
         name        : 'set_light',
         description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
                       'thing_name supports partial, case-insensitive match against the thing name OR against ' +
@@ -233,7 +277,7 @@ const MCP_TOOLS = [
             type       : 'object',
             properties : {
                 thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over thing_name.' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "kontor" matches "Kontor Spotlights").' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights").' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
                 color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' },
@@ -342,7 +386,7 @@ const MCP_ADMIN_TOOL_NAMES = new Set(MCP_TOOLS_ADMIN.map(t => t.name));
 // read-only but are handled inside dispatchControlTools — so it has to be stated here.
 const MCP_READ_TOOL_NAMES = new Set([
     'get_all_states', 'get_state', 'get_history',
-    'get_scenes', 'get_presence', 'get_alerts', 'analyze_patterns'
+    'get_scenes', 'get_presence', 'get_alerts', 'analyze_patterns', 'get_groups'
 ]);
 
 const MCP_WRITE_TOOL_NAMES = new Set([
@@ -351,7 +395,7 @@ const MCP_WRITE_TOOL_NAMES = new Set([
     // absent from MCP_TOOLS. Leaving it out would be a clean bypass of the write gate.
     'control_light',
     'control_device', 'control_fan', 'control_cover', 'control_spa', 'control_climate',
-    'activate_scene'
+    'activate_scene', 'control_group'
 ]);
 
 // Which gate a built-in tool answers to. Anything unclassified counts as a write, so a tool
