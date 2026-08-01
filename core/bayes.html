@@ -437,11 +437,19 @@
                         });
 
                     // What a group step is actually reading, directly under the source line as
-                    // in the other nodes. The 50px lead matches the column the selects start in;
+                    // in the other nodes. Built with the same flex shape as the lines around it
+                    // rather than fixed margins: the 50px lead is the column the selects start
+                    // in, and the trailing bs-endpad is the remove-button column, which
+                    // refreshRuleView hides for a single-step rule — with a fixed margin the box
+                    // would then stop 34px short of fields that had grown into that space.
                     // max-width goes because form-tips otherwise caps itself at 450px.
+                    var groupTipRow = $('<div/>', { class: "bs-group-tip-row",
+                        style: "display:flex; align-items:center; margin-top:6px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(groupTipRow);
                     var groupTip = $('<div/>', { class: "form-tips bs-group-tip",
-                        style: "margin-left:50px; margin-right:34px; margin-top:6px; max-width:none; box-sizing:border-box; white-space:normal;" })
-                        .appendTo(stepDiv).hide();
+                        style: "flex:1 1 0; min-width:0; max-width:none; box-sizing:border-box; white-space:normal;" })
+                        .appendTo(groupTipRow);
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(groupTipRow);
 
                     // Line 2 — the condition, and when it has to hold.
                     var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
@@ -529,7 +537,7 @@
                         if (show) {
                             groupTip.html($('<small/>').text('Value: ' + window.hal2GroupAggregate.label(g.aggregate)));
                         }
-                        groupTip.toggle(show);
+                        groupTipRow.toggle(show);
                     };
                     groupSel.change(syncGroupTip);
 
