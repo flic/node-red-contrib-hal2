@@ -17,8 +17,7 @@
             <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
         </div>
         <div class="form-tips" id="row-eh-tip" style="margin-left:105px; margin-bottom:8px;">
-            <small>A Thing points at its own Event handler, but a group is not a node &mdash; its value
-            lives in the handler's group registry, so this node has to be told which handler owns it.</small>
+            <small>Pick the Event handler that owns the group.</small>
         </div>
         <div class="form-row">
             <label for="node-input-action" style="width:95px; padding-right:10px;"><i class="fa fa-exchange"></i> Action</label>
@@ -311,8 +310,7 @@
                     }
                     var g = groupsList.filter(function(x) { return x.id === gid; })[0];
                     $("#group-tip").text(g
-                        ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) +
-                          '. Read-only — use an Action node to command a group.'
+                        ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate)
                         : '');
                     return;
                 }
