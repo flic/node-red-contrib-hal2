@@ -26,6 +26,10 @@
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
 
+        <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
+            <small id="group-tip"></small>
+        </div>
+
         <div class="form-row" id="thing-filter-div" hidden>
             <label for="thing-filter" id="label-thing-filter"><i class="fa fa-filter"></i> Filter</label>
             <select id="thing-filter" style="width:calc(100% - 170px)"></select>
@@ -124,7 +128,8 @@
 <script type="text/x-red" data-help-name="hal2Event">
     <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
     <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
-    <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger.</li>
+    <li><strong>Category</strong>: A <i>Thing</i> watches one Item, a <i>Type</i> watches the same Item across every Thing of that type, and a <i>Group</i> watches the group's own value. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be watched — a command-only group has nothing to observe.</li>
+    <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger. For a group the group <em>is</em> the item: it carries one aggregated value, and the trigger compares that. <code>msg.member</code> tells you which member moved it.</li>
     <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
     <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
     <li><strong>Topic</strong>: <code>msg.topic</code>, leave blank to get topic from <i>Item</i>.</li>
@@ -171,12 +176,19 @@
         oneditprepare: async function () {
             var operators = halOperators([{ v: "always", t: "always"}]);
 
-            // Check if Thing has been deleted
+            var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
+
+            // Check if the source has been deleted. A group is not a node — its id lives in the
+            // Event handler's registry — so looking it up with RED.nodes.node() finds nothing and
+            // would wipe a perfectly good configuration every time the dialog opened.
             if (this.thing != 0) {
                 try {
-                    let thing = RED.nodes.node(this.thing);
-                    if (typeof thing === 'undefined') {
-                        console.error('Thing ID '+this.thing+' is missing.');
+                    var stillThere = (this.typeSel === 'hal2Group')
+                        ? groupsList.some(function(g) { return g.id === this.thing; }, this)
+                        : typeof RED.nodes.node(this.thing) !== 'undefined';
+                    if (!stillThere) {
+                        console.error((this.typeSel === 'hal2Group' ? 'Group ' : 'Thing ') + this.thing +
+                                      ' is missing (or no longer has a value).');
                         this.thing = void 0;
                         this.item = void 0;
                         this.typeSel = void 0;
@@ -197,7 +209,6 @@
                 $("#div-error").show();
                 return;
             }  
-            var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val());
             var thingTypeList = halGetThingTypes(RED,thingsList,true);
 
             $('#node-input-rate').spinner({
@@ -241,6 +252,11 @@
                         $("#thing-filter-button").hide();
                         $("#thing-filter-div").hide();
                         $("#node-input-thing").children().remove();
+                        if (groupsList.length === 0) {
+                            // Say why rather than showing an empty box: a group is only
+                            // offered here once it has been given a Value.
+                            $("<option value=''>- no groups with a value -</option>").appendTo("#node-input-thing");
+                        }
                         for (let d in groupsList) {
                             $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>").appendTo("#node-input-thing");
                         }
@@ -305,8 +321,12 @@
                         $("<option value='" + gid + "'>" + gid + "</option>").appendTo("#node-input-item");
                         $("#node-input-item").val(gid);
                     }
+                    var g = groupsList.filter(function(x) { return x.id === gid; })[0];
+                    $("#group-tip").text(g ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : '');
+                    $("#row-group-tip").toggle(!!g);
                     return;
                 }
+                $("#row-group-tip").hide();
 
                 let thing = RED.nodes.node($("#node-input-thing").val());
                 if (typeof thing === 'undefined') { return }

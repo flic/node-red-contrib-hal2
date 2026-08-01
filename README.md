@@ -33,11 +33,37 @@ Take a look at the example flows and Thing definitions in the https://github.com
 
 ## Groups
 
-Control several Things at once with **Groups**. A group's identity — name, HAType, and a rate limit — lives in a registry on the **Event handler** (*Groups* tab), while membership is set per Item on each Thing (the *Groups* section of the Thing editor: pick an Item, pick a group). A group can then be used as a target in an **Action** node (broadcast a command to every member, paced by the rate limit) or as a source in an **Event** node (fire when any member changes, carrying which Thing/Item actually changed). Each group in the registry has an **info button** that lists its current members.
+Control and observe several Things at once with **Groups**. A group's identity — name, HAType, value function and rate limit — lives in a registry on the **Event handler** (*Groups* tab), while membership is set per Item on each Thing (the *Groups* section of the Thing editor: pick an Item, pick a group). A group can then be used as a target in an **Action** node, broadcasting a command to every member paced by the rate limit. Each group in the registry has an **info button** that lists its current members.
+
+### A group's own value
+
+Give a group a **Value** and it stops being write-only: it gains a state of its own, computed from its members, that **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's. *Temperatur inne → average* is one number for the whole house; *Alla lampor → any true* is one boolean for "is anything on".
+
+| Function | Result |
+|---|---|
+| `latest` | the most recently updated member's value, whatever its type |
+| `min` / `max` | the lowest / highest value |
+| `average` / `median` / `sum` | the mean, the middle value, everything added up |
+| `range` | highest minus lowest — the spread across the group |
+| `any true` / `all true` | at least one / every member is `true` |
+| `any false` / `all false` | at least one member is `false` / none is `true` |
+| `count true` / `count false` | how many members are `true` / `false` — compare it in a Gate |
+| `percent true` | the share that are `true`, 0–100 |
+
+Four rules decide what goes into the calculation:
+
+- **Only members with a state.** A command-only Item has nothing to contribute, and the Value field is disabled for a group that has no stateful members at all.
+- **No offline members.** A device that has dropped off the network is left out rather than voting with the value it had before it went quiet — so `any true` goes false when the last reachable lamp disappears, instead of reporting a light that may well be dark.
+- **Only values of the right kind.** The numeric functions skip anything that is not a number (a boolean member never counts as 1), and the boolean functions are strict about `true` / `false` — hal2 normalises `ON`/`1` in the ThingType's ingress function, so by the time a state reaches a group it is a real boolean or it is not one at all.
+- **Nothing eligible means no value.** A group with no live member reporting reads as *undefined*, not `0` or `false`, so a silent group can never be mistaken for a real "off" in a Gate.
+
+A group behaves like an Item in every other respect: it emits on each member update carrying `state` and `laststate`, so an **Event** node's *only on change* filter works the same as it does for a Thing, and `msg.member` says which member moved it. A group's value is derived, so it is never written to the history database and a **Value** node can only read it — use an **Action** node to command a group.
 
 A group has a **HAType** that sets the command contract for its members. Compatibility is directional: `Switch` and `Light` are interchangeable (both are boolean On/Off), and a `Dimmer` item may also join an On/Off group (turning a dimmer off is well-defined) — but a switch or light cannot join a `Dimmer` group, since an On/Off device can't honour a 0–100 level. The Thing editor only offers compatible groups for each Item, and the Event handler only offers HATypes its existing members can all honour. For genuinely mixed groups there is an **Other** type that accepts any Item.
 
-Groups replace the old standalone `hal2Group` node. Existing flows keep working — the Event handler folds legacy group nodes in automatically — but you should run `node tools/migrate-groups.js <flows.json>` to make the move permanent and then remove the deprecated nodes. The migration preserves group ids, so existing Action/Event references keep resolving untouched.
+A group without a Value stays exactly what it was: a command target, invisible to the reading nodes.
+
+Groups replace the old standalone `hal2Group` node. Existing flows keep working — the Event handler folds legacy group nodes in automatically, though they are command-only until migrated — but you should run `node tools/migrate-groups.js <flows.json>` to make the move permanent and then remove the deprecated nodes. The migration preserves group ids, so existing Action/Event references keep resolving untouched.
 
 ## AI & external control
 

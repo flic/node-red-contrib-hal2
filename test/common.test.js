@@ -102,3 +102,62 @@ describe('lib/common createThrottledQueue', function () {
         assert.deepStrictEqual(sent, ['a'], 'only the immediate send happens');
     });
 });
+
+describe('lib/common item capability predicates', function () {
+    // These mirror halStatusItem / halCommandItem in resources/hal.js. The editor decides with
+    // those which items may join a group; the engine decides with these which members count.
+    // A disagreement would show as a member you could add but that never contributed.
+    const item = (type, id) => ({ type, id: id || 'x' });
+
+    it('agrees on the item types that carry state', function () {
+        assert.strictEqual(common.statusCapableItem(item('status')), true);
+        assert.strictEqual(common.statusCapableItem(item('both')), true);
+        assert.strictEqual(common.statusCapableItem(item('loopback_both')), true);
+        assert.strictEqual(common.statusCapableItem(item('command')), false);
+        assert.strictEqual(common.statusCapableItem(item('loopback_command')), false);
+    });
+
+    it('treats the reserved heartbeat item as stateful whatever its type', function () {
+        assert.strictEqual(common.statusCapableItem(item('command', '1')), true);
+        assert.strictEqual(common.statusCapableItem(item(undefined, '1')), true);
+    });
+
+    it('agrees on the item types that accept commands', function () {
+        assert.strictEqual(common.commandCapableItem(item('command')), true);
+        assert.strictEqual(common.commandCapableItem(item('both')), true);
+        assert.strictEqual(common.commandCapableItem(item('loopback_both')), true);
+        assert.strictEqual(common.commandCapableItem(item('loopback_command')), true);
+        assert.strictEqual(common.commandCapableItem(item('status')), false);
+        // The heartbeat item is readable, never commandable.
+        assert.strictEqual(common.commandCapableItem(item('status', '1')), false);
+    });
+
+    it('says no rather than throwing on a missing item', function () {
+        assert.strictEqual(common.statusCapableItem(undefined), false);
+        assert.strictEqual(common.commandCapableItem(null), false);
+    });
+});
+
+describe('lib/common isThingAlive', function () {
+    const thing = (hbCheck, aliveState) => ({
+        thingType: { hbCheck },
+        state: aliveState === undefined ? {} : { '1': aliveState }
+    });
+
+    it('is alive when the ThingType does not check heartbeats', function () {
+        // Even with a stale false left over from before the check was switched off.
+        assert.strictEqual(common.isThingAlive(thing(false, false)), true);
+        assert.strictEqual(common.isThingAlive(thing(false, undefined)), true);
+    });
+
+    it('is alive until a heartbeat explicitly says otherwise', function () {
+        assert.strictEqual(common.isThingAlive(thing(true, undefined)), true, 'never reported yet');
+        assert.strictEqual(common.isThingAlive(thing(true, true)), true);
+        assert.strictEqual(common.isThingAlive(thing(true, false)), false);
+    });
+
+    it('is not alive for a thing that cannot be resolved', function () {
+        assert.strictEqual(common.isThingAlive(undefined), false);
+        assert.strictEqual(common.isThingAlive({}), false, 'no thingType — not a usable thing');
+    });
+});

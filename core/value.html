@@ -6,16 +6,33 @@
     </div>
     <div class="form-row" id="div-main">
         <div class="form-row">
+            <label for="node-input-typeSel" style="width:95px; padding-right:10px;"><i class="fa fa-folder"></i> Category</label>
+            <select id="node-input-typeSel" style="width:calc(100% - 170px)">
+                <option value='hal2Thing'>Thing</option>
+                <option value='hal2Group'>Group</option>
+            </select>
+        </div>
+        <div class="form-row" id="row-event-handler">
+            <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+            <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
+        </div>
+        <div class="form-tips" id="row-eh-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
+            <small>Pick the Event handler that owns the group.</small>
+        </div>
+        <div class="form-row">
             <label for="node-input-action" style="width:95px; padding-right:10px;"><i class="fa fa-exchange"></i> Action</label>
             <select id="node-input-action" style="width:calc(100% - 170px)">
                 <option value='get' selected>Get value</option>
                 <option value='set'>Set value</option>
             </select>
         </div>
-        <div class="form-row">
-            <label for="node-input-thing" style="width:95px; padding-right:10px;"><i class="fa fa-microchip"></i> Thing</label>
+        <div class="form-row" id="row-thing">
+            <label for="node-input-thing" id="label-node-input-thing" style="width:95px; padding-right:10px;" class="fa fa-microchip"> Thing</label>
             <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
+        </div>
+        <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
+            <small id="group-tip"></small>
         </div>
         <div class="form-row" id="thing-filter-div" hidden>
             <label for="thing-filter" id="label-thing-filter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filter</label>
@@ -29,7 +46,7 @@
             <label for="node-input-thingType" style="width:95px; padding-right:10px;"><i class="fa fa-gears"></i> Type</label>
             <select id="node-input-thingType" style="width:calc(100% - 170px)"></select>
         </div>
-        <div class="form-row">
+        <div class="form-row" id="div-item">
             <label for="node-input-item" style="width:95px; padding-right:10px;"><i class="fa fa-sitemap"></i> Item</label>
             <select id="node-input-item" style="width:calc(100% - 170px)"></select>
         </div>
@@ -108,10 +125,12 @@
 
 <script type="text/x-red" data-help-name="hal2Value">
     <p>The Value node is used to either query a specific <i>Item</i> and send the <i>Item</i> value on to the next node, or to update an <i>Item</i> value. In the latter case the ingress function as well as all topic filters are bypassed, the value is updated directly as is. Events are triggered as usual.</p>
+    <li><strong>Category</strong>: Read a single <i>Thing</i>'s Item, or a <i>Group</i>'s own value. A group's value is computed from its members by the Event handler — average, any true, count true and so on — so it is <b>read-only</b>: use an Action node to command a group. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be selected.</li>
+    <li><strong>Event handler</strong>: Shown for a <i>Group</i> only. A Thing carries a reference to its own handler, so this node can reach the bus through it; a group is not a node, and its value lives in the handler's group registry — so the handler that owns the group has to be named here.</li>
     <li><strong>Action</strong>: Get value from <i>Item</i> or set value to <i>Item</i>.</li>
     <li><strong>Item</strong>: Select the <i>Item</i>.</li>
     <li><strong>Property</strong>: Source or destination for <i>Item</i> value.</li>
-    <li><strong>Item info</strong>: Output <code>msg.thing</code> and <code>msg.item</code> information. Only works when <code>msg</code> is used for output.</li>
+    <li><strong>Item info</strong>: Output <code>msg.thing</code> and <code>msg.item</code> information, or <code>msg.group</code> for a group — including how many members currently contribute a value. Only works when <code>msg</code> is used for output.</li>
     <li><strong>Name</strong>: Node name.</li>  
 </script>
 
@@ -121,7 +140,28 @@
         color: '#b3b3ff',
         defaults: {
             name:           {},
+            // Optional: only a Group source needs it, and requiring it would flag every
+            // existing Value node as invalid.
+            eventHandler:   {
+                value: "", type: "hal2EventHandler", required: false,
+                // Only a group source needs one, so requiring it outright would flag every
+                // existing Value node. While the dialog is open the live Category wins; on
+                // the canvas (deploy-time validation, no dialog) the saved one does.
+                validate: function (v) {
+                    // #row-eh-tip exists only in this node's template, so it is what tells us
+                    // the open dialog is ours — hal2Event has a #node-input-typeSel too, and
+                    // reading that one would judge this node by another node's form.
+                    var mine  = $("#row-eh-tip").length > 0;
+                    var group = mine ? $("#node-input-typeSel").val() === 'hal2Group'
+                                     : this.typeSel === 'hal2Group';
+                    if (!group) { return true; }
+                    return !!v && v !== '_ADD_';
+                }
+            },
+            typeSel:        { value: 'hal2Thing' },
             action:         {},
+            // For a Group source `thing` carries the group id and `item` mirrors it, exactly
+            // as hal2Event stores a group — so the required-item validation keeps working.
             thing:          {},
             thingType:      {},   
             item:           { required: true   },           
@@ -150,15 +190,22 @@
         paletteLabel: "value",
         oneditprepare: function () {
 
-            // Check if Thing has been deleted
+            var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
+
+            // Check if the source has been deleted. A group is not a node, so it has to be
+            // looked up in the Event handler's registry instead of with RED.nodes.node().
             if (this.thing != 0) {
                 try {
-                    let thing = RED.nodes.node(this.thing);
-                    if (typeof thing === 'undefined') {
-                        console.error('Thing ID '+this.thing+' is missing.');
+                    var stillThere = (this.typeSel === 'hal2Group')
+                        ? groupsList.some(function(g) { return g.id === this.thing; }, this)
+                        : typeof RED.nodes.node(this.thing) !== 'undefined';
+                    if (!stillThere) {
+                        console.error((this.typeSel === 'hal2Group' ? 'Group ' : 'Thing ') + this.thing +
+                                      ' is missing (or no longer has a value).');
                         this.thing = void 0;
                         this.thingType = void 0;
                         this.item = void 0;
+                        this.typeSel = void 0;
                     }
                 } catch (error) {
                         console.log('Error: '+error.message);
@@ -167,14 +214,60 @@
             var savedThing = this.thing;
             var savedType = this.thingType;
             var savedItem = this.item;
+            var savedTypeSel = this.typeSel;
 
             var thingsList = halGetThings(RED,'status');
-            if (thingsList.length == 0) {
+            if (thingsList.length == 0 && groupsList.length == 0) {
                 $("#div-main").hide();
                 $("#div-error").show();
                 return;
             }
             var thingTypeList = halGetThingTypes(RED,thingsList,true);
+
+            // Category: a Group is read-only (its value is computed from its members, so
+            // there is nothing to write to) and has no items, no filter and no history.
+            var isGroup = function() { return $("#node-input-typeSel").val() === 'hal2Group'; };
+            $("#node-input-typeSel").change(function() {
+                var group = isGroup();
+                $("#row-thing").toggle(!group);
+                $("#row-event-handler").toggle(group);
+                $("#row-eh-tip").toggle(group);
+                $("#row-group-tip").toggle(group);
+                $("#div-item").toggle(!group);
+                if (group) {
+                    $("#thing-filter-div").hide();
+                    $("#row-notes").hide();
+                    $("#row-item-notes").hide();
+                    $("#div-type").hide();
+                    $("#node-input-action").val('get');
+                    $("#node-input-thing").children().remove();
+                    if (groupsList.length === 0) {
+                        $("<option value=''>- no groups with a value -</option>").appendTo("#node-input-thing");
+                    }
+                    for (var d in groupsList) {
+                        $("<option value='" + groupsList[d].id + "'>" + groupsList[d].name + "</option>")
+                            .appendTo("#node-input-thing");
+                    }
+                    $("#row-thing").show();
+                    $("#label-node-input-thing").text(' Group').attr('class', 'fa fa-object-group');
+                    $("#thing-filter-button").hide();
+                    if (savedTypeSel === 'hal2Group') { $("#node-input-thing").val(savedThing); }
+                } else {
+                    $("#label-node-input-thing").text(' Thing').attr('class', 'fa fa-microchip');
+                    $("#thing-filter-button").show();
+                    $("#node-input-thing").children().remove();
+                    $("#thing-filter").trigger('change');
+                    if (savedTypeSel !== 'hal2Group' && savedThing) {
+                        $("#node-input-thing").val(savedThing);
+                    }
+                    if ($("#node-input-thing").val() === null && thingsList.length) {
+                        $("#node-input-thing").val(thingsList[0].id);
+                    }
+                }
+                $("#node-input-action").prop('disabled', group);
+                $("#node-input-thing").trigger('change');
+                updateHistoryVisibility();
+            });
 
             $("#thing-filter").change(function() {
                 $("#node-input-thing").children().remove();
@@ -206,6 +299,22 @@
 
 
             $("#node-input-thing").change(function() {
+                // Groups are not nodes — the item field carries the group id, the same way
+                // hal2Event stores one, so the required-item validation is satisfied.
+                if (isGroup()) {
+                    var gid = $("#node-input-thing").val();
+                    $("#node-input-item").children().remove();
+                    if (gid) {
+                        $("<option value='" + gid + "'>" + gid + "</option>").appendTo("#node-input-item");
+                        $("#node-input-item").val(gid);
+                    }
+                    var g = groupsList.filter(function(x) { return x.id === gid; })[0];
+                    // Hidden rather than blank when there is no group to describe — an empty
+                    // tip box reads as something failing to load.
+                    $("#group-tip").text(g ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : '');
+                    $("#row-group-tip").toggle(!!g);
+                    return;
+                }
                 if ($("#node-input-thing").val() == '0') {
                     $("#div-type").show();
                     return;
@@ -217,7 +326,9 @@
 
                 //get all items and sort them alphabetically
                 let thing = RED.nodes.node($("#node-input-thing").val());
+                if (!thing) { $("#row-notes").hide(); return; }
                 let thingType = RED.nodes.node(thing.thingType);
+                if (!thingType) { $("#row-notes").hide(); return; }
                 // Show notes
                 if (thing.notes) {
                     $("#row-notes").show();
@@ -265,6 +376,8 @@
             function updateHistoryVisibility() {
                 var isGet = $("#node-input-action").val() === 'get';
                 if (!isGet) { $("#row-history-mode").hide(); hideHistoryDetails(); return; }
+                // A group's value is derived and never logged, so there is no series to query.
+                if (isGroup()) { $("#row-history-mode").hide(); hideHistoryDetails(); return; }
                 var thingType;
                 if ($("#node-input-thing").val() == '0') {
                     thingType = RED.nodes.node($("#node-input-thingType").val());
@@ -304,12 +417,14 @@
 
             $("#node-input-item").change(function() {
                 $("#row-item-notes").hide();
+                if (isGroup()) { updateHistoryVisibility(); return; }
                 if ($("#node-input-thing").val() == '0') {
                     var thingType = RED.nodes.node($("#node-input-thingType").val());
                 } else {
                     var thing = RED.nodes.node($("#node-input-thing").val());
-                    var thingType = RED.nodes.node(thing.thingType);
+                    var thingType = thing ? RED.nodes.node(thing.thingType) : null;
                 }
+                if (!thingType || !thingType.items) { updateHistoryVisibility(); return; }
                 var item = $("#node-input-item").val();
                 for (let d in thingType.items) {
                     if (thingType.items[d].id == item) {
@@ -359,16 +474,23 @@
                 $("#node-input-thingType").val(this.thingType);
             }
 
-            if (typeof this.thing !== 'undefined') {
-                $("#node-input-thing").val(this.thing);
-            } else {
-                $("#node-input-thing").val(thingsList[0].id);
-            }
+            // Category first: it repopulates the source select with either things or groups,
+            // so the saved id is resolved against the right list.
+            $("#node-input-typeSel").val(this.typeSel === 'hal2Group' ? 'hal2Group' : 'hal2Thing');
+            $("#node-input-typeSel").trigger('change');
 
-            if ($("#node-input-thing").val() == '0') {
-                $('#node-input-thingType').trigger('change');
-            } else {
-                $('#node-input-thing').trigger('change');
+            if ($("#node-input-typeSel").val() !== 'hal2Group') {
+                if (typeof this.thing !== 'undefined') {
+                    $("#node-input-thing").val(this.thing);
+                } else {
+                    $("#node-input-thing").val(thingsList[0].id);
+                }
+
+                if ($("#node-input-thing").val() == '0') {
+                    $('#node-input-thingType').trigger('change');
+                } else {
+                    $('#node-input-thing').trigger('change');
+                }
             }
 
             //Add output

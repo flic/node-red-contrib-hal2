@@ -11,6 +11,7 @@ const {
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories
 } = require('./mcp-tools');
 const { createToolGate, claimAllows } = require('../lib/claim-gate');
+const groupAggregate = require('../resources/group-aggregate');
 
 // ── HTTP helpers ──────────────────────────────────────────────────────────────
 
@@ -307,11 +308,15 @@ module.exports = function(RED) {
 
         // ── Group engine ────────────────────────────────────────────────────────
         // Groups are no longer separate nodes. Their identity (name, haType, notes,
-        // ratelimit) lives here on the EventHandler; membership lives per item on each
-        // hal2Thing (thing.groups = [{item, group}]). This engine resolves membership
-        // and wires, per group: a command listener that broadcasts to members, and
-        // update listeners that re-emit member changes under the group id (carrying the
-        // real member thing/item so event nodes get member context).
+        // ratelimit, aggregate) lives here on the EventHandler; membership lives per item
+        // on each hal2Thing (thing.groups = [{item, group}]). This engine resolves
+        // membership and wires, per group: a command listener that broadcasts to members,
+        // and update listeners that maintain the group's own value and emit it.
+        //
+        // A group with an `aggregate` function has a state of its own, computed from its
+        // members and shaped exactly like a hal2Thing item's — state/laststate, its own
+        // last_update/last_change — so hal2Event, hal2Value, hal2Gate and hal2Bayes can
+        // read a group wherever they can read a thing.
         //
         // Back-compat: legacy hal2Group nodes are folded in automatically (in memory)
         // by reading their config — old flows keep working with no file changes and no
@@ -320,24 +325,53 @@ module.exports = function(RED) {
         // Action/Event references keep pointing at the same id either way.
 
         node.groupWirings = [];
-
-        function commandCapableItem(item) {
-            const t = item && item.type;
-            return (t === 'both' || t === 'command' || t === 'loopback_both' || t === 'loopback_command');
+        // groupId -> { state, laststate, last_update, last_change, members, live, fn, name }
+        // Restored so laststate and last_change survive a restart, the same way a thing
+        // persists its own (core/thing.js:52-55). The values themselves are recomputed from
+        // live members at startup regardless.
+        const groupContext = node.context();
+        node.groupState = groupContext.get('groupState', node.contextStore) || {};
+        function persistGroupState() {
+            groupContext.set('groupState', node.groupState, node.contextStore);
         }
 
-        // groupId -> { ratelimit, legacy } merged from the registry and any legacy
-        // hal2Group nodes belonging to this handler. The registry wins on collision
-        // (i.e. once a group has been migrated, its hal2Group node is ignored).
+        const commandCapableItem = common.commandCapableItem;
+        const statusCapableItem  = common.statusCapableItem;
+
+        // The reserved heartbeat item. It is never aggregated, but a change to it flips a
+        // member in or out of every group it belongs to, so it has to trigger a recompute.
+        const HEARTBEAT_ITEM = '1';
+
+        // Read by hal2Value / hal2Gate / hal2Bayes. Returns undefined for an unknown group
+        // or one with no value configured, which reads as "nothing to compare" everywhere.
+        node.getGroupState = function (groupId) {
+            return node.groupState[groupId];
+        };
+
+        // groupId -> { ratelimit, aggregate, name, legacy } merged from the registry and any
+        // legacy hal2Group nodes belonging to this handler. The registry wins on collision
+        // (i.e. once a group has been migrated, its hal2Group node is ignored). Legacy nodes
+        // never carry an aggregate — the field only exists in the registry.
         function buildGroupDefs() {
             const defs = new Map();
             for (const g of node.groups) {
-                if (g && g.id) defs.set(g.id, { ratelimit: Number(g.ratelimit) || 0, legacy: false });
+                if (!g || !g.id) continue;
+                defs.set(g.id, {
+                    ratelimit: Number(g.ratelimit) || 0,
+                    aggregate: groupAggregate.isFunction(g.aggregate) ? g.aggregate : null,
+                    name: g.name || g.id,
+                    legacy: false
+                });
             }
             RED.nodes.eachNode(function (cfg) {
                 if (cfg.type !== 'hal2Group' || cfg.eventHandler !== node.id) return;
                 if (defs.has(cfg.id)) return;
-                defs.set(cfg.id, { ratelimit: Number(cfg.ratelimit) || 0, legacy: true });
+                defs.set(cfg.id, {
+                    ratelimit: Number(cfg.ratelimit) || 0,
+                    aggregate: null,
+                    name: cfg.name || cfg.id,
+                    legacy: true
+                });
             });
             return defs;
         }
@@ -379,10 +413,78 @@ module.exports = function(RED) {
             node.groupWirings = [];
         }
 
+        // Collect the samples a group's value is computed from. A member contributes only if
+        // its thing resolves, its item carries state, and the thing is alive — a device that
+        // has dropped off the network must not keep voting with the value it had before it
+        // went quiet. Members with no state yet are passed through as undefined and dropped
+        // by the aggregation, so "nobody reporting" and "no members" are one case.
+        function groupSamples(groupMembers) {
+            const samples = [];
+            let eligible = 0;
+            for (const m of groupMembers) {
+                const thing = RED.nodes.getNode(m.thing);
+                if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) continue;
+                const item = thing.thingType.items.find(it => it.id === m.item);
+                if (!item || !statusCapableItem(item)) continue;
+                if (m.item === HEARTBEAT_ITEM) continue;   // liveness is a filter, not a value
+                eligible += 1;
+                if (!common.isThingAlive(thing)) continue;
+                samples.push({
+                    state: thing.state ? thing.state[m.item] : undefined,
+                    updatedAt: (thing.heartbeat && thing.heartbeat[m.item]) || 0
+                });
+            }
+            return { samples, eligible };
+        }
+
+        // Recompute one group's value and, unless we are priming at startup, announce it.
+        // The record mirrors a thing item's: laststate and last_change only move when the
+        // value actually changed, so hal2Event's change filters behave identically whether
+        // they watch a thing or a group (core/thing.js:218-231).
+        function recomputeGroup(groupId, def, groupMembers, trigger) {
+            const { samples, eligible } = groupSamples(groupMembers);
+            const value = groupAggregate.aggregate(def.aggregate, samples);
+            const step  = groupAggregate.nextRecord(node.groupState[groupId], value, Date.now());
+
+            const rec = Object.assign({}, step, {
+                members: eligible,
+                live:    samples.length,
+                fn:      def.aggregate,
+                name:    def.name
+            });
+            delete rec.changed;          // a transient of the step, not part of the record
+            node.groupState[groupId] = rec;
+            persistGroupState();
+
+            if (!trigger) { return rec; }   // startup priming stays silent
+
+            const eventmsg = {
+                _msgid:    RED.util.generateId(),
+                state:     rec.state,
+                laststate: rec.laststate,
+                payload:   rec.state,
+                topic:     '',
+                group: {
+                    id: groupId, name: def.name, function: def.aggregate,
+                    members: rec.members, live: rec.live,
+                    last_update: rec.last_update, last_change: rec.last_change
+                },
+                // Which member moved the group. Kept because "the hall light is what turned
+                // the group on" is exactly the context an event flow wants next.
+                member: trigger
+            };
+            node.debug('Group ' + def.name + ' (' + def.aggregate + ') = ' + JSON.stringify(rec.state));
+            // Emitted straight onto the bus rather than through publishUpdate: a group's
+            // value is derived, so it must not be written to the history database.
+            node.emit('update_' + groupId, null, groupId, groupId, eventmsg);
+            return rec;
+        }
+
         function wireGroups() {
             unwireGroups();   // idempotent — safe to re-run on every flows:started
             const members = buildGroupMembers();
             const defs    = buildGroupDefs();
+            const valueGroups = [];
             let legacyCount = 0;
             for (const [groupId, def] of defs) {
                 const groupMembers = members.get(groupId) || [];
@@ -409,20 +511,44 @@ module.exports = function(RED) {
                 node.subscribe('command', groupId, commandListener);
                 node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener, throttle: throttle });
 
-                // Update: re-emit member changes under the group id, keeping the real
-                // member thing/item so event nodes can show which member changed.
+                // Update: maintain the group's own value and emit it. A group without an
+                // aggregation is command-only and has nothing to observe; the sweep below
+                // clears any record it used to have.
+                if (!def.aggregate) { continue; }
+
                 const updateListener = function (thingtypeid, thingid, itemid, payload) {
                     const isMember = groupMembers.some(m => m.thing === thingid && m.item === itemid);
-                    if (!isMember) return;
-                    node.emit('update_' + groupId, thingtypeid, thingid, itemid, payload);
+                    // A heartbeat is not a member item, but it decides whether that thing's
+                    // members count at all — so it has to recompute too, or a group would keep
+                    // counting a device for as long as it stayed silent.
+                    if (!isMember && itemid !== HEARTBEAT_ITEM) return;
+                    const trigger = {
+                        thing: { id: thingid, name: (payload && payload.thing && payload.thing.name) || thingid },
+                        item:  { id: itemid,  name: (payload && payload.item  && payload.item.name)  || itemid },
+                        heartbeat: !isMember
+                    };
+                    recomputeGroup(groupId, def, groupMembers, trigger);
                 };
                 const uniqueThings = [...new Set(groupMembers.map(m => m.thing))];
                 for (const t of uniqueThings) {
                     node.subscribe('update', t, updateListener);
                     node.groupWirings.push({ event: 'update', id: t, listener: updateListener });
                 }
+
+                // Prime the value so the group can be read before any member moves.
+                recomputeGroup(groupId, def, groupMembers, null);
+                valueGroups.push(def.name + ' (' + def.aggregate + ')');
             }
+            // Drop records for groups that no longer exist or lost their aggregation, so a
+            // stale value cannot be read from a deleted group after a redeploy.
+            for (const id of Object.keys(node.groupState)) {
+                if (!defs.has(id) || !defs.get(id).aggregate) { delete node.groupState[id]; }
+            }
+            persistGroupState();
             node.debug('Group engine wired ' + defs.size + ' group(s)');
+            if (valueGroups.length) {
+                node.log('Group values: ' + valueGroups.join(', '));
+            }
             if (legacyCount > 0) {
                 node.warn('Group engine: auto-handling ' + legacyCount + ' legacy hal2Group node(s) in memory. ' +
                     'Run tools/migrate-groups.js to make this permanent and remove the deprecated nodes.');
@@ -627,7 +753,7 @@ module.exports = function(RED) {
                         thing_name  : thing.name,
                         type_id     : tt.id,
                         type_name   : tt.name,
-                        alive       : tt.hbCheck === false ? true : thing.state['1'] !== false,
+                        alive       : common.isThingAlive(thing),
                         last_change : msToIso(lastChange[thing.id]),
                         items
                     };

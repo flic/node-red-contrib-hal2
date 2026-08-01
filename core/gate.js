@@ -15,50 +15,65 @@ module.exports = function(RED) {
         //a=state, b=comparison value
         var compare = rules.COMPARE;
 
-        var ruleMatch = 0;
-        for (var i = 0; i < node.rules.length; i += 1) {
-            var rule = node.rules[i];
-            var id;
-            if (rule.thing == 'dynamic') {
-                id = common.thingIdFromMsg(RED,node,rule.thingtype,msg);
-                if (typeof id == 'undefined') { continue; }
-            } else {
-                id = rule.thing;
+        // The state a rule compares against, plus the timestamps the last_* operators need.
+        // A thing keeps these per item; a group keeps one set for its whole aggregated value.
+        function sourceOf(rule) {
+            if (rule.category === 'hal2Group') {
+                if (!node.eventHandler || typeof node.eventHandler.getGroupState !== 'function') {
+                    node.warn('Rule skipped: a group rule needs an event handler on this node');
+                    return null;
+                }
+                var rec = node.eventHandler.getGroupState(rule.thing);
+                // No record, or no live member reporting: the rule has nothing to compare
+                // and does not match, rather than matching against a stale or invented value.
+                if (!rec || rec.state === undefined) { return null; }
+                return { state: rec.state, laststate: rec.laststate,
+                         last_update: rec.last_update, last_change: rec.last_change };
             }
-
+            var id = (rule.thing == 'dynamic')
+                ? common.thingIdFromMsg(RED,node,rule.thingtype,msg)
+                : rule.thing;
+            if (typeof id == 'undefined') { return null; }
             var thing;
             try {
                 thing = RED.nodes.getNode(id);
             } catch (error) {
                 console.log('Error: '+error.message);
             }
-            if ( typeof thing == 'undefined' ) { continue; }
+            if (typeof thing == 'undefined' || thing === null) { return null; }
+            if (!thing.state || !thing.state.hasOwnProperty(rule.item)) { return null; }
+            return { state: thing.state[rule.item], laststate: thing.laststate[rule.item],
+                     last_update: thing.heartbeat[rule.item], last_change: thing.last_change[rule.item] };
+        }
+
+        var ruleMatch = 0;
+        for (var i = 0; i < node.rules.length; i += 1) {
+            var rule = node.rules[i];
+            var src = sourceOf(rule);
+            if (src === null) { continue; }      // unresolvable source never matches
 
             var cv = convertTo[rule.type](rule.value,msg);
 
-            // Check if item has state
-            if (thing.state.hasOwnProperty(rule.item)) {
-                if (rule.operator.includes('last_')) {
-                    let now = Date.now();
-                    let last_update = Math.trunc((now - thing.heartbeat[rule.item])/1000);
-                    let last_change = Math.trunc((now - thing.last_change[rule.item])/1000);
-                    switch (rule.operator) {
-                        case 'last_update_gte':
-                            if (last_update >= Number(cv)) { ruleMatch++; }
-                            break;
-                        case 'last_update_lte':
-                            if (last_update <= Number(cv)) { ruleMatch++; }
-                            break;
-                        case 'last_change_gte':
-                            if (last_change >= Number(cv)) { ruleMatch++; }
-                            break;
-                        case 'last_change_lte':
-                            if (last_change <= Number(cv)) { ruleMatch++; }
-                            break;
-                    }
-                } else if (compare[rule.operator](thing.state[rule.item],cv,thing.laststate[rule.item])){
-                    ruleMatch ++;
+            if (rule.operator.includes('last_')) {
+                let now = Date.now();
+                let last_update = Math.trunc((now - src.last_update)/1000);
+                let last_change = Math.trunc((now - src.last_change)/1000);
+                switch (rule.operator) {
+                    case 'last_update_gte':
+                        if (last_update >= Number(cv)) { ruleMatch++; }
+                        break;
+                    case 'last_update_lte':
+                        if (last_update <= Number(cv)) { ruleMatch++; }
+                        break;
+                    case 'last_change_gte':
+                        if (last_change >= Number(cv)) { ruleMatch++; }
+                        break;
+                    case 'last_change_lte':
+                        if (last_change <= Number(cv)) { ruleMatch++; }
+                        break;
                 }
+            } else if (compare[rule.operator](src.state,cv,src.laststate)){
+                ruleMatch ++;
             }
         }
 
@@ -84,6 +99,7 @@ module.exports = function(RED) {
     function hal2Gate(config) {
         RED.nodes.createNode(this,config);
         this.name = config.name;
+        this.eventHandler = RED.nodes.getNode(config.eventHandler);
         this.rules = config.rules;
         this.checkall = config.checkall;
         this.if = config.if;

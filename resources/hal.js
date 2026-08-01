@@ -70,14 +70,34 @@ function halGetThings(RED,filter) {
     return filteredThingsList;
 }
 
-function halGetGroups(RED, eventHandlerId) {
+function halGetGroups(RED, eventHandlerId, filter) {
     // Groups live in the EventHandler registry (config node). For back-compat we also
     // surface any legacy hal2Group nodes still in the flow (the runtime folds these in
     // too, by node id), so existing Action/Event references keep resolving until
     // tools/migrate-groups.js is run. Registry wins on id collision.
-    // Returns [{ id, name, haType, notes, ratelimit }] sorted by name.
+    // Returns [{ id, name, haType, notes, ratelimit, aggregate }] sorted by name.
+    //
+    // filter 'value' keeps only groups that have a value function configured — the ones
+    // that can be read by Value/Gate/Event/Bayes. Expressed once here so every node that
+    // offers a group as a source applies the same rule. Legacy hal2Group nodes never have
+    // one, so they are command-only until migrated.
+    // A specific handler when one is given and resolves; otherwise every handler in the
+    // flow. Nodes that only gained an Event handler field recently (Value, Gate) carry an
+    // empty one on existing instances, and a group id is unique across handlers anyway —
+    // returning nothing there would silently offer an empty list instead of the real groups.
     var eh = eventHandlerId ? RED.nodes.node(eventHandlerId) : null;
-    var groupsList = (eh && Array.isArray(eh.groups)) ? eh.groups.slice() : [];
+    var groupsList = [];
+    if (eh && Array.isArray(eh.groups)) {
+        groupsList = eh.groups.slice();
+    } else if (typeof RED.nodes.eachConfig === 'function') {
+        // eachConfig, not filterNodes: the latter only walks flow nodes, and an Event
+        // handler is a config node — it would find nothing at all.
+        RED.nodes.eachConfig(function (cfg) {
+            if (cfg && cfg.type === 'hal2EventHandler' && Array.isArray(cfg.groups)) {
+                groupsList = groupsList.concat(cfg.groups);
+            }
+        });
+    }
 
     var seen = {};
     for (var i in groupsList) { seen[groupsList[i].id] = true; }
@@ -87,8 +107,16 @@ function halGetGroups(RED, eventHandlerId) {
         var g = legacy[l];
         if (seen[g.id]) { continue; }
         if (eventHandlerId && g.eventHandler !== eventHandlerId) { continue; }
-        groupsList.push({ id: g.id, name: g.name, haType: 'other', notes: '', ratelimit: Number(g.ratelimit) || 0 });
+        groupsList.push({ id: g.id, name: g.name, haType: 'other', notes: '', ratelimit: Number(g.ratelimit) || 0, aggregate: '' });
         seen[g.id] = true;
+    }
+
+    if (filter === 'value') {
+        var ga = (typeof window !== 'undefined') && window.hal2GroupAggregate;
+        groupsList = groupsList.filter(function(x) {
+            if (!x || !x.aggregate) { return false; }
+            return ga ? ga.isFunction(x.aggregate) : true;
+        });
     }
 
     groupsList.sort(function(a, b) {

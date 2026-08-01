@@ -1,6 +1,7 @@
 <script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
 <script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-scale.js"></script>
 <script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-time.js"></script>
+<script type="text/javascript" src="resources/node-red-contrib-hal2/group-aggregate.js"></script>
 
 <script type="text/x-red" data-template-name="hal2Bayes">
     <div class="form-row">
@@ -105,8 +106,14 @@
     <h3>Rules</h3>
     <p>Everything is a <b>rule</b>, built from steps. Each step names a source and a condition, then
     says <i>when</i> that condition has to hold. A source is normally a <b>thing</b> item, but it can
-    also be a <b>flow</b>, <b>global</b> or <b>env</b> variable &mdash; useful for facts that live
-    elsewhere in the flow, such as "the calendar says we are away" or "guest mode is on".</p>
+    also be a <b>group</b> &mdash; the value a group computes from its members, so "any window is
+    open" or "the average indoor temperature" is one step instead of ten &mdash; or a <b>flow</b>,
+    <b>global</b> or <b>env</b> variable, useful for facts that live elsewhere in the flow, such as
+    "the calendar says we are away" or "guest mode is on".</p>
+    <p>A <b>group</b> behaves exactly like a thing item here: it emits when its value changes, so
+    every timing qualifier below works on it. Only groups that have been given a <b>Value</b> on the
+    Event handler's Groups tab can be chosen, and a group where no live member is reporting reads as
+    no evidence rather than as a false.</p>
     <ul>
         <li><b>now</b> &mdash; a condition, true at that instant. Reads <i>and&hellip;</i></li>
         <li><b>now or soon</b> &mdash; the same, but if it is not true yet the step waits for it until
@@ -278,6 +285,7 @@
             oneditprepare: function() {
                 var node = this;
                 var thingsList = halGetThings(RED, 'status');
+                var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
 
                 var tabs = RED.tabs.create({
                     id: 'hal2bayes-tabs',
@@ -336,6 +344,7 @@
                 function stepValid(s) {
                     if (!s) { return false; }
                     if (s.src === 'time') { return btime.parseHHMM(s.start) !== null && btime.parseHHMM(s.end) !== null; }
+                    if (s.src === 'group') { return !!s.group; }
                     if (s.src === 'flow' || s.src === 'global' || s.src === 'env') { return !!s.prop; }
                     return !!(s.thing && s.item);
                 }
@@ -392,12 +401,22 @@
                     var line1 = flexRow();
                     $('<span/>', { class: "bs-lead", style: "flex:0 0 50px; font-weight:bold;" }).appendTo(line1);
                     var srcSel = $('<select/>', { class: "bs-src", style: "flex:0 0 130px; min-width:0;" }).appendTo(line1);
-                    [['thing', 'thing'], ['flow', 'flow'], ['global', 'global'], ['env', 'env'], ['time', 'time']]
+                    [['thing', 'thing'], ['group', 'group'], ['flow', 'flow'], ['global', 'global'], ['env', 'env'], ['time', 'time']]
                         .forEach(function(s) { srcSel.append($("<option></option>").val(s[0]).text(s[1])); });
                     var thingWrap = $('<span/>', { class: "bs-thing-wrap",
                         style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
                     var thingSel = $('<select/>', { class: "bs-thing", style: "flex:5 1 0; min-width:0;" }).appendTo(thingWrap);
                     var itemSel = $('<select/>', { class: "bs-item", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(thingWrap);
+                    var groupWrap = $('<span/>', { class: "bs-group-wrap",
+                        style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
+                    var groupSel = $('<select/>', { class: "bs-group", style: "flex:1 1 0; min-width:0;" }).appendTo(groupWrap);
+                    groupsList.forEach(function(g) {
+                        groupSel.append($("<option></option>").val(g.id).text(g.name));
+                    });
+                    if (!groupsList.length) {
+                        groupSel.append($("<option></option>").val('').text('- no groups with a value -'));
+                    }
+                    groupSel.val(step.group || (groupsList[0] && groupsList[0].id) || '');
                     var propWrap = $('<span/>', { class: "bs-prop-wrap",
                         style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
                     $('<input/>', { class: "bs-prop", type: "text", placeholder: "variable name", style: "width:100%;" })
@@ -416,6 +435,21 @@
                             stepDiv.remove();
                             refreshRuleView(ruleContainer);
                         });
+
+                    // What a group step is actually reading, directly under the source line as
+                    // in the other nodes. Built with the same flex shape as the lines around it
+                    // rather than fixed margins: the 50px lead is the column the selects start
+                    // in, and the trailing bs-endpad is the remove-button column, which
+                    // refreshRuleView hides for a single-step rule — with a fixed margin the box
+                    // would then stop 34px short of fields that had grown into that space.
+                    // max-width goes because form-tips otherwise caps itself at 450px.
+                    var groupTipRow = $('<div/>', { class: "bs-group-tip-row",
+                        style: "display:flex; align-items:center; margin-top:6px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(groupTipRow);
+                    var groupTip = $('<div/>', { class: "form-tips bs-group-tip",
+                        style: "flex:1 1 0; min-width:0; max-width:none; box-sizing:border-box; white-space:normal;" })
+                        .appendTo(groupTipRow);
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(groupTipRow);
 
                     // Line 2 — the condition, and when it has to hold.
                     var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
@@ -497,11 +531,23 @@
                     };
                     opSel.change(opHandler);
 
+                    var syncGroupTip = function() {
+                        var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
+                        var show = srcSel.val() === 'group' && !!g;
+                        if (show) {
+                            groupTip.html($('<small/>').text('Value: ' + window.hal2GroupAggregate.label(g.aggregate)));
+                        }
+                        groupTipRow.toggle(show);
+                    };
+                    groupSel.change(syncGroupTip);
+
                     var srcHandler = function() {
                         var src = srcSel.val();
                         thingWrap.toggle(src === 'thing');
-                        propWrap.toggle(src !== 'thing' && src !== 'time');
+                        groupWrap.toggle(src === 'group');
+                        propWrap.toggle(src !== 'thing' && src !== 'group' && src !== 'time');
                         timeWrap.toggle(src === 'time');
+                        syncGroupTip();
                         syncOperatorOptions();
                     };
                     // For a time step resolveState yields a boolean, so the existing
@@ -530,13 +576,14 @@
                     opSel.val(step.operator || 'true');
                     opHandler();
 
-                    var src = ['thing', 'flow', 'global', 'env'].indexOf(step.src) >= 0 ? step.src : 'thing';
+                    var src = ['thing', 'group', 'flow', 'global', 'env', 'time'].indexOf(step.src) >= 0 ? step.src : 'thing';
                     srcSel.val(src);
                     patSel.val(step.pattern || 'is');
                     srcHandler();
                     // A saved edge qualifier on a polled source can never fire; say so rather
                     // than silently swapping it.
-                    if (src !== 'thing' && (step.pattern === 'becomes' || step.pattern === 'cycle')) {
+                    if (src !== 'thing' && src !== 'group' && src !== 'time' &&
+                        (step.pattern === 'becomes' || step.pattern === 'cycle')) {
                         RED.notify('hal2Bayes: a ' + src + ' step cannot detect changes — changed it to "now"', 'warning');
                     }
                     return stepDiv;
@@ -567,6 +614,7 @@
                         var step = {
                             src:      src,
                             thing:    el.find('.bs-thing option:selected').val(),
+                            group:    el.find('.bs-group option:selected').val() || '',
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
                             operator: el.find('.bs-op option:selected').val(),
@@ -605,7 +653,7 @@
                         var isTime = src === 'time';
 
                         var allowed = isTime ? ['is']
-                                    : src === 'thing' ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
+                                    : (src === 'thing' || src === 'group') ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
                                     : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
                         var patSel = el.find('.bs-pattern');
                         setPatternOptions(patSel, allowed, patSel.val());
