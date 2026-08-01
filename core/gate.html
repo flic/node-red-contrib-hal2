@@ -120,6 +120,9 @@
                         .appendTo(container)
                         .hide()
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    var rowGroupTip = $('<div/>', { class: "form-tips",
+                        style: "margin-top:8px; margin-left:90px; width:calc(100% - 110px); box-sizing:border-box; white-space:normal;" })
+                        .appendTo(container).hide();
 
                     //Add labels
                     var labelName = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-microchip"})
@@ -166,8 +169,13 @@
                             itemsField.children().remove();
                             itemsField.append($("<option></option>").val(thingsField.val()).text(thingsField.val()));
                             itemsField.val(thingsField.val());
+                            var g = groupsList.filter(function(x) { return x.id === thingsField.val(); })[0];
+                            rowGroupTip.html($('<small/>').text(g
+                                ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : ''));
+                            rowGroupTip.toggle(!!g);
                             return;
                         }
+                        rowGroupTip.hide();
                         rowItem.show();
                         if (thingsField.val() == 'dynamic') {
                             rowTypes.show();
@@ -355,10 +363,11 @@
                             } else {
                                 console.error('ThingType ID '+rule.thingtype+' is missing.');
                             }
-                            $("#node-input-rule-container").editableList('addItem',rule);
                         } catch (error) {
                             console.log('Error: '+error.message);
                         }
+                    } else if (groupIds[rule.thing]) {
+                        $("#node-input-rule-container").editableList('addItem',rule);
                     } else {
                         try {
                             let thing = RED.nodes.node(rule.thing);
