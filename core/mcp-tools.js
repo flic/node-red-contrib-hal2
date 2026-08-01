@@ -56,9 +56,9 @@ const MCP_TOOLS = [
                       'Use this whenever the user asks about history, statistics, trends, activity over time, ' +
                       'how often something happened, when it last changed, or similar time-based questions. ' +
                       'Items that support history are marked with history:true in get_all_states. ' +
-                      'NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Sjövatten Sensor" contains an item named "Temperatur"), so a thing name will not match an item name. ' +
+                      'NOTE: a thing is the device, an item is a measurement/control WITHIN it — they are separate namespaces with separate names (e.g. the device "Lake Water Sensor" contains an item named "Temperature"), so a thing name will not match an item name. ' +
                       'If you know the device but not the exact item, pass ha_type (e.g. ha_type="temperature") and the server resolves the item for you. ' +
-                      'If a device has several items of the same ha_type (e.g. an indoor and an outdoor temperature), combine ha_type with tag (e.g. tag="ute") to pick the right one — items and their tags are listed in available_items when the match is ambiguous. ' +
+                      'If a device has several items of the same ha_type (e.g. an indoor and an outdoor temperature), combine ha_type with tag (e.g. tag="outdoor") to pick the right one — items and their tags are listed in available_items when the match is ambiguous. ' +
                       'If item resolution fails, the error response includes available_items (item_id, item_name, ha_type, history) for that thing — pick from it, no full get_all_states dump needed. ' +
                       'Returns an array of objects with timestamp (ISO 8601 UTC, e.g. "2026-05-28T12:03:11.000Z") and state fields, sorted oldest-first. ' +
                       'Time window — use one of these forms: ' +
@@ -79,9 +79,9 @@ const MCP_TOOLS = [
                 thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to thing_id)' },
                 item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
-                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperatur"), not the device name.' },
+                item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name.' },
                 ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
-                tag        : { type: 'string',  description: 'Disambiguate items of the same ha_type within the thing by tag (e.g. ha_type="temperature" + tag="ute"). Can also be used alone. Item tags appear in available_items.' },
+                tag        : { type: 'string',  description: 'Disambiguate items of the same ha_type within the thing by tag (e.g. ha_type="temperature" + tag="outdoor"). Can also be used alone. Item tags appear in available_items.' },
                 hours      : { type: 'number',  description: 'Hours back from now (default: 24). Ignored if from/to/at are provided.', minimum: 1 },
                 from       : { type: 'string',  description: 'Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string' },
                 to         : { type: 'string',  description: 'End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted.' },
@@ -233,7 +233,7 @@ const MCP_TOOLS = [
                       'A group with members but no configured function has no standing value and no function field — pass function to read it. members > 0 is what says it is worth asking. ' +
                       'readable:true means the group has members that carry a state, so it can be read. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. ' +
                       'members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. ' +
-                      'notes and tags say what the group actually covers, which the name usually does not ("Alla lampor" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.',
+                      'notes and tags say what the group actually covers, which the name usually does not ("All lights" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.',
         inputSchema : {
             type       : 'object',
             properties : {
@@ -277,7 +277,7 @@ const MCP_TOOLS = [
             type       : 'object',
             properties : {
                 thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over thing_name.' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "kontor" matches "Kontor Spotlights").' },
+                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights").' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
                 color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' },

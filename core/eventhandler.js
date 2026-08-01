@@ -1647,8 +1647,8 @@ module.exports = function(RED) {
                         let itemId = args.item_id;
 
                         // Resolve by ha_type and/or tag when the device is known but the exact item
-                        // isn't (e.g. thing_name="Sjövatten" + ha_type="temperature", or a sauna
-                        // sensor with two temperatures → ha_type="temperature" + tag="ute").
+                        // isn't (e.g. thing_name="Lake Water" + ha_type="temperature", or a sauna
+                        // sensor with two temperatures → ha_type="temperature" + tag="outdoor").
                         if (!itemId && !args.item_name && (args.ha_type || args.tag)) {
                             let matches = ttItems;
                             if (args.ha_type) {

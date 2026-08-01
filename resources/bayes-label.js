@@ -6,7 +6,7 @@
 //   - runtime/tests: require('../resources/bayes-label')
 //
 // Pure: names arrive already resolved. Only core/bayes.js can reach RED.nodes to turn a thing
-// id into "Kontor Sensor", so it does that and hands the result over — the same separation
+// id into "Office Sensor", so it does that and hands the result over — the same separation
 // lib/bayes.js uses for resolveState.
 
 (function (root, factory) {
@@ -48,7 +48,7 @@
         return !!(rule && rule.steps && rule.steps.length && rule.steps.every(isCondition));
     }
 
-    // names: { source, window } — `source` is the resolved subject ("Kontor Sensor ·
+    // names: { source, window } — `source` is the resolved subject ("Office Sensor ·
     // Temperature", "flow.guestMode"), `window` the phrasing for a time step. Both optional;
     // an unresolvable source falls back to whatever the step carries so a label is never empty.
     function describeStep(step, names, index, continuous) {

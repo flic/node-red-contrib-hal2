@@ -37,7 +37,7 @@ Control and observe several Things at once with **Groups**. A group's identity �
 
 ### A group's own value
 
-Give a group a **Value** and it stops being write-only: it gains a state of its own, computed from its members, that **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's. *Temperatur inne → average* is one number for the whole house; *Alla lampor → any true* is one boolean for "is anything on".
+Give a group a **Value** and it stops being write-only: it gains a state of its own, computed from its members, that **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's. *Indoor temperature → average* is one number for the whole house; *All lights → any true* is one boolean for "is anything on".
 
 | Function | Result |
 |---|---|
@@ -98,7 +98,7 @@ show up with `readable: true` and a member count and no value, which is the invi
 function.
 
 Give a group **Tags** and **Notes** on the Groups tab and both reach the assistant. This is worth
-doing: the name is usually all it has to go on, and "Alla lampor" does not say whether the outdoor
+doing: the name is usually all it has to go on, and "All lights" does not say whether the outdoor
 lights are in it. A note does, and `get_groups` takes a `tag` filter so the assistant can ask for
 exactly the set it means.
 
@@ -369,11 +369,11 @@ correct whenever you do look. Only the reporting is on demand.
 ```json
 { "p": 0.86, "logOdds": 1.86, "share": 108.4, "binary": true, "held": false,
   "rules": [
-    { "id": "r1", "label": "While Hall Rörelse · Motion is true",
+    { "id": "r1", "label": "While Hallway Sensor · Motion is true",
       "status": "contributing", "share": 73.8, "logOdds": 2.303, "value": true },
-    { "id": "r2", "label": "When Ytterdörr · Contact is true on a full cycle and Hall Rörelse · Motion is true",
+    { "id": "r2", "label": "When Front Door · Contact is true on a full cycle and Hallway Sensor · Motion is true",
       "status": "waiting", "share": 0, "logOdds": 0, "step": 2, "steps": 2, "deadline": 47 },
-    { "id": "r3", "label": "While Kontor Sensor · Temperature > 25",
+    { "id": "r3", "label": "While Office Sensor · Temperature > 25",
       "status": "condition-false", "share": 0, "logOdds": 0, "value": 23.4 }
   ] }
 ```
