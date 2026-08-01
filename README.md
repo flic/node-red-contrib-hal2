@@ -318,8 +318,14 @@ available as escape hatches.
 
 ### Explaining the estimate
 
-Output 2 emits a snapshot on every evaluation, built for tuning: it says not just what the
-estimate is but which rules produced it.
+Output 2 emits a snapshot built for tuning: it says not just what the estimate is but which
+rules produced it.
+
+It fires whenever a sensor a rule watches reports, and whenever the binary result flips. It does
+**not** fire on the clock tick unless **Snapshot every tick** is enabled (Advanced) — so watching
+evidence decay between sensor reports means turning that on. The decay itself does not depend on
+it: contributions are computed from timestamps whenever the node evaluates, so the value is
+correct whenever you do look. Only the reporting is on demand.
 
 ```json
 { "p": 0.86, "logOdds": 1.86, "share": 108.4, "binary": true, "held": false,

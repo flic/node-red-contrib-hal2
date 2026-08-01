@@ -230,6 +230,10 @@
     <code>{ p, logOdds, share, binary, held, rules }</code>, on every sensor evaluation (and every
     tick if enabled). Wire output 1 onward like any other message to record the result on a Thing
     &mdash; the node has no side channel into the object model.</p>
+    <p>A snapshot follows every sensor report and every flip of the result. The clock tick does not
+    produce one unless <b>Snapshot every tick</b> is enabled &mdash; turn it on to watch evidence
+    decay between reports. Decay does not depend on it: contributions are computed from timestamps
+    at evaluation, so the value is right whenever the node does look.</p>
     <p><b>rules</b> lists <i>every</i> rule on every snapshot, not only the ones firing &mdash; while
     tuning, the question is usually why a rule is <em>not</em> contributing. Each entry carries a
     <code>label</code> read off its own steps, the <code>value</code> its source holds right now, its
