@@ -63,6 +63,25 @@ A group has a **HAType** that sets the command contract for its members. Compati
 
 A group without a Value stays exactly what it was: a command target, invisible to the reading nodes.
 
+### Groups over MCP
+
+Groups are exposed to assistants as their own pair of tools rather than as parameters on the device
+ones, because a group is not a device: it has no items, and reading it is not the inverse of writing
+it. **`get_groups`** returns every group with its value and how that value was computed;
+**`control_group`** sends one command to every member that can accept one, paced by the group's rate
+limit. `get_all_states` carries the same group list alongside `devices`, so orientation takes one
+call.
+
+The asymmetry is the thing to hold on to, and the tools say it in as many words: reading a group
+uses its **state-capable** members, commanding it uses its **command-capable** ones, and either set
+can be empty. A sensor group reads and cannot be commanded; a scene group is the reverse.
+Commanding never writes the value — the value follows from what the members report back.
+
+Give a group **Tags** and **Notes** on the Groups tab and both reach the assistant. This is worth
+doing: the name is usually all it has to go on, and "Alla lampor" does not say whether the outdoor
+lights are in it. A note does, and `get_groups` takes a `tag` filter so the assistant can ask for
+exactly the set it means.
+
 Groups replace the old standalone `hal2Group` node. Existing flows keep working — the Event handler folds legacy group nodes in automatically, though they are command-only until migrated — but you should run `node tools/migrate-groups.js <flows.json>` to make the move permanent and then remove the deprecated nodes. The migration preserves group ids, so existing Action/Event references keep resolving untouched.
 
 ## AI & external control
@@ -75,8 +94,8 @@ The **hal2EventHandler** config node can run an embedded **MCP (Model Context Pr
 
 It ships with a catalog of built-in tools:
 
-- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `analyze_patterns`
-- **Write** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`
+- **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `get_groups`, `analyze_patterns`
+- **Write** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`, `control_group`
 - **Admin** (opt-in) — `get_flow`, `deploy_flow`
 
 Those three classes are also the unit of [access control](#access-control): a token can be allowed to read the house without being allowed to change it.
@@ -91,8 +110,8 @@ On the Event handler's *MCP* tab, one **Access claim** (default `groups`) carrie
 
 | Gate | Covers | Default |
 |---|---|---|
-| **Read tools** | `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `analyze_patterns` | empty — any authenticated caller |
-| **Write tools** | `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene` | empty — same as read |
+| **Read tools** | `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `get_groups`, `analyze_patterns` | empty — any authenticated caller |
+| **Write tools** | `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`, `control_group` | empty — same as read |
 | **Admin tools** | `get_flow`, `deploy_flow` (and only when *Enable Node-RED admin tools* is on) | `admin` |
 
 The read list is the floor: a caller who fails it reaches nothing at all. Writes are checked **on top of** it, so `Read tools = family`, `Write tools = ops` gives the whole household visibility while only ops can switch anything. A tool that is in neither set — a future addition, or the undocumented `control_light` alias of `set_light` — is treated as a **write**, so an unclassified tool fails closed rather than slipping through.

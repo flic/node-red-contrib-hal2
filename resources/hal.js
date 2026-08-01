@@ -1,3 +1,10 @@
+// Tags as the editors store them: a comma-separated field in, an array out. Blank entries are
+// dropped rather than kept as '' — an empty tag would match a tag filter for the empty string.
+function halParseTags(s) {
+    if (Array.isArray(s)) { return s.map(function (t) { return String(t).trim(); }).filter(Boolean); }
+    return (s || '').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
+}
+
 function halCreateId () {
     return (1+Math.random()*4294967295).toString(16);
 }

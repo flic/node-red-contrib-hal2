@@ -222,6 +222,41 @@ const MCP_TOOLS = [
         }
     },
     {
+        name        : 'get_groups',
+        description : 'Returns the groups configured at this location, with their current value. ' +
+                      'A GROUP IS NOT A DEVICE: it is a named set of items drawn from several devices, and it has no items of its own — so it takes no item_id and does not appear in get_state. ' +
+                      'Its value is COMPUTED from its members by the function shown (latest, min, max, average, median, sum, range, any true, all true, any false, all false, count true, count false, percent true), and members whose device is offline are left out — so a group value can change with nothing having been switched. ' +
+                      'Prefer a group over reading its members one by one whenever the user speaks about a set as one thing: "is anything on?", "how warm is it indoors?", "how many windows are open?". Use get_state instead when they mean one specific device. ' +
+                      'readable:false means the group has no value at all (it exists only to be commanded) — no value field is present, rather than a null one. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. ' +
+                      'members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. ' +
+                      'notes and tags say what the group actually covers, which the name usually does not ("Alla lampor" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.',
+        inputSchema : {
+            type       : 'object',
+            properties : {
+                group_name : { type: 'string', description: 'Optional partial, case-insensitive filter on group name' },
+                ha_type    : { type: 'string', description: 'Filter to groups of this ha_type (e.g. "light", "temperature")' },
+                tag        : { type: 'string', description: 'Filter to groups tagged with this value (case-insensitive, exact match)' }
+            }
+        }
+    },
+    {
+        name        : 'control_group',
+        description : 'Sends one command to every member of a group that can accept one — one call instead of one per device. Use get_groups to find groups and see which are controllable. ' +
+                      'COMMANDING A GROUP COMMANDS ITS MEMBERS. The group\'s own value is derived and is never written: it follows from what the members report back afterwards, so read it again rather than assuming the command set it. ' +
+                      'Members that only report (sensors) are skipped, so the number of members commanded can be lower than the member count in get_groups. Members are paced by the group\'s rate limit, so a large group takes a moment to finish. ' +
+                      'The value must suit the group\'s ha_type: on/off (or true/false) for a light or switch group, 0-100 for a dimmer or cover group, a number for a setpoint group. ' +
+                      'To control a single device instead, use set_light or control_device.',
+        inputSchema : {
+            type       : 'object',
+            required   : ['value'],
+            properties : {
+                group_id   : { type: 'string', description: 'Exact group ID (from get_groups)' },
+                group_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to group_id)' },
+                value      : { description: 'Value to send to every commandable member — "on"/"off", true/false, or a number' }
+            }
+        }
+    },
+    {
         name        : 'set_light',
         description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
                       'thing_name supports partial, case-insensitive match against the thing name OR against ' +
@@ -342,7 +377,7 @@ const MCP_ADMIN_TOOL_NAMES = new Set(MCP_TOOLS_ADMIN.map(t => t.name));
 // read-only but are handled inside dispatchControlTools — so it has to be stated here.
 const MCP_READ_TOOL_NAMES = new Set([
     'get_all_states', 'get_state', 'get_history',
-    'get_scenes', 'get_presence', 'get_alerts', 'analyze_patterns'
+    'get_scenes', 'get_presence', 'get_alerts', 'analyze_patterns', 'get_groups'
 ]);
 
 const MCP_WRITE_TOOL_NAMES = new Set([
@@ -351,7 +386,7 @@ const MCP_WRITE_TOOL_NAMES = new Set([
     // absent from MCP_TOOLS. Leaving it out would be a clean bypass of the write gate.
     'control_light',
     'control_device', 'control_fan', 'control_cover', 'control_spa', 'control_climate',
-    'activate_scene'
+    'activate_scene', 'control_group'
 ]);
 
 // Which gate a built-in tool answers to. Anything unclassified counts as a write, so a tool

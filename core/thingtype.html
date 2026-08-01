@@ -168,9 +168,9 @@
         return attributes;
     }
 
-    function parseTags(s) {
-        return (s || '').split(',').map(t => t.trim()).filter(Boolean);
-    }
+    // Thin alias: the rule itself lives in resources/hal.js so every editor parses tags the
+    // same way. Kept as a local name because this file calls it in a dozen places.
+    var parseTags = halParseTags;
 
     function localGetItems() {
         let items = [];
