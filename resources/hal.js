@@ -29,6 +29,24 @@ function halOperators(ops) {
     return operators;    
 }
 
+// Comparisons that can only mean a number. Used to pick the value field's type for you when
+// you choose one of them — a default, never a lock: the type selector still offers everything,
+// so a string or a flow reference remains one click away.
+function halNumericOperator(op) {
+    return ['lt', 'lte', 'gt', 'gte'].indexOf(op) >= 0;
+}
+
+// Should choosing `op` switch the value field to num? Only when nothing would be lost by it:
+// the field is still on its default string type and holds either nothing or something that
+// already reads as a number. A deliberate choice — a msg/flow reference, or text like "warm" —
+// is left exactly as it is.
+function halShouldDefaultNumeric(op, currentType, currentValue) {
+    if (!halNumericOperator(op)) { return false; }
+    if (currentType !== 'str') { return false; }
+    var v = (currentValue === undefined || currentValue === null) ? '' : String(currentValue).trim();
+    return v === '' || (!isNaN(Number(v)) && isFinite(Number(v)));
+}
+
 function halTypeMQTT() {
     return {
         value: "mqtt",

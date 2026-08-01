@@ -557,6 +557,11 @@
                     var opHandler = function() {
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false');
+                        // "> 100" wants a number; say so for you rather than leaving a string
+                        // that only compares correctly by JavaScript's coercion rules.
+                        if (halShouldDefaultNumeric(op, valField.typedInput('type'), valField.typedInput('value'))) {
+                            valField.typedInput('type', 'num');
+                        }
                     };
                     opSel.change(opHandler);
 
