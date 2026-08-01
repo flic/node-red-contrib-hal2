@@ -681,11 +681,29 @@
                         var src = el.find('.bs-src').val();
                         var isTime = src === 'time';
 
+                        // The first step decides what kind of rule this is, and the rest
+                        // follow from it. Start with a condition and the rule is an AND: every
+                        // later step is judged at the same instant, so there is no edge to
+                        // wait for and nothing to be "soon" after — only "now" is meaningful,
+                        // and an event there would make the rule unreachable instead.
+                        var condFirst = isCondition(rule.steps[0]);
                         var allowed = isTime ? ['is']
+                                    // Only narrow a step that is already a condition. An event
+                                    // after a leading condition is a broken rule, not an AND —
+                                    // coercing it would quietly turn "then the door opens" into
+                                    // "and the door is open". Leave it, and let the warning say so.
+                                    : (i > 0 && condFirst && isCondition(rule.steps[i])) ? ['is']
                                     : (src === 'thing' || src === 'group') ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
                                     : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
                         var patSel = el.find('.bs-pattern');
-                        setPatternOptions(patSel, allowed, patSel.val());
+                        var wasPat = patSel.val();
+                        setPatternOptions(patSel, allowed, wasPat);
+                        // Say it once rather than silently rewriting: in an AND the two behave
+                        // identically, so this is showing what already happens, not a change.
+                        if (wasPat === 'isOrBecomes' && allowed.indexOf('isOrBecomes') < 0 && i > 0 && condFirst) {
+                            RED.notify('hal2Bayes: every step is a condition, so this rule is an "and" — ' +
+                                       '"now or soon" has nothing to wait for and reads as "now".', 'warning');
+                        }
                         patSel.toggle(allowed.length > 1);
                         el.find('.bs-val-wrap').toggle(!isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0);
 
@@ -693,9 +711,7 @@
                         // A condition reads "and …"; an event reads "then …".
                         var isCond = (pat === 'is' || pat === 'isOrBecomes');
                         el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
-                        // In an AND there is no "previous step" to be soon after — every
-                        // condition is judged at the same instant.
-                        var showWindow = i > 0 && pat !== 'is' && !cont;
+                        var showWindow = i > 0 && pat !== 'is';
                         var showCycle = (pat === 'cycle');
                         timing.find('.bs-window-span').toggle(showWindow);
                         timing.find('.bs-cycle-span').toggle(showCycle);
