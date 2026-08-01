@@ -100,10 +100,29 @@ describe('group-tools matchesFilters', function () {
         assert.deepStrictEqual(filter({ group_name: 'TEMPERATUR' }).map(g => g.id), ['temp']);
     });
 
-    it('matches ha_type exactly', function () {
+    it('matches ha_type case-insensitively', function () {
         assert.deepStrictEqual(filter({ ha_type: 'light' }).map(g => g.id), ['lights', 'night']);
         assert.deepStrictEqual(filter({ ha_type: 'Temperature' }).map(g => g.id), ['temp']);
         assert.deepStrictEqual(filter({ ha_type: 'cover' }), []);
+    });
+
+    it('expands category aliases the same way get_all_states does', function () {
+        // ha_type="light" has to reach a dimmer group here exactly as it reaches a dimmer
+        // device there, or the same parameter would mean two different things.
+        const dimmers = info({ id: 'dim', name: 'Dimmers', haType: 'dimmer', aggregate: 'average' });
+        const withDim = [...all, dimmers];
+        const expand = ha => new Set(ha === 'light' ? ['light', 'dimmer'] : [ha.toLowerCase()]);
+        const ids = withDim.filter(g => gt.matchesFilters(g, { ha_type: 'light' }, expand)).map(g => g.id);
+        assert.deepStrictEqual(ids, ['lights', 'night', 'dim']);
+        // Without an expander it stays a literal match, so the module works standalone.
+        assert.deepStrictEqual(
+            withDim.filter(g => gt.matchesFilters(g, { ha_type: 'light' })).map(g => g.id),
+            ['lights', 'night']);
+    });
+
+    it('filters to one group by exact id', function () {
+        assert.deepStrictEqual(filter({ group_id: 'temp' }).map(g => g.id), ['temp']);
+        assert.deepStrictEqual(filter({ group_id: 'nope' }), []);
     });
 
     it('matches a tag exactly, case-insensitively', function () {

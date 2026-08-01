@@ -354,6 +354,8 @@ module.exports = function(RED) {
         // fills this in once; liveness is read per call from the state record, which tracks it.
         node.groupInfo = [];
         node.getGroups = function () { return node.groupInfo; };
+        // groupId → send(payload) → { queued, skipped }. Rebuilt by wireGroups on every deploy.
+        node.groupCommanders = {};
 
         // groupId -> { ratelimit, aggregate, name, legacy } merged from the registry and any
         // legacy hal2Group nodes belonging to this handler. The registry wins on collision
@@ -516,6 +518,7 @@ module.exports = function(RED) {
             const defs    = buildGroupDefs();
             const valueGroups = [];
             const info = [];
+            node.groupCommanders = {};
             let legacyCount = 0;
             for (const [groupId, def] of defs) {
                 const groupMembers = members.get(groupId) || [];
@@ -534,18 +537,26 @@ module.exports = function(RED) {
                 // two rapid group commands share one rate limit instead of racing.
                 const throttle = common.createThrottledQueue(ratelimit,
                     m => node.publishCommand(m.thing, m.item, m.payload));
-                const commandListener = function (itemid, payload) {
+                // One implementation for both ways in — the bus listener below and the MCP
+                // tool — so the count the tool reports is the queue that was actually built,
+                // not an estimate from the member list. Members are resolved at send time
+                // because a thing can have gone away since the last deploy.
+                const runCommand = function (payload) {
                     const queue = [];
+                    let skipped = 0;
                     for (const m of groupMembers) {
                         const thing = RED.nodes.getNode(m.thing);
-                        if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) continue;
+                        if (!thing || !thing.thingType || !Array.isArray(thing.thingType.items)) { skipped += 1; continue; }
                         const item = thing.thingType.items.find(it => it.id === m.item);
-                        if (!item || !commandCapableItem(item)) continue;
+                        if (!item || !commandCapableItem(item)) { skipped += 1; continue; }
                         queue.push({ thing: m.thing, item: m.item, payload: payload });
                     }
-                    if (queue.length === 0) return;
-                    throttle.push(queue);
+                    if (queue.length) { throttle.push(queue); }
+                    return { queued: queue.length, skipped: skipped };
                 };
+                node.groupCommanders[groupId] = runCommand;
+
+                const commandListener = function (itemid, payload) { runCommand(payload); };
                 node.subscribe('command', groupId, commandListener);
                 node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener, throttle: throttle });
 
@@ -814,7 +825,7 @@ module.exports = function(RED) {
             function listGroups(args) {
                 const infos = (typeof node.getGroups === 'function') ? node.getGroups() : [];
                 return infos
-                    .filter(info => groupTools.matchesFilters(info, args || {}))
+                    .filter(info => groupTools.matchesFilters(info, args || {}, expandHaTypeFilter))
                     .map(info => groupTools.groupEntry(info, node.getGroupState(info.id), msToIso))
                     .sort((a, b) => a.name.localeCompare(b.name));
             }
@@ -1389,19 +1400,25 @@ module.exports = function(RED) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
                             return toolOk(JSON.stringify(refusal));
                         }
-                        node.publishCommand(found.group.id, found.group.id, args.value);
+                        const send = node.groupCommanders[found.group.id];
+                        const sent = send ? send(args.value)
+                                          : { queued: 0, skipped: found.group.commandMembers };
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({
-                            ok               : true,
-                            group_id         : found.group.id,
-                            name             : found.group.name,
-                            value            : args.value,
-                            members_commanded: found.group.commandMembers,
-                            // Say it rather than let a follow-up read look like a failure.
-                            note             : 'The group value is derived from its members and updates as they report back'
-                                               + (found.group.ratelimit
-                                                  ? '; members are paced ' + found.group.ratelimit + ' ms apart'
-                                                  : '') + '.'
+                            ok        : true,
+                            group_id  : found.group.id,
+                            name      : found.group.name,
+                            value     : args.value,
+                            commanded : sent.queued,
+                            skipped   : sent.skipped,
+                            // Delivery is fire-and-forget onto the event bus and paced by the
+                            // rate limit, so there is nothing to report per member — saying so
+                            // is better than an empty failures list that looks like a promise.
+                            delivery  : 'queued'
+                                        + (found.group.ratelimit
+                                           ? ', members paced ' + found.group.ratelimit + ' ms apart'
+                                           : '')
+                                        + '. No per-member result is available; read the group again to see the effect.'
                         }));
                     }
 

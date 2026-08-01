@@ -225,7 +225,7 @@ const MCP_TOOLS = [
         name        : 'get_groups',
         description : 'Returns the groups configured at this location, with their current value. ' +
                       'A GROUP IS NOT A DEVICE: it is a named set of items drawn from several devices, and it has no items of its own — so it takes no item_id and does not appear in get_state. ' +
-                      'Its value is COMPUTED from its members by the function shown (latest, min, max, average, median, sum, range, any true, all true, any false, all false, count true, count false, percent true), and members whose device is offline are left out — so a group value can change with nothing having been switched. ' +
+                      'Its value is COMPUTED from its members by the function shown — latest, min, max, average, median, sum, range (highest minus lowest), any true, all true, any false, all false, count true, count false, percent true (0-100) — and members whose device is offline are left out, so a group value can change with nothing having been switched. ' +
                       'Prefer a group over reading its members one by one whenever the user speaks about a set as one thing: "is anything on?", "how warm is it indoors?", "how many windows are open?". Use get_state instead when they mean one specific device. ' +
                       'readable:false means the group has no value at all (it exists only to be commanded) — no value field is present, rather than a null one. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. ' +
                       'members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. ' +
@@ -233,8 +233,9 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
+                group_id   : { type: 'string', description: 'Exact group ID — returns just that group, for re-reading one you already know' },
                 group_name : { type: 'string', description: 'Optional partial, case-insensitive filter on group name' },
-                ha_type    : { type: 'string', description: 'Filter to groups of this ha_type (e.g. "light", "temperature")' },
+                ha_type    : { type: 'string', description: 'Filter to groups of this ha_type. Accepts the same category aliases as get_all_states (climate, spa, light, fan, cover, scene), so ha_type="light" also matches dimmer groups' },
                 tag        : { type: 'string', description: 'Filter to groups tagged with this value (case-insensitive, exact match)' }
             }
         }
@@ -244,7 +245,9 @@ const MCP_TOOLS = [
         description : 'Sends one command to every member of a group that can accept one — one call instead of one per device. Use get_groups to find groups and see which are controllable. ' +
                       'COMMANDING A GROUP COMMANDS ITS MEMBERS. The group\'s own value is derived and is never written: it follows from what the members report back afterwards, so read it again rather than assuming the command set it. ' +
                       'Members that only report (sensors) are skipped, so the number of members commanded can be lower than the member count in get_groups. Members are paced by the group\'s rate limit, so a large group takes a moment to finish. ' +
-                      'The value must suit the group\'s ha_type: on/off (or true/false) for a light or switch group, 0-100 for a dimmer or cover group, a number for a setpoint group. ' +
+                      'The value must suit the group\'s ha_type: on/off (or true/false) for a light or switch group, 0-100 for a dimmer or cover group, a number for a setpoint group. Groups of a structured type (e.g. colour) take whatever value that type expects, so the parameter is deliberately untyped. ' +
+                      'RETURNS { ok, group_id, name, value, commanded, skipped, delivery }: commanded is how many members the command was queued to, skipped how many were passed over because they only report or could not be resolved. ' +
+                      'There is NO per-member success or failure — commands are fire-and-forget onto the event bus and paced by the rate limit, so most members have not been sent yet when the call returns. A non-zero commanded means the command was accepted and queued, not that any device has acted on it. To confirm the effect, read the group again with get_groups; do not treat the reply as confirmation and do not re-send on the assumption that nothing happened. ' +
                       'To control a single device instead, use set_light or control_device.',
         inputSchema : {
             type       : 'object',
