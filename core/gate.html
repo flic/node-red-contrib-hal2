@@ -9,7 +9,7 @@
         <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
         <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
     </div>
-    <div class="form-tips" style="margin-left:105px; width:calc(100% - 170px); box-sizing:border-box; margin-bottom:8px;">
+    <div class="form-tips" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
         <small>Only needed when a rule reads a <b>Group</b> &mdash; pick the Event handler that owns it.</small>
     </div>
     <div class="form-row">
@@ -120,8 +120,12 @@
                         .appendTo(container)
                         .hide()
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
+                    // The label column is 80px (border-box, padding included) and the fields
+                    // are calc(100% - 110px), so this lines the tip up with them exactly.
+                    // max-width has to go: form-tips caps itself at 450px, which is what pulled
+                    // the right edge in short of the field above.
                     var rowGroupTip = $('<div/>', { class: "form-tips",
-                        style: "margin-top:8px; margin-left:90px; width:calc(100% - 110px); box-sizing:border-box; white-space:normal;" })
+                        style: "margin-top:8px; margin-left:80px; width:calc(100% - 110px); max-width:none; box-sizing:border-box; white-space:normal;" })
                         .appendTo(container).hide();
 
                     //Add labels

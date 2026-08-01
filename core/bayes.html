@@ -470,6 +470,13 @@
                     $('<div/>', { class: "bs-days-hint",
                         style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
 
+                    // What a group step is actually reading, last in the step so it sits under
+                    // the timing line. The 50px lead matches the column the selects start in;
+                    // max-width goes because form-tips otherwise caps itself at 450px.
+                    var groupTip = $('<div/>', { class: "form-tips bs-group-tip",
+                        style: "margin-left:50px; margin-right:34px; margin-top:6px; max-width:none; white-space:normal;" })
+                        .appendTo(stepDiv).hide();
+
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('within ');
                     $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
@@ -516,12 +523,23 @@
                     };
                     opSel.change(opHandler);
 
+                    var syncGroupTip = function() {
+                        var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
+                        var show = srcSel.val() === 'group' && !!g;
+                        if (show) {
+                            groupTip.html($('<small/>').text('Value: ' + window.hal2GroupAggregate.label(g.aggregate)));
+                        }
+                        groupTip.toggle(show);
+                    };
+                    groupSel.change(syncGroupTip);
+
                     var srcHandler = function() {
                         var src = srcSel.val();
                         thingWrap.toggle(src === 'thing');
                         groupWrap.toggle(src === 'group');
                         propWrap.toggle(src !== 'thing' && src !== 'group' && src !== 'time');
                         timeWrap.toggle(src === 'time');
+                        syncGroupTip();
                         syncOperatorOptions();
                     };
                     // For a time step resolveState yields a boolean, so the existing
