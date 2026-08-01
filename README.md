@@ -85,6 +85,13 @@ stays the group's own, is what the flow nodes read, and is what `get_all_states`
 names `configured_function` whenever the two differ, so an ad-hoc reading is never mistaken for the
 setting.
 
+A function that does not apply is **refused rather than answered**: asking a temperature group
+whether all its members are true comes back as an error naming what the members hold and listing
+the functions that fit. It does not come back as `false`, which is a claim about the group rather
+than about the question. Partial coverage is a different matter and is answered: on a mixed group
+*average* uses the dimmers and ignores the on/off members, so the reply carries `used` beside
+`live` and a mean over 10 of 39 members can be read as what it is.
+
 This also means a group is readable **as soon as it has members that carry state**, whether or not
 anyone has picked a Value for it. Command groups usually do: switchable devices report back. They
 show up with `readable: true` and a member count and no value, which is the invitation to ask for a

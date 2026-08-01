@@ -233,3 +233,61 @@ describe('group-tools commandRefusal', function () {
         assert.deepStrictEqual(r.controllable_groups.map(g => g.group_id), ['lights', 'night']);
     });
 });
+
+describe('group-tools functionMismatch', function () {
+    const kinds = (numbers, booleans) => ({ numbers, booleans, reporting: numbers + booleans });
+    const NUMERIC = ['latest', 'min', 'max', 'average', 'median', 'sum', 'range'];
+    const BOOLEAN = ['latest', 'anyTrue', 'allTrue', 'anyFalse', 'allFalse', 'countTrue', 'countFalse', 'percentTrue'];
+
+    it('refuses a boolean function over members that report numbers', function () {
+        // The case that prompted this: allTrue over a temperature group is not false, it is a
+        // question that does not apply — and answering false would be believed.
+        const r = gt.functionMismatch(SENSORS, 'allTrue', kinds(9, 0), NUMERIC);
+        assert.match(r.error, /"allTrue" does not apply/);
+        assert.match(r.error, /ha_type temperature/);
+        assert.match(r.error, /hold numbers/);
+        assert.deepStrictEqual(r.suitable_functions, NUMERIC);
+        assert.strictEqual(r.group_id, 'temp');
+    });
+
+    it('refuses a numeric function over members that report true/false', function () {
+        const r = gt.functionMismatch(LIGHTS, 'average', kinds(0, 12), BOOLEAN);
+        assert.match(r.error, /"average" does not apply/);
+        assert.match(r.error, /true\/false/);
+        assert.deepStrictEqual(r.suitable_functions, BOOLEAN);
+    });
+
+    it('allows a function that fits some of a mixed group', function () {
+        // Partial coverage answers and is disclosed by `used`; only zero coverage is refused.
+        assert.strictEqual(gt.functionMismatch(LIGHTS, 'average', kinds(10, 29), NUMERIC.concat(BOOLEAN)), null);
+        assert.strictEqual(gt.functionMismatch(LIGHTS, 'anyTrue', kinds(10, 29), NUMERIC.concat(BOOLEAN)), null);
+    });
+
+    it('says so when nothing is reporting at all, rather than blaming the function', function () {
+        const r = gt.functionMismatch(SENSORS, 'average', kinds(0, 0), []);
+        assert.match(r.error, /no member reporting a value/);
+        assert.strictEqual(r.members, 9);
+    });
+
+    it('is silent when no function was asked for', function () {
+        assert.strictEqual(gt.functionMismatch(SENSORS, null, kinds(9, 0), NUMERIC), null);
+    });
+
+    it('describes a mixed group by both kinds', function () {
+        const r = gt.functionMismatch(LIGHTS, 'sum', kinds(3, 4), ['latest']);
+        assert.match(r.error, /3 report numbers and 4 report true\/false/);
+    });
+});
+
+describe('group-tools groupEntry used', function () {
+    it('reports used only when the function covered part of the group', function () {
+        const partial = gt.groupEntry(LIGHTS, undefined, msToIso,
+            { value: 25.4, live: 39, used: 10, members: 39, fn: 'average' });
+        assert.strictEqual(partial.used, 10, 'a mean over 10 of 39 must not read as the group');
+        assert.strictEqual(partial.live, 39);
+
+        const full = gt.groupEntry(LIGHTS, undefined, msToIso,
+            { value: true, live: 12, used: 12, members: 12, fn: 'anyTrue' });
+        assert.ok(!('used' in full), 'nothing to disclose when every member counted');
+    });
+});

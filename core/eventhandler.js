@@ -564,9 +564,12 @@ module.exports = function(RED) {
                 node.groupReaders[groupId] = function (fn) {
                     const { samples, eligible } = groupSamples(groupMembers);
                     return {
-                        value  : groupAggregate.aggregate(fn, samples),
-                        live   : samples.length,
-                        members: eligible
+                        value    : groupAggregate.aggregate(fn, samples),
+                        live     : samples.length,
+                        members  : eligible,
+                        used     : groupAggregate.usableCount(fn, samples),
+                        kinds    : groupAggregate.sampleKinds(samples),
+                        suitable : groupAggregate.suitableFunctions(samples)
                     };
                 };
 
@@ -849,10 +852,14 @@ module.exports = function(RED) {
                         if (a.function && node.groupReaders[info.id]) {
                             computed = node.groupReaders[info.id](a.function);
                             computed.fn = a.function;
+                            // A function that fits none of the members is not a value of
+                            // false or zero — it is a question that does not apply here.
+                            const bad = groupTools.functionMismatch(info, a.function, computed.kinds, computed.suitable);
+                            if (bad) { return bad; }
                         }
                         return groupTools.groupEntry(info, node.getGroupState(info.id), msToIso, computed);
                     })
-                    .sort((a2, b2) => a2.name.localeCompare(b2.name));
+                    .sort((a2, b2) => String(a2.name || '').localeCompare(String(b2.name || '')));
             }
 
             function hasAnyHaType(wantedTypes) {
@@ -1069,6 +1076,15 @@ module.exports = function(RED) {
                             }));
                         }
                         const groups = listGroups(args);
+                        // Every match refused: the reply is the refusal, not a list containing
+                        // one. This is the shape the single-group case deserves, and it is also
+                        // the honest answer to "anyTrue across my sensors".
+                        const refusals = groups.filter(g => g.error);
+                        if (groups.length && refusals.length === groups.length) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(groups.length === 1 ? groups[0]
+                                : { error: 'No matching group can answer "' + args.function + '"', groups }, null, 2));
+                        }
                         const result = { total: groups.length, groups };
                         if (config.locationName) result.location = config.locationName;
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
