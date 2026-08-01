@@ -29,6 +29,13 @@ function halOperators(ops) {
     return operators;    
 }
 
+// Comparisons that can only mean a number. The editors narrow the value field's type list to
+// num when one of these is chosen, the way hal2Event and hal2Gate have always done — offering
+// a string for "greater than" only invites a comparison that works by coercion or not at all.
+function halNumericOperator(op) {
+    return ['lt', 'lte', 'gt', 'gte'].indexOf(op) >= 0;
+}
+
 function halTypeMQTT() {
     return {
         value: "mqtt",

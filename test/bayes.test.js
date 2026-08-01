@@ -8,6 +8,13 @@ const HOUR = 60 * MIN;
 
 // ---- helpers ----------------------------------------------------------------
 
+// evaluate() now reports every rule once, with a status, instead of an activeRules list and a
+// terms list. These ask the same two questions of the new shape: which rules hold a weight
+// right now, and which are carrying a decaying one.
+const active = r => r.rules.filter(x => x.status === 'contributing');
+const fading = r => r.rules.filter(x => x.status === 'fading' || x.status === 'injected');
+const byId   = (r, id) => r.rules.find(x => x.id === id);
+
 function cfgOf(overrides) {
     return Object.assign({
         prior: 0.2, pOn: 0.85, pOff: 0.30, clamp: 6, halfLifeMs: 20 * MIN,
@@ -183,13 +190,13 @@ describe('certain terms', function() {
         b.handleEvent(hit('arr', 0), true, 0);
         b.handleEvent(hit('arr', 0), false, MIN);
         b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
         // Exit (certain false) fires — the positive term is cleared, not fought.
         b.handleEvent(hit('exit', 0), true, 3 * MIN);
         b.handleEvent(hit('exit', 0), false, 4 * MIN);
         b.handleEvent(hit('exit', 1), true, 4.5 * MIN);
         const r = b.evaluate(noState, 5 * MIN);
-        assert.deepStrictEqual(r.terms.map(t => t.ruleId), ['exit']);
+        assert.deepStrictEqual(fading(r).map(t => t.id), ['exit']);
         assert.ok(r.p < 0.05);
     });
 
@@ -199,13 +206,13 @@ describe('certain terms', function() {
         b.handleEvent(hit('exit', 0), true, 0);
         b.handleEvent(hit('exit', 0), false, MIN);
         b.handleEvent(hit('exit', 1), true, 1.5 * MIN);
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
         // Coming back: a mere moderate arrival invalidates the certain statement.
         b.handleEvent(hit('arr', 0), true, 10 * MIN);
         b.handleEvent(hit('arr', 0), false, 11 * MIN);
         b.handleEvent(hit('arr', 1), true, 11.5 * MIN);
         const r = b.evaluate(noState, 12 * MIN);
-        assert.deepStrictEqual(r.terms.map(t => t.ruleId), ['arr']);
+        assert.deepStrictEqual(fading(r).map(t => t.id), ['arr']);
         assert.ok(r.p > 0.2);
     });
 
@@ -217,7 +224,7 @@ describe('certain terms', function() {
         b.handleEvent(hit('down', 0), true, 3 * MIN);
         b.handleEvent(hit('down', 0), false, 4 * MIN);
         b.handleEvent(hit('down', 1), true, 4.5 * MIN);
-        assert.strictEqual(b.evaluate(noState, 5 * MIN).terms.length, 2);
+        assert.strictEqual(fading(b.evaluate(noState, 5 * MIN)).length, 2);
     });
 });
 
@@ -248,7 +255,7 @@ describe('momentary rules decay', function() {
         b.handleEvent(hit('a', 0), false, 0.5 * MIN);
         b.handleEvent(hit('a', 1), true, MIN);
         b.tick(40 * MIN);
-        assert.strictEqual(b.evaluate(noState, 40 * MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, 40 * MIN)).length, 0);
     });
 });
 
@@ -260,13 +267,13 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 0), true, 0);
         b.handleEvent(hit('arr', 0), false, MIN);            // cycle ok (≤ 3 min)
         b.handleEvent(hit('arr', 1), true, 2 * MIN);          // within 2 min window
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
 
         const slow = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
         slow.handleEvent(hit('arr', 0), true, 0);
         slow.handleEvent(hit('arr', 0), false, 4 * MIN);      // > cycleMax
         slow.handleEvent(hit('arr', 1), true, 4.5 * MIN);
-        assert.strictEqual(slow.evaluate(noState, 5 * MIN).terms.length, 0);
+        assert.strictEqual(fading(slow.evaluate(noState, 5 * MIN)).length, 0);
     });
 
     it('overlap: an edge during the previous step counts at its completion', function() {
@@ -274,7 +281,7 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 0), true, 0);                // door opens
         b.handleEvent(hit('arr', 1), true, 0.5 * MIN);        // motion while open
         b.handleEvent(hit('arr', 0), false, MIN);             // door closes — fires here
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 1);
     });
 
     it('an edge before arming never counts', function() {
@@ -282,11 +289,11 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 1), true, 0);                // motion before the door ever opens
         b.handleEvent(hit('arr', 0), true, 5 * MIN);
         b.handleEvent(hit('arr', 0), false, 6 * MIN);
-        assert.strictEqual(b.evaluate(noState, 6 * MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, 6 * MIN)).length, 0);
         // …but fresh motion within the window still confirms
         b.handleEvent(hit('arr', 1), false, 6.5 * MIN);
         b.handleEvent(hit('arr', 1), true, 7 * MIN);
-        assert.strictEqual(b.evaluate(noState, 7 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 7 * MIN)).length, 1);
     });
 
     it('a three-step rule completes in order and not out of order', function() {
@@ -300,13 +307,13 @@ describe('step sequences', function() {
         b.handleEvent(hit('r3', 1), true, MIN);               // door opens
         b.handleEvent(hit('r3', 1), false, 2 * MIN);          // door closes
         b.handleEvent(hit('r3', 2), true, 3 * MIN);           // motion
-        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 3 * MIN)).length, 1);
 
         const wrong = createBayes(cfgOf({ rules: [rule] }));
         wrong.handleEvent(hit('r3', 1), true, 0);             // door first — ignored at step 0
         wrong.handleEvent(hit('r3', 1), false, MIN);
         wrong.handleEvent(hit('r3', 2), true, 1.5 * MIN);
-        assert.strictEqual(wrong.evaluate(noState, 2 * MIN).terms.length, 0);
+        assert.strictEqual(fading(wrong.evaluate(noState, 2 * MIN)).length, 0);
     });
 
     it('timeout between steps resets the sequence; tick also cleans up', function() {
@@ -314,14 +321,14 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 0), true, 0);
         b.handleEvent(hit('arr', 0), false, MIN);             // pending, window 2 min
         b.handleEvent(hit('arr', 1), true, 5 * MIN);          // too late
-        assert.strictEqual(b.evaluate(noState, 5 * MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, 5 * MIN)).length, 0);
 
         const t = createBayes(cfgOf({ rules: [arrivalRule('arr', 30)] }));
         t.handleEvent(hit('arr', 0), true, 0);                // door opens, never closes
         t.tick(10 * MIN);                                     // stale opening dropped
         t.handleEvent(hit('arr', 0), false, 10.5 * MIN);      // close without tracked open
         t.handleEvent(hit('arr', 1), true, 11 * MIN);
-        assert.strictEqual(t.evaluate(noState, 11 * MIN).terms.length, 0);
+        assert.strictEqual(fading(t.evaluate(noState, 11 * MIN)).length, 0);
     });
 
     it('no rising edge on step 0 means nothing ever arms (exit protection)', function() {
@@ -331,7 +338,7 @@ describe('step sequences', function() {
         // Phone goes true→false is a falling edge on "is true" — never arms.
         b.handleEvent(hit('r', 0), false, 0);
         b.handleEvent(hit('r', 1), true, MIN);
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 0);
     });
 
     it('a level check is answered when the previous step completes, whenever it turned true', function() {
@@ -345,7 +352,7 @@ describe('step sequences', function() {
         const b = createBayes(cfgOf({ rules: [rule] }));
         b.handleEvent(hit('arr', 0), true, 60 * MIN, stateOf(state));      // door opens
         b.handleEvent(hit('arr', 0), false, 61 * MIN, stateOf(state));     // closes → level check
-        assert.strictEqual(b.evaluate(noState, 61 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 61 * MIN)).length, 1);
     });
 
     it('a failing level check aborts the sequence', function() {
@@ -357,12 +364,12 @@ describe('step sequences', function() {
         const b = createBayes(cfgOf({ rules: [rule] }));
         b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
         b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 0);
         // …and the sequence is reset, so the next real cycle still works.
         state.phone = true;
         b.handleEvent(hit('arr', 0), true, 10 * MIN, stateOf(state));
         b.handleEvent(hit('arr', 0), false, 11 * MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, 11 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 11 * MIN)).length, 1);
     });
 
     it('"is or becomes" accepts a condition that already holds', function() {
@@ -374,7 +381,7 @@ describe('step sequences', function() {
         const b = createBayes(cfgOf({ rules: [rule] }));
         b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
         b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 1);
     });
 
     it('"is or becomes" waits for a late sensor instead of aborting', function() {
@@ -386,11 +393,11 @@ describe('step sequences', function() {
         const b = createBayes(cfgOf({ rules: [rule] }));
         b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
         b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);   // pending, not aborted
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 0);   // pending, not aborted
 
         state.phone = true;
         b.handleEvent(hit('arr', 1), true, 2 * MIN, stateOf(state));    // arrives inside the window
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
     });
 
     it('"is or becomes" still times out when the sensor never reports', function() {
@@ -404,7 +411,7 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
         state.phone = true;
         b.handleEvent(hit('arr', 1), true, 10 * MIN, stateOf(state));    // far too late
-        assert.strictEqual(b.evaluate(noState, 10 * MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, 10 * MIN)).length, 0);
     });
 
     it('"now or soon" completes on a later tick when a polled source turns true', function() {
@@ -418,11 +425,11 @@ describe('step sequences', function() {
         const b = createBayes(cfgOf({ rules: [rule] }));
         b.handleEvent(hit('r', 0), true, 0, stateOf(state));
         b.handleEvent(hit('r', 0), false, MIN, stateOf(state));      // pending, level still false
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 0);
 
         state.flowvar = true;                                         // changes with no event
         b.tick(3 * MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, 3 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 3 * MIN)).length, 1);
     });
 
     it('a polled "now or soon" still times out if it never turns true', function() {
@@ -437,7 +444,7 @@ describe('step sequences', function() {
         b.tick(10 * MIN, stateOf(state));                             // window long gone
         state.flowvar = true;
         b.tick(11 * MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, 11 * MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, 11 * MIN)).length, 0);
     });
 
     it('a tick-completed step cascades into a following condition step', function() {
@@ -452,7 +459,7 @@ describe('step sequences', function() {
         b.handleEvent(hit('r', 0), false, MIN, stateOf(state));
         state.flowvar = true;
         b.tick(2 * MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
     });
 
     it('tick without a resolver leaves pending steps alone', function() {
@@ -464,7 +471,7 @@ describe('step sequences', function() {
         b.handleEvent(hit('r', 0), true, 0, stateOf({ flowvar: true }));
         b.handleEvent(hit('r', 0), false, MIN, stateOf({ flowvar: false }));
         b.tick(2 * MIN);                                              // no resolver passed
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 0);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 0);
     });
 
     it('level checks chain: door cycle, then motion, and the phone is here', function() {
@@ -478,7 +485,7 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 0), true, 0, stateOf(state));
         b.handleEvent(hit('arr', 0), false, MIN, stateOf(state));
         b.handleEvent(hit('arr', 1), true, 1.5 * MIN, stateOf(state));
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
     });
 
     it('repeated identical reports count once (edge dedupe)', function() {
@@ -488,7 +495,7 @@ describe('step sequences', function() {
         b.handleEvent(hit('arr', 0), false, MIN);
         b.handleEvent(hit('arr', 1), true, 1.5 * MIN);
         b.handleEvent(hit('arr', 1), true, 1.6 * MIN);        // repeat
-        assert.strictEqual(b.evaluate(noState, 2 * MIN).terms.length, 1);
+        assert.strictEqual(fading(b.evaluate(noState, 2 * MIN)).length, 1);
     });
 });
 
@@ -588,7 +595,7 @@ describe('scaled rule weight', function() {
         const mid = at(40);
         assert.ok(mid.p > 0.2 && mid.p < 0.85, 'halfway dry is partial evidence');
         assert.ok(Math.abs(at(59).p - 0.2) < 0.05, 'nearly wet contributes almost nothing');
-        assert.strictEqual(at(70).activeRules.length, 0, 'above the condition it is not active at all');
+        assert.strictEqual(active(at(70)).length, 0, 'above the condition it is not active at all');
     });
 
     it('a negative endpoint share pushes the estimate down', function() {
@@ -602,7 +609,7 @@ describe('scaled rule weight', function() {
     it('an unusable reading makes a scaled rule contribute nothing', function() {
         const b = createBayes(cfgOf({ rules: [soil()] }));
         const r = b.evaluate(stateOf({ soil: 'n/a' }), 0);
-        assert.strictEqual(r.activeRules.length, 0);
+        assert.strictEqual(active(r).length, 0);
         assert.ok(Math.abs(r.p - 0.2) < 1e-12);
     });
 
@@ -629,7 +636,7 @@ describe('scaled rule weight', function() {
         const b = createBayes(cfgOf({ rules: [strongSoil, against] }));
         b.handleEvent(hit('sun', 0), true, 0, stateOf({ sun: true }));
         b.handleEvent(hit('soil', 0), 20, MIN, stateOf({ soil: 20 }));
-        assert.strictEqual(b.evaluate(noState, MIN).terms.length, 2, 'both terms coexist');
+        assert.strictEqual(fading(b.evaluate(noState, MIN)).length, 2, 'both terms coexist');
     });
 
     it('reference irrigation set: dryness can override the sun', function() {
@@ -680,10 +687,10 @@ describe('persistence and input', function() {
         ] }));
         const state = { x: true, y: true };
         const r = b.evaluate(stateOf(state), 0);
-        assert.strictEqual(r.activeRules.length, 2);
+        assert.strictEqual(active(r).length, 2);
         assert.ok(r.p > 0.9);                      // both contribute, not just one
         state.y = false;
-        assert.strictEqual(b.evaluate(stateOf(state), 0).activeRules.length, 1);
+        assert.strictEqual(active(b.evaluate(stateOf(state), 0)).length, 1);
     });
 
     it('restore starts the maxHold clock when a held-on state has none', function() {
@@ -736,7 +743,7 @@ describe('persistence and input', function() {
             b.restore(junk);
             const r = b.evaluate(noState, 0);
             assert.strictEqual(r.binary, false);
-            assert.strictEqual(r.terms.length, 0);
+            assert.strictEqual(fading(r).length, 0);
         }
     });
 
@@ -750,7 +757,238 @@ describe('persistence and input', function() {
         assert.strictEqual(b.inject(1, null, 0), false);
         b.reset();
         const r = b.evaluate(noState, 0);
-        assert.strictEqual(r.terms.length, 0);
+        assert.strictEqual(fading(r).length, 0);
         assert.ok(Math.abs(r.p - 0.2) < 1e-12);
+    });
+});
+
+describe('snapshot report', function() {
+    // What output 2 carries. The estimate itself is tested above; this is about whether the
+    // report explains it — every rule accounted for, with a status saying why.
+
+    it('lists every configured rule exactly once, whatever its state', function() {
+        // The guard that matters: a rule must not fall out of the report because no branch
+        // claimed it. Four rules in four different states, four entries.
+        const b = createBayes(cfgOf({ rules: [
+            contRule('on',  10, { thing: 'a' }),
+            contRule('off', 10, { thing: 'b' }),
+            arrivalRule('seq', 3),
+            { id: 'scaled', lr: 1, halfLifeMs: null, scale: { fromValue: 0, fromShare: 1, toValue: 10, toShare: 0 },
+              steps: [step('is', { thing: 'c', operator: 'neq', value: '', valueType: 'str' })] }
+        ]}));
+        b.handleEvent(hit('seq', 0), true, 0);
+        b.handleEvent(hit('seq', 0), false, MIN);          // cycle done → parked on step 2
+        const r = b.evaluate(stateOf({ a: true, b: false, c: 'warm' }), MIN);
+
+        assert.strictEqual(r.rules.length, 4);
+        assert.deepStrictEqual(r.rules.map(x => x.id), ['on', 'off', 'seq', 'scaled']);
+        assert.strictEqual(byId(r, 'on').status, 'contributing');
+        assert.strictEqual(byId(r, 'off').status, 'condition-false');
+        assert.strictEqual(byId(r, 'seq').status, 'waiting');
+        assert.strictEqual(byId(r, 'scaled').status, 'no-value', 'condition holds but the reading is not a number');
+    });
+
+    it('reports what a rule reads, so a false condition can be seen rather than inferred', function() {
+        const b = createBayes(cfgOf({ rules: [contRule('temp', 10, { thing: 'a', operator: 'gt', value: '25', valueType: 'num' })] }));
+        const r = b.evaluate(stateOf({ a: 23.4 }), 0);
+        assert.strictEqual(byId(r, 'temp').status, 'condition-false');
+        assert.strictEqual(byId(r, 'temp').value, 23.4);
+    });
+
+    it('says no-value, without a value, when the source cannot be read at all', function() {
+        const b = createBayes(cfgOf({ rules: [contRule('gone', 10, { thing: 'missing' })] }));
+        const r = b.evaluate(stateOf({}), 0);
+        assert.strictEqual(byId(r, 'gone').status, 'no-value');
+        assert.ok(!('value' in byId(r, 'gone')), 'nothing read, so nothing reported');
+    });
+
+    it('shares agree with the estimate they explain', function() {
+        // Log-odds are additive and a share is just a rescaling of one, so the contributing
+        // shares have to sum to the total. If they ever drift the report is lying.
+        const b = createBayes(cfgOf({ rules: [
+            contRule('a', 10, { thing: 'a' }),
+            contRule('b', 3,  { thing: 'b' })
+        ]}));
+        const r = b.evaluate(stateOf({ a: true, b: true }), 0);
+        const sum = active(r).reduce((t, x) => t + x.share, 0);
+        assert.ok(Math.abs(sum - r.share) < 0.2, sum + ' vs ' + r.share);
+        // 'strong' is the 74 % of the editor's scale.
+        assert.ok(Math.abs(byId(r, 'a').share - 73.8) < 0.5);
+    });
+
+    it('a rule at 100 % is exactly the one that reaches the threshold alone', function() {
+        // The same boundary the editor's summary draws: at 100 % the estimate touches pOn.
+        const lr = Math.exp(scale.requiredGain(0.2, 0.85));
+        const b = createBayes(cfgOf({ rules: [contRule('alone', lr, { thing: 'a' })] }));
+        const r = b.evaluate(stateOf({ a: true }), 0);
+        assert.ok(Math.abs(byId(r, 'alone').share - 100) < 0.2);
+        assert.ok(Math.abs(r.p - 0.85) < 1e-6);
+        assert.strictEqual(r.binary, true);
+    });
+
+    it('a momentary rule reads as fading, with its age and half-life', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 10)] }));
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);
+        b.handleEvent(hit('arr', 1), true, 1.5 * MIN);      // fires
+
+        const at = b.evaluate(noState, 1.5 * MIN);
+        assert.strictEqual(byId(at, 'arr').status, 'fading');
+        assert.strictEqual(byId(at, 'arr').age, 0);
+        assert.strictEqual(byId(at, 'arr').halfLife, 20 * 60, 'the node default, in seconds');
+
+        // A half-life later the contribution has halved, and so has the share.
+        const later = b.evaluate(noState, 21.5 * MIN);
+        assert.strictEqual(byId(later, 'arr').age, 20 * 60);
+        assert.ok(Math.abs(byId(later, 'arr').share - byId(at, 'arr').share / 2) < 0.5);
+    });
+
+    it('a waiting sequence says where it is and how long it has', function() {
+        const b = createBayes(cfgOf({ rules: [arrivalRule('arr', 10)] }));
+        b.handleEvent(hit('arr', 0), true, 0);
+        b.handleEvent(hit('arr', 0), false, MIN);          // step 1 done, window is 2 min
+
+        const e = byId(b.evaluate(noState, 1.5 * MIN), 'arr');
+        assert.strictEqual(e.status, 'waiting');
+        assert.strictEqual(e.step, 2);
+        assert.strictEqual(e.steps, 2);
+        assert.strictEqual(e.deadline, 90, 'seconds left of the 2-minute window');
+
+        // Before anything arms it, the same rule is idle rather than waiting.
+        const fresh = createBayes(cfgOf({ rules: [arrivalRule('arr', 10)] }));
+        assert.strictEqual(byId(fresh.evaluate(noState, 0), 'arr').status, 'armed');
+    });
+
+    it('injected evidence gets its own entry and leaves when it decays', function() {
+        const b = createBayes(cfgOf({ rules: [contRule('a', 10, { thing: 'a' })] }));
+        b.inject(30, 10 * MIN, 0);
+        const r = b.evaluate(stateOf({ a: false }), 0);
+        assert.strictEqual(r.rules.length, 2, 'the configured rule plus the injection');
+        assert.strictEqual(byId(r, 'injected').status, 'injected');
+        assert.ok(byId(r, 'injected').share > 0);
+
+        // Once pruned it is gone from the report, not left at zero.
+        b.tick(3 * HOUR, noState);
+        const after = b.evaluate(stateOf({ a: false }), 3 * HOUR);
+        assert.strictEqual(after.rules.length, 1);
+        assert.strictEqual(byId(after, 'injected'), undefined);
+    });
+
+    it('carries the label the node attached, falling back to the id', function() {
+        const b = createBayes(cfgOf({ rules: [
+            Object.assign(contRule('a', 10, { thing: 'a' }), { label: 'While Kontor · Temperature is true' }),
+            contRule('b', 10, { thing: 'b' })
+        ]}));
+        const r = b.evaluate(stateOf({ a: true, b: true }), 0);
+        assert.strictEqual(byId(r, 'a').label, 'While Kontor · Temperature is true');
+        assert.strictEqual(byId(r, 'b').label, 'b', 'unlabelled rules stay identifiable');
+    });
+});
+
+describe('multi-condition rules', function() {
+    // A rule made only of level checks is one weight with several conditions, not a sequence.
+    // Before this it fell through to the sequence machinery and could never fire: a condition
+    // is not an event, so nothing ever drove the first step forward.
+    const twoConditions = () => ({ id: 'and', lr: 10, halfLifeMs: null, steps: [
+        step('is', { thing: 'a', operator: 'gt', value: '100', valueType: 'num' }),
+        step('is', { thing: 'b' })
+    ]});
+
+    it('holds its weight only while every condition holds at once', function() {
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        const state = { a: 150, b: true };
+        const R = stateOf(state);
+
+        assert.strictEqual(active(b.evaluate(R, 0)).length, 1, 'both hold');
+        state.b = false;
+        assert.strictEqual(active(b.evaluate(R, MIN)).length, 0, 'second condition dropped');
+        state.b = true; state.a = 50;
+        assert.strictEqual(active(b.evaluate(R, 2 * MIN)).length, 0, 'first condition dropped');
+        state.a = 150;
+        assert.strictEqual(active(b.evaluate(R, 3 * MIN)).length, 1, 'both hold again');
+    });
+
+    it('names the condition that failed', function() {
+        // With one condition "condition-false" is enough; with several, which one is the
+        // whole question.
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        const e = byId(b.evaluate(stateOf({ a: 150, b: false }), 0), 'and');
+        assert.strictEqual(e.status, 'condition-false');
+        assert.strictEqual(e.failedStep, 2);
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 50, b: true }), 0), 'and').failedStep, 1);
+    });
+
+    it('contributes nothing before it holds, and applies its full weight when it does', function() {
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        assert.ok(Math.abs(b.evaluate(stateOf({ a: 50, b: true }), 0).p - 0.2) < 1e-12);
+        const on = b.evaluate(stateOf({ a: 150, b: true }), 0);
+        assert.ok(Math.abs(byId(on, 'and').share - 73.8) < 0.5, 'one strong weight, not two');
+    });
+
+    it('accepts isOrBecomes as a condition — it has nothing to wait for here', function() {
+        // The live rule that prompted this: a time window plus a level, the second saved as
+        // "now or soon" from when it was written as a sequence.
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 10, halfLifeMs: null, steps: [
+            step('is', { thing: 'a' }),
+            step('isOrBecomes', { thing: 'b' })
+        ]}]}));
+        assert.strictEqual(active(b.evaluate(stateOf({ a: true, b: true }), 0)).length, 1);
+        assert.strictEqual(active(b.evaluate(stateOf({ a: true, b: false }), 0)).length, 0);
+    });
+
+    it('does not drive the sequence machinery', function() {
+        // handleEvent must leave an all-condition rule alone; an FSM entry for it would be
+        // state that nothing ever clears.
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        b.handleEvent(hit('and', 0), true, 0);
+        assert.deepStrictEqual(b.serialize().fsm, {});
+    });
+
+    it('reports a rule that opens with a condition but waits for an event as never-fires', function() {
+        // Still unreachable, and now it says so instead of sitting at "armed" looking idle.
+        const b = createBayes(cfgOf({ rules: [{ id: 'dead', lr: 10, halfLifeMs: null, steps: [
+            step('is', { thing: 'a' }),
+            step('becomes', { thing: 'b' })
+        ]}]}));
+        const e = byId(b.evaluate(stateOf({ a: true, b: true }), 0), 'dead');
+        assert.strictEqual(e.status, 'never-fires');
+        assert.strictEqual(e.share, 0);
+
+        // A sequence that opens with an event is fine and stays armed.
+        const ok = createBayes(cfgOf({ rules: [arrivalRule('arr', 10)] }));
+        assert.strictEqual(byId(ok.evaluate(noState, 0), 'arr').status, 'armed');
+    });
+});
+
+describe('unusable operator and value pairings', function() {
+    // The editor now offers only 're' for a regex comparison, but a rule saved before that
+    // can pair it with a plain string — and COMPARE.regex calls b.test, which a string does
+    // not have. One bad rule must not take the whole evaluation down with it.
+    it('a regex operator against a string value does not throw', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'bad', lr: 3, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'regex', value: '^on$', valueType: 'str' })] },
+            { id: 'good', lr: 10, halfLifeMs: null, steps: [step('is', { thing: 'b' })] }
+        ]}));
+        const r = b.evaluate(stateOf({ a: 'on', b: true }), 0);
+        assert.strictEqual(byId(r, 'bad').status, 'condition-false', 'unevaluable is not a match');
+        assert.strictEqual(byId(r, 'good').status, 'contributing', 'and the other rules still run');
+    });
+
+    it('a regex operator against a real regex still matches', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'r', lr: 10, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'regex', value: '^on$', valueType: 're' })] }
+        ]}));
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 'on' }), 0), 'r').status, 'contributing');
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 'off' }), 0), 'r').status, 'condition-false');
+    });
+
+    it('an unparseable value leaves the rule inactive rather than throwing', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'j', lr: 3, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'eq', value: '{not json', valueType: 'json' })] }
+        ]}));
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 'x' }), 0), 'j').status, 'condition-false');
     });
 });

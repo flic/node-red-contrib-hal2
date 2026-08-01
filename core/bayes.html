@@ -125,6 +125,10 @@
         <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
             door opening and closing. Reads <i>then&hellip;</i></li>
     </ul>
+    <p>A rule whose steps are <b>all conditions</b> is not a sequence but an <b>AND</b>: its weight
+    applies while every one of them holds at the same time, and it reads <i>While A and B</i>. A rule
+    that opens with a condition but waits for an event later cannot work &mdash; nothing completes
+    that first step &mdash; and the rule says so.</p>
     <p>Timing appears on a second line under a step, only where it applies: <i>within N s of the
     previous step</i> is how long that step has to happen, and <i>stays on for at most N s</i> is how
     long a cycle may stay true &mdash; a door held open longer than that is not a pass-through and the
@@ -222,10 +226,35 @@
     <p><b>1:</b> the binary result &mdash; <code>payload</code> true/false, <code>probability</code>,
     <code>changed</code>. By default this only emits when the result actually flips, so a rule firing
     again while the node is already on sends nothing; set <b>Emit output 1</b> to <i>every evaluation</i>
-    to have the state re-asserted continuously instead. <b>2:</b> snapshot
-    <code>{ p, logOdds, binary, held, activeRules, terms, fsm }</code> on every sensor evaluation
-    (and every tick if enabled). Wire output 1 onward like any other message to record the result on
-    a Thing &mdash; the node has no side channel into the object model.</p>
+    to have the state re-asserted continuously instead. <b>2:</b> the snapshot,
+    <code>{ p, logOdds, share, binary, held, rules }</code>, on every sensor evaluation (and every
+    tick if enabled). Wire output 1 onward like any other message to record the result on a Thing
+    &mdash; the node has no side channel into the object model.</p>
+    <p>A snapshot follows every sensor report and every flip of the result. The clock tick does not
+    produce one unless <b>Snapshot every tick</b> is enabled &mdash; turn it on to watch evidence
+    decay between reports. Decay does not depend on it: contributions are computed from timestamps
+    at evaluation, so the value is right whenever the node does look.</p>
+    <p><b>rules</b> lists <i>every</i> rule on every snapshot, not only the ones firing &mdash; while
+    tuning, the question is usually why a rule is <em>not</em> contributing. Each entry carries a
+    <code>label</code> read off its own steps, the <code>value</code> its source holds right now, its
+    <code>share</code> of the way to the on-threshold (the same percentage the bars above use, and it
+    adds up: the contributing shares sum to the snapshot's <code>share</code>), and a
+    <code>status</code>:</p>
+    <ul>
+        <li><b>contributing</b> &mdash; a level rule whose condition holds; its weight is in the
+            estimate now</li>
+        <li><b>fading</b> &mdash; fired earlier; <code>age</code> and <code>halfLife</code> in seconds
+            say how far it has decayed</li>
+        <li><b>waiting</b> &mdash; a sequence partway through: <code>step</code> of <code>steps</code>,
+            with <code>deadline</code> seconds left of its window</li>
+        <li><b>armed</b> &mdash; a sequence at its first step, waiting to be triggered</li>
+        <li><b>condition-false</b> &mdash; evaluated and did not match; <code>value</code> shows what
+            it read and <code>failedStep</code> which condition broke it</li>
+        <li><b>no-value</b> &mdash; the reading is missing, or unusable for a scaled weight</li>
+        <li><b>injected</b> &mdash; ad-hoc evidence from <code>msg.topic = "evidence"</code></li>
+        <li><b>never-fires</b> &mdash; the rule opens with a condition but waits for an event later,
+            so nothing can start it</li>
+    </ul>
 
     <h3>Notes</h3>
     <p>The estimate is persisted in node context (the event handler's context store), so it survives
@@ -364,9 +393,13 @@
                     return Math.abs(a) >= Math.abs(b) ? a : b;
                 }
 
+                function isCondition(st) {
+                    return !!st && (st.pattern === 'is' || st.pattern === 'isOrBecomes');
+                }
                 function isContinuous(rule) {
-                    // A lone level check is the continuous case: "while X is true".
-                    return rule.steps.length === 1 && rule.steps[0].pattern === 'is';
+                    // A rule made only of level checks is the continuous case: one weight that
+                    // applies while every condition holds at once — "while X and Y".
+                    return rule.steps.length > 0 && rule.steps.every(isCondition);
                 }
 
                 function ruleHalfLifeS(rule) {
@@ -525,9 +558,20 @@
                         fillItemSelect(itemSel, thingSel.val(), (thingSel.val() === step.thing) ? step.item : null);
                     });
                     // Hide the wrapper, not just the widget, so its flex space collapses too.
+                    // The value types an operator can actually work with, following what
+                    // hal2Event and hal2Gate already do: a comparison that can only mean a
+                    // number offers only num, and regex offers only re — where the estimator
+                    // needs a real RegExp and a string would throw at evaluation.
                     var opHandler = function() {
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false');
+                        if (op === 'regex') {
+                            valField.typedInput('types', ['re']).typedInput('type', 're');
+                        } else if (halNumericOperator(op)) {
+                            valField.typedInput('types', ['num']).typedInput('type', 'num');
+                        } else {
+                            valField.typedInput('types', ['str', 'num', 'bool', 're']);
+                        }
                     };
                     opSel.change(opHandler);
 
@@ -652,11 +696,29 @@
                         var src = el.find('.bs-src').val();
                         var isTime = src === 'time';
 
+                        // The first step decides what kind of rule this is, and the rest
+                        // follow from it. Start with a condition and the rule is an AND: every
+                        // later step is judged at the same instant, so there is no edge to
+                        // wait for and nothing to be "soon" after — only "now" is meaningful,
+                        // and an event there would make the rule unreachable instead.
+                        var condFirst = isCondition(rule.steps[0]);
                         var allowed = isTime ? ['is']
+                                    // Only narrow a step that is already a condition. An event
+                                    // after a leading condition is a broken rule, not an AND —
+                                    // coercing it would quietly turn "then the door opens" into
+                                    // "and the door is open". Leave it, and let the warning say so.
+                                    : (i > 0 && condFirst && isCondition(rule.steps[i])) ? ['is']
                                     : (src === 'thing' || src === 'group') ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
                                     : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
                         var patSel = el.find('.bs-pattern');
-                        setPatternOptions(patSel, allowed, patSel.val());
+                        var wasPat = patSel.val();
+                        setPatternOptions(patSel, allowed, wasPat);
+                        // Say it once rather than silently rewriting: in an AND the two behave
+                        // identically, so this is showing what already happens, not a change.
+                        if (wasPat === 'isOrBecomes' && allowed.indexOf('isOrBecomes') < 0 && i > 0 && condFirst) {
+                            RED.notify('hal2Bayes: every step is a condition, so this rule is an "and" — ' +
+                                       '"now or soon" has nothing to wait for and reads as "now".', 'warning');
+                        }
                         patSel.toggle(allowed.length > 1);
                         el.find('.bs-val-wrap').toggle(!isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0);
 
@@ -697,10 +759,13 @@
                     });
 
                     // A level check cannot start a sequence — nothing would trigger it.
-                    var deadTrigger = rule.steps.length > 1 &&
-                        (rule.steps[0].pattern === 'is' || rule.steps[0].pattern === 'isOrBecomes');
+                    // Only a rule that mixes a leading condition with a later event is dead:
+                    // nothing completes the first step. All conditions is an AND, and an event
+                    // first is an ordinary sequence.
+                    var deadTrigger = rule.steps.length > 1 && !isContinuous(rule) &&
+                        isCondition(rule.steps[0]);
                     container.find('.br-warning')
-                        .text(deadTrigger ? 'The first step is a condition, so nothing triggers this rule — use "on change" or "on a full cycle".' : '')
+                        .text(deadTrigger ? 'This rule starts with a condition but waits for an event later, so nothing can trigger it — make the first step "on change" or "on a full cycle", or make every step a condition.' : '')
                         .toggle(deadTrigger);
 
                     var scaled = (rule.strength === 'scaled' && rule.steps.length === 1);
