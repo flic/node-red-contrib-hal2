@@ -444,20 +444,15 @@ module.exports = function(RED) {
         function recomputeGroup(groupId, def, groupMembers, trigger) {
             const { samples, eligible } = groupSamples(groupMembers);
             const value = groupAggregate.aggregate(def.aggregate, samples);
-            const now   = Date.now();
-            const prev  = node.groupState[groupId] || {};
-            const changed = prev.state !== value;
+            const step  = groupAggregate.nextRecord(node.groupState[groupId], value, Date.now());
 
-            const rec = {
-                state:       value,
-                laststate:   changed ? prev.state : prev.laststate,
-                last_update: now,
-                last_change: changed ? now : (prev.last_change || now),
-                members:     eligible,
-                live:        samples.length,
-                fn:          def.aggregate,
-                name:        def.name
-            };
+            const rec = Object.assign({}, step, {
+                members: eligible,
+                live:    samples.length,
+                fn:      def.aggregate,
+                name:    def.name
+            });
+            delete rec.changed;          // a transient of the step, not part of the record
             node.groupState[groupId] = rec;
             persistGroupState();
 

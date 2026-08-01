@@ -163,9 +163,30 @@
         return undefined;
     }
 
+    // One step of a group's state record, mirroring what hal2Thing.updateState does to a
+    // thing item (core/thing.js:218-231) — because hal2Event's change filters compare
+    // state against laststate and must behave identically for both.
+    //
+    // The rule that matters: `laststate` is ALWAYS the previous value, even when it is the
+    // same value. Only `last_change` is conditional. Carrying the last *different* value
+    // forward instead would make every later update look like a change, which is exactly
+    // what "on change" is there to suppress.
+    function nextRecord(prev, value, now) {
+        prev = prev || {};
+        var changed = prev.state !== value;
+        return {
+            state:       value,
+            laststate:   prev.state,
+            last_update: now,
+            last_change: changed ? now : (prev.last_change || now),
+            changed:     changed
+        };
+    }
+
     return {
         FUNCTIONS: FUNCTIONS,
         aggregate: aggregate,
+        nextRecord: nextRecord,
         suggestFor: suggestFor,
         kindOf: kindOf,
         isFunction: isFunction,

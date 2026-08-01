@@ -176,3 +176,62 @@ describe('group-aggregate metadata', function () {
         }
     });
 });
+
+describe('group-aggregate nextRecord', function () {
+    // What hal2Event's change filters compare against. The rule this pins is the one that
+    // broke in practice: laststate is the previous value, always — carrying the last
+    // *different* value forward makes every later update look like a change, so "on change"
+    // fires on every member report even when the group's value has not moved.
+    it('always reports the previous value as laststate', function () {
+        var a = ga.nextRecord({ state: 25.25, last_change: 100 }, 25.28, 200);
+        assert.strictEqual(a.state, 25.28);
+        assert.strictEqual(a.laststate, 25.25);
+        assert.strictEqual(a.changed, true);
+        assert.strictEqual(a.last_change, 200);
+
+        // The next update leaves the value alone: state and laststate now match, which is
+        // what makes an "on change" event skip it.
+        var b = ga.nextRecord(a, 25.28, 300);
+        assert.strictEqual(b.state, 25.28);
+        assert.strictEqual(b.laststate, 25.28);
+        assert.strictEqual(b.changed, false);
+    });
+
+    it('moves last_change only on a real change, and last_update always', function () {
+        var a = ga.nextRecord({ state: 1, last_change: 100 }, 1, 200);
+        assert.strictEqual(a.last_change, 100, 'unchanged value keeps its last_change');
+        assert.strictEqual(a.last_update, 200, 'but the update time still moves');
+
+        var b = ga.nextRecord(a, 2, 300);
+        assert.strictEqual(b.last_change, 300);
+        assert.strictEqual(b.last_update, 300);
+    });
+
+    it('handles the very first computation', function () {
+        var first = ga.nextRecord(undefined, true, 500);
+        assert.strictEqual(first.state, true);
+        assert.strictEqual(first.laststate, undefined, 'no previous value to report');
+        assert.strictEqual(first.changed, true);
+        assert.strictEqual(first.last_change, 500);
+    });
+
+    it('treats a group falling silent as a change, and staying silent as none', function () {
+        // Every member goes offline: the value becomes undefined, which is a real transition.
+        var gone = ga.nextRecord({ state: 21.5, last_change: 100 }, undefined, 200);
+        assert.strictEqual(gone.state, undefined);
+        assert.strictEqual(gone.laststate, 21.5);
+        assert.strictEqual(gone.changed, true);
+
+        var still = ga.nextRecord(gone, undefined, 300);
+        assert.strictEqual(still.changed, false);
+        assert.strictEqual(still.last_change, 200, 'still pointing at when it went quiet');
+    });
+
+    it('distinguishes false from undefined', function () {
+        // A group that reads false is reporting something; one that reads undefined is not.
+        var r = ga.nextRecord({ state: undefined, last_change: 100 }, false, 200);
+        assert.strictEqual(r.changed, true);
+        assert.strictEqual(r.laststate, undefined);
+        assert.strictEqual(ga.nextRecord({ state: false }, false, 300).changed, false);
+    });
+});
