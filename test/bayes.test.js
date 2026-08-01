@@ -884,3 +884,78 @@ describe('snapshot report', function() {
         assert.strictEqual(byId(r, 'b').label, 'b', 'unlabelled rules stay identifiable');
     });
 });
+
+describe('multi-condition rules', function() {
+    // A rule made only of level checks is one weight with several conditions, not a sequence.
+    // Before this it fell through to the sequence machinery and could never fire: a condition
+    // is not an event, so nothing ever drove the first step forward.
+    const twoConditions = () => ({ id: 'and', lr: 10, halfLifeMs: null, steps: [
+        step('is', { thing: 'a', operator: 'gt', value: '100', valueType: 'num' }),
+        step('is', { thing: 'b' })
+    ]});
+
+    it('holds its weight only while every condition holds at once', function() {
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        const state = { a: 150, b: true };
+        const R = stateOf(state);
+
+        assert.strictEqual(active(b.evaluate(R, 0)).length, 1, 'both hold');
+        state.b = false;
+        assert.strictEqual(active(b.evaluate(R, MIN)).length, 0, 'second condition dropped');
+        state.b = true; state.a = 50;
+        assert.strictEqual(active(b.evaluate(R, 2 * MIN)).length, 0, 'first condition dropped');
+        state.a = 150;
+        assert.strictEqual(active(b.evaluate(R, 3 * MIN)).length, 1, 'both hold again');
+    });
+
+    it('names the condition that failed', function() {
+        // With one condition "condition-false" is enough; with several, which one is the
+        // whole question.
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        const e = byId(b.evaluate(stateOf({ a: 150, b: false }), 0), 'and');
+        assert.strictEqual(e.status, 'condition-false');
+        assert.strictEqual(e.failedStep, 2);
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 50, b: true }), 0), 'and').failedStep, 1);
+    });
+
+    it('contributes nothing before it holds, and applies its full weight when it does', function() {
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        assert.ok(Math.abs(b.evaluate(stateOf({ a: 50, b: true }), 0).p - 0.2) < 1e-12);
+        const on = b.evaluate(stateOf({ a: 150, b: true }), 0);
+        assert.ok(Math.abs(byId(on, 'and').share - 73.8) < 0.5, 'one strong weight, not two');
+    });
+
+    it('accepts isOrBecomes as a condition — it has nothing to wait for here', function() {
+        // The live rule that prompted this: a time window plus a level, the second saved as
+        // "now or soon" from when it was written as a sequence.
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 10, halfLifeMs: null, steps: [
+            step('is', { thing: 'a' }),
+            step('isOrBecomes', { thing: 'b' })
+        ]}]}));
+        assert.strictEqual(active(b.evaluate(stateOf({ a: true, b: true }), 0)).length, 1);
+        assert.strictEqual(active(b.evaluate(stateOf({ a: true, b: false }), 0)).length, 0);
+    });
+
+    it('does not drive the sequence machinery', function() {
+        // handleEvent must leave an all-condition rule alone; an FSM entry for it would be
+        // state that nothing ever clears.
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        b.handleEvent(hit('and', 0), true, 0);
+        assert.deepStrictEqual(b.serialize().fsm, {});
+    });
+
+    it('reports a rule that opens with a condition but waits for an event as never-fires', function() {
+        // Still unreachable, and now it says so instead of sitting at "armed" looking idle.
+        const b = createBayes(cfgOf({ rules: [{ id: 'dead', lr: 10, halfLifeMs: null, steps: [
+            step('is', { thing: 'a' }),
+            step('becomes', { thing: 'b' })
+        ]}]}));
+        const e = byId(b.evaluate(stateOf({ a: true, b: true }), 0), 'dead');
+        assert.strictEqual(e.status, 'never-fires');
+        assert.strictEqual(e.share, 0);
+
+        // A sequence that opens with an event is fine and stays armed.
+        const ok = createBayes(cfgOf({ rules: [arrivalRule('arr', 10)] }));
+        assert.strictEqual(byId(ok.evaluate(noState, 0), 'arr').status, 'armed');
+    });
+});

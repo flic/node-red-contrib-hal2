@@ -205,9 +205,16 @@ Everything is a **rule**, built from steps. Each step names a source and a condi
 - **on a full cycle** — a cycle: true and back to false within its limit, e.g. a door opening
   and closing (*then…*)
 
+A rule whose steps are **all conditions** is not a sequence but an **AND**: its weight applies for
+as long as every one of them holds at the same time. "While it is 09:00–10:00 *and* the terrace is
+above 100 lux" is one weight with two conditions. A rule that opens with a condition but waits for
+an event later cannot work — nothing completes that first step — and the editor says so on the
+rule; in the snapshot it reads as `never-fires`.
+
 Timing sits on a second line under a step, only where it applies: *within N s of the previous
 step* is how long that step has to happen, and *stays on for at most N s* is how long a cycle may
 stay true — a door held open longer than that is not a pass-through, so the rule does not advance.
+In an AND there is no previous step to be soon after, so no window is shown.
 
 A **time** source is a window of the day rather than a sensor: start and end in 24-hour format
 plus the weekdays it applies on. It may cross midnight (22:00–06:00), start is inclusive and end
@@ -336,9 +343,10 @@ is in:
 | `fading` | a rule that fired earlier — `age` and `halfLife` (seconds) say how far it has decayed |
 | `waiting` | a sequence partway through: `step` of `steps`, with `deadline` seconds left |
 | `armed` | a sequence at its first step, waiting to be triggered |
-| `condition-false` | evaluated and did not match — `value` is what it read |
+| `condition-false` | evaluated and did not match — `value` is what it read, and `failedStep` which condition broke it |
 | `no-value` | the reading is missing, or unusable for a scaled weight |
 | `injected` | ad-hoc evidence from `msg.topic = "evidence"`, which has no rule behind it |
+| `never-fires` | the rule opens with a condition but waits for an event later, so nothing can start it |
 
 `share` is the contribution as a percentage of the way from the prior to the on-threshold — the
 same unit the rule bars and the summary use in the editor, so what you tuned is what you read back.

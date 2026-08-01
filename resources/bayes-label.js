@@ -38,10 +38,14 @@
         return (step.pattern === 'is' || step.pattern === 'isOrBecomes') ? 'and' : 'then';
     }
 
-    // A rule is continuous when it is a single level check — the same test the estimator
-    // uses to decide whether a rule holds a weight or fires one (lib/bayes.js).
+    // A rule is continuous when every step is a level check — the same test the estimator uses
+    // to decide whether a rule holds a weight or fires one (lib/bayes.js). Several conditions
+    // read as one "While A and B": they all have to hold at once.
+    function isCondition(step) {
+        return !!step && (step.pattern === 'is' || step.pattern === 'isOrBecomes');
+    }
     function isContinuous(rule) {
-        return !!(rule && rule.steps && rule.steps.length === 1 && rule.steps[0].pattern === 'is');
+        return !!(rule && rule.steps && rule.steps.length && rule.steps.every(isCondition));
     }
 
     // names: { source, window } — `source` is the resolved subject ("Kontor Sensor ·
@@ -86,6 +90,7 @@
     return {
         OPERATORS: OPERATORS,
         PATTERNS: PATTERNS,
+        isCondition: isCondition,
         isContinuous: isContinuous,
         describeStep: describeStep,
         describeRule: describeRule

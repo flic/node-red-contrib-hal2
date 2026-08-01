@@ -87,13 +87,28 @@ describe('bayes-label describeRule', function () {
             'When Ytterdörr · Contact is true on a full cycle and Hall Rörelse · Motion is true');
     });
 
-    it('calls only a lone level check continuous', function () {
+    it('calls a rule continuous when every step is a condition', function () {
         // The same test the estimator uses to decide whether a rule holds a weight or fires
         // one, so "While" in a label means exactly "this rule holds a weight".
         assert.strictEqual(bl.isContinuous({ steps: [step({ pattern: 'is' })] }), true);
+        assert.strictEqual(bl.isContinuous({ steps: [step({ pattern: 'is' }), step({ pattern: 'is' })] }), true,
+            'two conditions are an AND, not a sequence');
+        assert.strictEqual(bl.isContinuous({ steps: [step({ pattern: 'is' }), step({ pattern: 'isOrBecomes' })] }), true);
         assert.strictEqual(bl.isContinuous({ steps: [step({ pattern: 'becomes' })] }), false);
-        assert.strictEqual(bl.isContinuous({ steps: [step({}), step({})] }), false);
+        assert.strictEqual(bl.isContinuous({ steps: [step({ pattern: 'is' }), step({ pattern: 'becomes' })] }), false);
+        assert.strictEqual(bl.isContinuous({ steps: [] }), false);
         assert.strictEqual(bl.isContinuous(null), false);
+    });
+
+    it('reads a two-condition rule as one While clause', function () {
+        // The rule that prompted this: a time window and a level, both holding at once.
+        const rule = { steps: [
+            step({ src: 'time', operator: 'true' }),
+            step({ pattern: 'isOrBecomes', operator: 'gt', value: '100', valueType: 'num' })
+        ]};
+        assert.strictEqual(
+            bl.describeRule(rule, [{ window: '09:00–10:00, every day' }, named('Terrass Sensor · Lux')]),
+            'While 09:00–10:00, every day is inside and Terrass Sensor · Lux > 100');
     });
 
     it('is empty for a rule with no steps', function () {
