@@ -26,13 +26,13 @@
                 <option value='set'>Set value</option>
             </select>
         </div>
-        <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); box-sizing:border-box; margin-bottom:8px;">
-            <small id="group-tip"></small>
-        </div>
         <div class="form-row" id="row-thing">
             <label for="node-input-thing" id="label-node-input-thing" style="width:95px; padding-right:10px;" class="fa fa-microchip"> Thing</label>
             <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
+        </div>
+        <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); box-sizing:border-box; margin-bottom:8px;">
+            <small id="group-tip"></small>
         </div>
         <div class="form-row" id="thing-filter-div" hidden>
             <label for="thing-filter" id="label-thing-filter" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filter</label>
@@ -309,9 +309,10 @@
                         $("#node-input-item").val(gid);
                     }
                     var g = groupsList.filter(function(x) { return x.id === gid; })[0];
-                    $("#group-tip").text(g
-                        ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate)
-                        : '');
+                    // Hidden rather than blank when there is no group to describe — an empty
+                    // tip box reads as something failing to load.
+                    $("#group-tip").text(g ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : '');
+                    $("#row-group-tip").toggle(!!g);
                     return;
                 }
                 if ($("#node-input-thing").val() == '0') {
