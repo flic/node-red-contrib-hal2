@@ -436,6 +436,13 @@
                             refreshRuleView(ruleContainer);
                         });
 
+                    // What a group step is actually reading, directly under the source line as
+                    // in the other nodes. The 50px lead matches the column the selects start in;
+                    // max-width goes because form-tips otherwise caps itself at 450px.
+                    var groupTip = $('<div/>', { class: "form-tips bs-group-tip",
+                        style: "margin-left:50px; margin-right:34px; margin-top:6px; max-width:none; box-sizing:border-box; white-space:normal;" })
+                        .appendTo(stepDiv).hide();
+
                     // Line 2 — the condition, and when it has to hold.
                     var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
                     indent(line2);
@@ -469,13 +476,6 @@
                     // Read-back of the configured window, on its own line under the weekdays.
                     $('<div/>', { class: "bs-days-hint",
                         style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
-
-                    // What a group step is actually reading, last in the step so it sits under
-                    // the timing line. The 50px lead matches the column the selects start in;
-                    // max-width goes because form-tips otherwise caps itself at 450px.
-                    var groupTip = $('<div/>', { class: "form-tips bs-group-tip",
-                        style: "margin-left:50px; margin-right:34px; margin-top:6px; max-width:none; white-space:normal;" })
-                        .appendTo(stepDiv).hide();
 
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('within ');
