@@ -77,6 +77,19 @@ uses its **state-capable** members, commanding it uses its **command-capable** o
 can be empty. A sensor group reads and cannot be commanded; a scene group is the reverse.
 Commanding never writes the value — the value follows from what the members report back.
 
+**The function is not fixed.** `get_groups` takes a `function` argument that computes a different
+one from the same members for that call only, which is what makes a group answer more than one
+question: *any true* asks "is a lamp on?", *all true* asks "did the command to turn them all on
+work?", *count true* asks "how many are on?" — one group, three questions. The configured Value
+stays the group's own, is what the flow nodes read, and is what `get_all_states` reports; the reply
+names `configured_function` whenever the two differ, so an ad-hoc reading is never mistaken for the
+setting.
+
+This also means a group is readable **as soon as it has members that carry state**, whether or not
+anyone has picked a Value for it. Command groups usually do: switchable devices report back. They
+show up with `readable: true` and a member count and no value, which is the invitation to ask for a
+function.
+
 Give a group **Tags** and **Notes** on the Groups tab and both reach the assistant. This is worth
 doing: the name is usually all it has to go on, and "Alla lampor" does not say whether the outdoor
 lights are in it. A note does, and `get_groups` takes a `tag` filter so the assistant can ask for

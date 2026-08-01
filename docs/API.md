@@ -294,13 +294,14 @@ Returns water leak sensor status, devices with low battery, and offline devices 
 
 ### `get_groups` 👁 (read)
 
-Returns the groups configured at this location, with their current value. A GROUP IS NOT A DEVICE: it is a named set of items drawn from several devices, and it has no items of its own — so it takes no item_id and does not appear in get_state. Its value is COMPUTED from its members by the function shown — latest, min, max, average, median, sum, range (highest minus lowest), any true, all true, any false, all false, count true, count false, percent true (0-100) — and members whose device is offline are left out, so a group value can change with nothing having been switched. Prefer a group over reading its members one by one whenever the user speaks about a set as one thing: "is anything on?", "how warm is it indoors?", "how many windows are open?". Use get_state instead when they mean one specific device. readable:false means the group has no value at all (it exists only to be commanded) — no value field is present, rather than a null one. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. notes and tags say what the group actually covers, which the name usually does not ("Alla lampor" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.
+Returns the groups configured at this location, with their current value. A GROUP IS NOT A DEVICE: it is a named set of items drawn from several devices, and it has no items of its own — so it takes no item_id and does not appear in get_state. Its value is COMPUTED from its members by the function shown — latest, min, max, average, median, sum, range (highest minus lowest), any true, all true, any false, all false, count true, count false, percent true (0-100) — and members whose device is offline are left out, so a group value can change with nothing having been switched. Prefer a group over reading its members one by one whenever the user speaks about a set as one thing: "is anything on?", "how warm is it indoors?", "how many windows are open?". Use get_state instead when they mean one specific device. THE FUNCTION IS NOT FIXED: pass function to compute a different one from the same members on this call. That is the point — "any true" answers "is a lamp on?", "all true" answers "did the turn-them-on command work?", "count true" answers "how many are on?", over exactly the same group. It changes nothing: the configured function is what the group keeps reporting, and configured_function appears in the reply when the two differ. A group with members but no configured function has no standing value and no function field — pass function to read it. members > 0 is what says it is worth asking. readable:true means the group has members that carry a state, so it can be read. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. notes and tags say what the group actually covers, which the name usually does not ("Alla lampor" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `group_id` | `string` | no | Exact group ID — returns just that group, for re-reading one you already know |
+| `function` | `latest` \| `min` \| `max` \| `average` \| `median` \| `sum` \| `range` \| `anyTrue` \| `allTrue` \| `anyFalse` \| `allFalse` \| `countTrue` \| `countFalse` \| `percentTrue` | no | Compute this function instead of the group's configured one, for this call only: latest, min, max, average, median, sum, range, anyTrue, allTrue, anyFalse, allFalse, countTrue, countFalse, percentTrue |
 | `group_name` | `string` | no | Optional partial, case-insensitive filter on group name |
 | `ha_type` | `string` | no | Filter to groups of this ha_type. Accepts the same category aliases as get_all_states (climate, spa, light, fan, cover, scene), so ha_type="light" also matches dimmer groups |
 | `tag` | `string` | no | Filter to groups tagged with this value (case-insensitive, exact match) |
@@ -308,7 +309,7 @@ Returns the groups configured at this location, with their current value. A GROU
 **Example**
 
 ```json
-{ "tool": "get_groups", "args": { "group_id": "…", "group_name": "…" } }
+{ "tool": "get_groups", "args": { "group_id": "…", "function": "latest" } }
 ```
 
 ### `control_group` ✏️ (write)

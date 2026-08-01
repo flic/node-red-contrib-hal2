@@ -23,6 +23,10 @@ const LIGHTS  = info({ id: 'lights', name: 'Alla lampor', haType: 'light',
                        aggregate: 'anyTrue', stateMembers: 12, commandMembers: 12 });
 const SCENE   = info({ id: 'night', name: 'Natt (Släck lampor)', haType: 'light',
                        aggregate: null, stateMembers: 0, commandMembers: 8 });
+// The common real case: switchable members that report back, with nobody having picked a
+// default function. Readable, but only if you say what to compute.
+const UNSET   = info({ id: 'alla', name: 'Alla lampor', haType: 'light',
+                       aggregate: null, stateMembers: 39, commandMembers: 39 });
 
 describe('group-tools groupEntry', function () {
     it('shapes a readable group with its value and how it was computed', function () {
@@ -48,6 +52,45 @@ describe('group-tools groupEntry', function () {
         assert.strictEqual(e.members, 9);
     });
 
+    it('a group with state members but no configured function is readable and has no value', function () {
+        // The case that made the function parameter worth having: 39 members that could answer,
+        // and nothing to report until someone says what to compute.
+        const e = gt.groupEntry(UNSET, undefined, msToIso);
+        assert.strictEqual(e.readable, true);
+        assert.strictEqual(e.members, 39);
+        assert.ok(!('value' in e));
+        assert.ok(!('function' in e), 'no function to report — none configured, none asked for');
+    });
+
+    it('computes a function asked for on the call', function () {
+        const e = gt.groupEntry(UNSET, undefined, msToIso,
+                                { value: true, live: 37, members: 39, fn: 'anyTrue' });
+        assert.strictEqual(e.value, true);
+        assert.strictEqual(e.function, 'anyTrue');
+        assert.strictEqual(e.live, 37);
+        assert.ok(!('configured_function' in e), 'nothing configured to differ from');
+        assert.ok(!('last_change' in e), 'only tracked for the configured function');
+    });
+
+    it('names the configured function when a different one was asked for', function () {
+        // Otherwise a reply computed with allTrue would look like the group's own setting.
+        const e = gt.groupEntry(SENSORS, state({ state: 25.68 }), msToIso,
+                                { value: 19.1, live: 9, members: 9, fn: 'min' });
+        assert.strictEqual(e.function, 'min');
+        assert.strictEqual(e.value, 19.1);
+        assert.strictEqual(e.configured_function, 'median');
+    });
+
+    it('omits the value when the function asked for suits nothing in the group', function () {
+        // average over booleans, say: the module returns undefined and the entry stays silent
+        // rather than inventing a number.
+        const e = gt.groupEntry(UNSET, undefined, msToIso,
+                                { value: undefined, live: 39, members: 39, fn: 'average' });
+        assert.ok(!('value' in e));
+        assert.strictEqual(e.function, 'average');
+        assert.strictEqual(e.live, 39);
+    });
+
     it('a command-only group is not readable and carries no value fields', function () {
         const e = gt.groupEntry(SCENE, undefined, msToIso);
         assert.strictEqual(e.readable, false);
@@ -71,6 +114,10 @@ describe('group-tools groupEntry', function () {
 
         const orphan = gt.groupEntry(info({ stateMembers: 0, commandMembers: 0 }), undefined, msToIso);
         assert.deepStrictEqual([orphan.readable, orphan.controllable], [false, false]);
+
+        // Readable rests on having state members, not on a function having been picked.
+        const unset = gt.groupEntry(UNSET, undefined, msToIso);
+        assert.deepStrictEqual([unset.readable, unset.controllable], [true, true]);
     });
 
     it('carries notes and tags only when they exist', function () {

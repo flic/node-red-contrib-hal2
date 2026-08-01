@@ -356,6 +356,11 @@ module.exports = function(RED) {
         node.getGroups = function () { return node.groupInfo; };
         // groupId → send(payload) → { queued, skipped }. Rebuilt by wireGroups on every deploy.
         node.groupCommanders = {};
+        // groupId → read(fn) → { value, live, members }. The configured function is only a
+        // default: the same members answer different questions depending on which function is
+        // asked for — "any true" says whether a lamp is on, "all true" says whether the command
+        // to turn them all on worked. Both are one read away from the same group.
+        node.groupReaders = {};
 
         // groupId -> { ratelimit, aggregate, name, legacy } merged from the registry and any
         // legacy hal2Group nodes belonging to this handler. The registry wins on collision
@@ -519,6 +524,7 @@ module.exports = function(RED) {
             const valueGroups = [];
             const info = [];
             node.groupCommanders = {};
+            node.groupReaders = {};
             let legacyCount = 0;
             for (const [groupId, def] of defs) {
                 const groupMembers = members.get(groupId) || [];
@@ -555,6 +561,14 @@ module.exports = function(RED) {
                     return { queued: queue.length, skipped: skipped };
                 };
                 node.groupCommanders[groupId] = runCommand;
+                node.groupReaders[groupId] = function (fn) {
+                    const { samples, eligible } = groupSamples(groupMembers);
+                    return {
+                        value  : groupAggregate.aggregate(fn, samples),
+                        live   : samples.length,
+                        members: eligible
+                    };
+                };
 
                 const commandListener = function (itemid, payload) { runCommand(payload); };
                 node.subscribe('command', groupId, commandListener);
@@ -823,11 +837,22 @@ module.exports = function(RED) {
             // Every group as the tools report it, newest registry state each call so a value
             // is never stale. Sorted by name to match how the device list reads.
             function listGroups(args) {
+                const a = args || {};
                 const infos = (typeof node.getGroups === 'function') ? node.getGroups() : [];
                 return infos
-                    .filter(info => groupTools.matchesFilters(info, args || {}, expandHaTypeFilter))
-                    .map(info => groupTools.groupEntry(info, node.getGroupState(info.id), msToIso))
-                    .sort((a, b) => a.name.localeCompare(b.name));
+                    .filter(info => groupTools.matchesFilters(info, a, expandHaTypeFilter))
+                    .map(info => {
+                        // A function asked for on this call is computed from the members now.
+                        // It changes nothing: the configured function is what the flow nodes
+                        // use and what the group keeps reporting.
+                        let computed = null;
+                        if (a.function && node.groupReaders[info.id]) {
+                            computed = node.groupReaders[info.id](a.function);
+                            computed.fn = a.function;
+                        }
+                        return groupTools.groupEntry(info, node.getGroupState(info.id), msToIso, computed);
+                    })
+                    .sort((a2, b2) => a2.name.localeCompare(b2.name));
             }
 
             function hasAnyHaType(wantedTypes) {
@@ -847,7 +872,7 @@ module.exports = function(RED) {
                 if (toolName === 'get_groups' || toolName === 'control_group') {
                     const infos = (typeof node.getGroups === 'function') ? node.getGroups() : [];
                     const ok = toolName === 'get_groups'
-                        ? infos.some(g => g.aggregate)
+                        ? infos.some(g => g.stateMembers > 0)
                         : infos.some(g => g.commandMembers > 0);
                     if (ok) return null;
                     return {
@@ -855,7 +880,7 @@ module.exports = function(RED) {
                         tool    : toolName,
                         message : toolName === 'get_groups'
                             ? 'No group at this location (' + (config.locationName || 'unnamed') +
-                              ') has a value configured.'
+                              ') has members that carry a state.'
                             : 'No group at this location (' + (config.locationName || 'unnamed') +
                               ') has members that accept commands.'
                     };
@@ -1037,6 +1062,12 @@ module.exports = function(RED) {
 
                     // get_groups
                     if (toolName === 'get_groups') {
+                        if (args.function && !groupAggregate.isFunction(args.function)) {
+                            return toolOk(JSON.stringify({
+                                error     : 'Unknown function "' + args.function + '"',
+                                functions : groupAggregate.FUNCTIONS.map(f => f.v)
+                            }));
+                        }
                         const groups = listGroups(args);
                         const result = { total: groups.length, groups };
                         if (config.locationName) result.location = config.locationName;
