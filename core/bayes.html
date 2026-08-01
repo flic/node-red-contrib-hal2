@@ -554,13 +554,19 @@
                         fillItemSelect(itemSel, thingSel.val(), (thingSel.val() === step.thing) ? step.item : null);
                     });
                     // Hide the wrapper, not just the widget, so its flex space collapses too.
+                    // The value types an operator can actually work with, following what
+                    // hal2Event and hal2Gate already do: a comparison that can only mean a
+                    // number offers only num, and regex offers only re — where the estimator
+                    // needs a real RegExp and a string would throw at evaluation.
                     var opHandler = function() {
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false');
-                        // "> 100" wants a number; say so for you rather than leaving a string
-                        // that only compares correctly by JavaScript's coercion rules.
-                        if (halShouldDefaultNumeric(op, valField.typedInput('type'), valField.typedInput('value'))) {
-                            valField.typedInput('type', 'num');
+                        if (op === 'regex') {
+                            valField.typedInput('types', ['re']).typedInput('type', 're');
+                        } else if (halNumericOperator(op)) {
+                            valField.typedInput('types', ['num']).typedInput('type', 'num');
+                        } else {
+                            valField.typedInput('types', ['str', 'num', 'bool', 're']);
                         }
                     };
                     opSel.change(opHandler);

@@ -959,3 +959,36 @@ describe('multi-condition rules', function() {
         assert.strictEqual(byId(ok.evaluate(noState, 0), 'arr').status, 'armed');
     });
 });
+
+describe('unusable operator and value pairings', function() {
+    // The editor now offers only 're' for a regex comparison, but a rule saved before that
+    // can pair it with a plain string — and COMPARE.regex calls b.test, which a string does
+    // not have. One bad rule must not take the whole evaluation down with it.
+    it('a regex operator against a string value does not throw', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'bad', lr: 3, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'regex', value: '^on$', valueType: 'str' })] },
+            { id: 'good', lr: 10, halfLifeMs: null, steps: [step('is', { thing: 'b' })] }
+        ]}));
+        const r = b.evaluate(stateOf({ a: 'on', b: true }), 0);
+        assert.strictEqual(byId(r, 'bad').status, 'condition-false', 'unevaluable is not a match');
+        assert.strictEqual(byId(r, 'good').status, 'contributing', 'and the other rules still run');
+    });
+
+    it('a regex operator against a real regex still matches', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'r', lr: 10, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'regex', value: '^on$', valueType: 're' })] }
+        ]}));
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 'on' }), 0), 'r').status, 'contributing');
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 'off' }), 0), 'r').status, 'condition-false');
+    });
+
+    it('an unparseable value leaves the rule inactive rather than throwing', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'j', lr: 3, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'eq', value: '{not json', valueType: 'json' })] }
+        ]}));
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: 'x' }), 0), 'j').status, 'condition-false');
+    });
+});
