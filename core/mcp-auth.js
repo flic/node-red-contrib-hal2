@@ -126,7 +126,10 @@ function createMcpAuth(opts) {
         const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);
         if (Object.prototype.hasOwnProperty.call(tokenCache, cacheKey)
             && tokenCache[cacheKey].exp >= Date.now()) {
-            return tokenCache[cacheKey].claims;
+            // Cloned for the same reason the debug groups are sliced above: these claims are
+            // handed to flows (msg.jwtClaims), and a flow that mutates them must not poison
+            // the cached copy that later requests with the same token are authorized against.
+            return structuredClone(tokenCache[cacheKey].claims);
         }
         try {
             const oidc = await getOidcConfig();
@@ -154,7 +157,7 @@ function createMcpAuth(opts) {
             const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
             const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
             cacheToken(cacheKey, { claims, exp: cacheExp });
-            return claims;
+            return structuredClone(claims);   // same isolation as the cache-hit path
         } catch (e) {
             warn('MCP token verify failed: ' + e.message);
             return null;

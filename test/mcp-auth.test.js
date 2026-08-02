@@ -79,6 +79,17 @@ describe('core/mcp-auth validateToken', function () {
         assert.strictEqual(auth.cacheSize(), 1);
     });
 
+    it('isolates callers from the cache — mutating returned claims cannot poison later requests', async function () {
+        const { auth } = build();
+        const first = await auth.validateToken('good');
+        // A flow receiving msg.jwtClaims does exactly this kind of damage, deliberately or not.
+        first.groups.push('root');
+        first.sub = 'evil';
+        const second = await auth.validateToken('good');
+        assert.deepStrictEqual(second.groups, ['admin']);
+        assert.strictEqual(second.sub, 'abc');
+    });
+
     it('bypasses the IdP for the local debug token', async function () {
         const { auth, state } = build({ localDebugToken: 'dbg-secret' });
         const claims = await auth.validateToken('dbg-secret');
