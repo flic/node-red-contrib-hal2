@@ -59,6 +59,15 @@ function httpRequest(method, hostname, port, path, headers, body) {
     });
 }
 
+// Every name the built-in dispatchers answer to. A dynamic hal2MCPIn tool with one of
+// these names would register fine but never fire — node.callTool tries the built-ins
+// first — so registration refuses it loudly instead (see registerMCPTool).
+const BUILTIN_TOOL_NAMES = new Set([
+    ...MCP_TOOLS.map(t => t.name),
+    ...MCP_TOOLS_ADMIN.map(t => t.name),
+    'control_light'   // undocumented alias of set_light, accepted by the dispatcher
+]);
+
 // ── EventHandler node ─────────────────────────────────────────────────────────
 
 module.exports = function(RED) {
@@ -96,6 +105,14 @@ module.exports = function(RED) {
         };
 
         node.registerMCPTool = function (toolName, description, schema, timeoutSec, requiredValue, ownerId) {
+            // A built-in name is refused, not shadowed: callTool dispatches to the built-ins
+            // before the dynamic registry, so a flow behind this name would never run — and
+            // registering it anyway would list the same name twice in tools/list.
+            if (BUILTIN_TOOL_NAMES.has(toolName)) {
+                node.warn('MCP tool "' + toolName + '" collides with a built-in tool of the same name — '
+                    + 'the built-in always wins, so this flow would never be called. Rename the tool.');
+                return;
+            }
             // Duplicate names are a silent conflict: the registry entry is overwritten but
             // BOTH hal2MCPIn listeners keep firing, so one call runs two flows and whichever
             // hal2MCPOut answers first wins. Say so rather than debug it in production.
