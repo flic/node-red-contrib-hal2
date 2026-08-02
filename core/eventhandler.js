@@ -1107,7 +1107,17 @@ module.exports = function(RED) {
                             device = all.find(d => d.thing_id === args.thing_id);
                         } else {
                             const q = args.thing_name.toLowerCase();
-                            device = all.find(d => d.thing_name.toLowerCase().includes(q));
+                            // Several matches is not a coin toss — same rule as resolveGroup:
+                            // say which ones and let the caller pick, rather than silently
+                            // answering for whichever device happened to come first.
+                            const hits = all.filter(d => d.thing_name.toLowerCase().includes(q));
+                            if (hits.length > 1) {
+                                return toolOk(JSON.stringify({
+                                    error   : 'Several devices match "' + args.thing_name + '" — use thing_id to pick one',
+                                    matches : hits.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name }))
+                                }));
+                            }
+                            device = hits[0];
                         }
                         if (!device) {
                             return toolOk(JSON.stringify({ error: 'Device not found' }));
