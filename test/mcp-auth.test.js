@@ -190,4 +190,11 @@ describe('core/mcp-auth requireBearer', function () {
         assert.strictEqual(claims.sub, 'abc');
         assert.strictEqual(res.statusCode, null); // no error response written
     });
+
+    it('matches the Bearer scheme case-insensitively (RFC 7235)', async function () {
+        const { auth } = build();
+        const claims = await auth.requireBearer({ headers: { authorization: 'bearer good' } }, mockRes());
+        assert.ok(claims);
+        assert.strictEqual(claims.sub, 'abc');
+    });
 });

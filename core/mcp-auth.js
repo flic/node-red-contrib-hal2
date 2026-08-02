@@ -166,13 +166,15 @@ function createMcpAuth(opts) {
 
     async function requireBearer(req, res) {
         const authHeader = req.headers['authorization'] || '';
-        if (!authHeader.startsWith('Bearer ')) {
+        // Scheme matched case-insensitively per RFC 7235 — "bearer x" is as valid as "Bearer x".
+        const m = /^Bearer\s+(.+)$/i.exec(authHeader);
+        if (!m) {
             res.set('WWW-Authenticate',
                 `Bearer resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`);
             res.status(401).json({ error: 'unauthorized' });
             return null;
         }
-        const token  = authHeader.slice(7);
+        const token  = m[1];
         const claims = await validateToken(token);
         if (!claims) {
             res.set('WWW-Authenticate',
