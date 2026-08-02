@@ -1036,6 +1036,10 @@ module.exports = function(RED) {
 
             // ── Auth middleware helper ─────────────────────────────────────────
             node.requireBearer = requireBearer;
+            // Read by standalone hal2MCPServer nodes: requireBearer exists regardless, but
+            // without mcpEnabled no OAuth discovery routes are registered, so clients could
+            // authenticate in principle yet never complete a login — refuse early instead.
+            node.mcpEnabled = !!config.mcpEnabled;
 
         // ── Shared tool dispatcher (used by the /mcp route and the hal2Api node) ──
         // Returns a uniform shape: { ok:true, text } | { ok:true, content } | { ok:false, code, message }

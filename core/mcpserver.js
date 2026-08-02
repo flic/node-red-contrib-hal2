@@ -15,7 +15,10 @@ module.exports = function (RED) {
             return;
         }
 
-        if (!eventHandler.requireBearer) {
+        // requireBearer exists on every EventHandler, so the real signal is mcpEnabled:
+        // without it no OAuth discovery routes are registered, and clients could validate
+        // tokens in principle but never complete a login. Refuse early instead.
+        if (!eventHandler.requireBearer || !eventHandler.mcpEnabled) {
             node.error('MCP is not enabled on the event handler');
             node.status({ fill: 'red', shape: 'ring', text: 'MCP not enabled on event handler' });
             return;
