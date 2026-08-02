@@ -577,19 +577,29 @@
                     };
                     opSel.change(opHandler);
 
+                    var groupStray = false;
+                    // Refilling resets the select to the value passed in, so this runs only when
+                    // the group changes — wiring it to the function select's own change put the
+                    // previous value straight back on every pick.
+                    var syncGroupOptions = function() {
+                        var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
+                        if (!g) { return; }
+                        groupStray = halFillGroupFunctions(groupFnSel, g.haType,
+                                                           groupFnSel.val() || step.groupFunction || '');
+                    };
                     var syncGroupTip = function() {
                         var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
                         var show = srcSel.val() === 'group' && !!g;
                         if (show) {
-                            var stray = halFillGroupFunctions(groupFnSel, g.haType, step.groupFunction || '');
                             groupTip.html($('<small/>').text(halGroupFunctionTip(
-                                g.haType, groupFnSel.val(), stray,
+                                g.haType, groupFnSel.val(), groupStray,
                                 'The saved function does not fit this group\'s members — this step will read as no evidence.')));
                         }
                         groupTipRow.toggle(show);
                     };
-                    groupSel.change(syncGroupTip);
+                    groupSel.change(function() { syncGroupOptions(); syncGroupTip(); });
                     groupFnSel.change(syncGroupTip);
+                    syncGroupOptions();
 
                     var srcHandler = function() {
                         var src = srcSel.val();

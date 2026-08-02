@@ -54,12 +54,12 @@ function halFillGroupFunctions(sel, haType, saved) {
     var stray = !!saved && fits.indexOf(saved) < 0;
     var deflt = ga.defaultFunction(haType);
 
+    // Kept short enough to read inside the field: which default applies, and why a stray no
+    // longer fits, are both said in full on the tip line under it.
     sel.children().remove();
-    sel.append($('<option></option>').val('').text(deflt
-        ? '(group default: ' + deflt + ')'
-        : '(group default: none for this HAType)'));
+    sel.append($('<option></option>').val('').text(deflt ? '(group default)' : '(no default)'));
     fits.forEach(function (v) { sel.append($('<option></option>').val(v).text(ga.label(v))); });
-    if (stray) { sel.append($('<option></option>').val(saved).text(saved + ' — does not fit this group')); }
+    if (stray) { sel.append($('<option></option>').val(saved).text(ga.label(saved) + ' (unfit)')); }
     sel.val(saved || '');
     return stray;
 }

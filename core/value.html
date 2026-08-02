@@ -325,8 +325,10 @@
                         $("#node-input-item").val(gid);
                     }
                     var g = groupsList.filter(function(x) { return x.id === gid; })[0];
-                    var stray = halFillGroupFunctions($("#node-input-groupFunction"),
-                                                      g && g.haType, savedFunction);
+                    // The current pick if there is one, so changing group does not throw away
+                    // a function you just chose.
+                    var stray = halFillGroupFunctions($("#node-input-groupFunction"), g && g.haType,
+                                                      $("#node-input-groupFunction").val() || savedFunction);
                     $("#row-group-function").toggle(!!g);
                     groupHaType = g && g.haType;
                     groupStray  = stray;

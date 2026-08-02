@@ -189,7 +189,8 @@
                             itemsField.append($("<option></option>").val(thingsField.val()).text(thingsField.val()));
                             itemsField.val(thingsField.val());
                             var g = groupsList.filter(function(x) { return x.id === thingsField.val(); })[0];
-                            var stray = halFillGroupFunctions(groupFnField, g && g.haType, rule.function || '');
+                            var stray = halFillGroupFunctions(groupFnField, g && g.haType,
+                                                              groupFnField.val() || rule.function || '');
                             rowGroupFn.toggle(!!g);
                             groupHaType = g && g.haType;
                             groupStray  = stray;
