@@ -555,9 +555,6 @@
                         }
                     });
                     haTypeProperty.val(currentHaType);
-                    // The default follows the HAType, so the line has to follow the select.
-                    haTypeProperty.change(syncSummary);
-                    syncSummary();
 
                     // What the group can actually do, in the same terms MCP reports it: how many
                     // members can be read, how many can be commanded, and what it says by itself.
@@ -609,6 +606,11 @@
                         }
                         rowSummary.text(parts.join(' '));
                     };
+                    // Wired here rather than beside the select: syncSummary is a var, so calling
+                    // it above its assignment threw and took the whole group row with it.
+                    // The default follows the HAType, so the line has to follow the select.
+                    haTypeProperty.change(syncSummary);
+                    syncSummary();
 
                     var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
                         .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);
