@@ -138,6 +138,75 @@ describe('lib/common item capability predicates', function () {
     });
 });
 
+describe('lib/common checkHeartbeats', function () {
+    // A mock thing that mimics core/thing.js updateState's side effects — it writes the
+    // state AND refreshes the heartbeat timestamp. That side effect is the whole reason
+    // the sweep must only act on the transition to offline: a rewrite would keep the
+    // timestamp fresh forever and re-emit an update per sweep.
+    function mockThing(now, lastSeenMsAgo, state1) {
+        const thing = {
+            id: 't1', name: 'Sensor',
+            thingType: { hbTTL: 60 },                     // seconds
+            state: state1 === undefined ? {} : { '1': state1 },
+            heartbeat: lastSeenMsAgo === null ? {} : { t1: now - lastSeenMsAgo },
+            writes: [],
+            updateState(msg, itemId, state, logtype) {
+                this.writes.push({ itemId, state, logtype });
+                this.state[itemId] = state;
+                this.heartbeat[this.id] = now;            // the side effect under test
+            }
+        };
+        return thing;
+    }
+    const sweep = (thing, now) => common.checkHeartbeats([{ id: 't1' }], () => thing, now);
+
+    it('marks a thing offline when its TTL has expired', function () {
+        const now = 1000000;
+        const thing = mockThing(now, 61000, true);        // TTL 60s, silent for 61s
+        sweep(thing, now);
+        assert.deepStrictEqual(thing.writes, [{ itemId: '1', state: false, logtype: 'heartbeat' }]);
+    });
+
+    it('writes offline only once — repeated sweeps do not flip-flop', function () {
+        const now = 1000000;
+        const thing = mockThing(now, 61000, true);
+        sweep(thing, now);
+        // The offline write refreshed thing.heartbeat, so `online` now computes true —
+        // the regression was that this re-triggered a write every sweep, forever.
+        sweep(thing, now + 5000);
+        sweep(thing, now + 10000);
+        assert.strictEqual(thing.writes.length, 1);
+    });
+
+    it('leaves a thing inside its TTL alone', function () {
+        const now = 1000000;
+        const thing = mockThing(now, 30000, true);        // seen 30s ago, TTL 60s
+        sweep(thing, now);
+        assert.deepStrictEqual(thing.writes, []);
+    });
+
+    it('does not resurrect an offline thing — coming back is the ingress path\'s job', function () {
+        const now = 1000000;
+        const thing = mockThing(now, 1000, false);        // fresh heartbeat, still marked offline
+        sweep(thing, now);
+        assert.deepStrictEqual(thing.writes, []);
+    });
+
+    it('marks a thing that has never reported as offline, once', function () {
+        const now = 1000000;
+        const thing = mockThing(now, null, undefined);    // no heartbeat, no state
+        sweep(thing, now);
+        sweep(thing, now + 5000);
+        assert.strictEqual(thing.writes.length, 1);
+        assert.strictEqual(thing.writes[0].state, false);
+    });
+
+    it('skips unresolvable and half-built things without throwing', function () {
+        assert.doesNotThrow(() => common.checkHeartbeats([{ id: 'gone' }], () => undefined, 0));
+        assert.doesNotThrow(() => common.checkHeartbeats([{ id: 'x' }], () => ({ id: 'x' }), 0));
+    });
+});
+
 describe('lib/common isThingAlive', function () {
     const thing = (hbCheck, aliveState) => ({
         thingType: { hbCheck },

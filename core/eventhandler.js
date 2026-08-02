@@ -136,19 +136,10 @@ module.exports = function(RED) {
 
         // ── Heartbeat ─────────────────────────────────────────────────────────
 
+        // The sweep itself lives in lib/common.js (checkHeartbeats) so the transition logic
+        // is unit-tested; this is glue binding it to the live registry and clock.
         function checkHeartbeat() {
-            const date = Date.now();
-            for (const n in hbList) {
-                const thing  = RED.nodes.getNode(hbList[n].id);
-                // Stale entry (thing removed mid-flight) — skip rather than crash the interval.
-                if (!thing || !thing.thingType) { continue; }
-                const online = (thing.id in thing.heartbeat) &&
-                               (date < (Number(thing.thingType.hbTTL) * 1000) + thing.heartbeat[thing.id]);
-                if (online !== thing.state['1']) {
-                    if (!online) { node.debug("Heartbeat: " + thing.name + " offline"); }
-                    thing.updateState([], '1', false, 'heartbeat');
-                }
-            }
+            common.checkHeartbeats(hbList, id => RED.nodes.getNode(id), Date.now(), m => node.debug(m));
         }
 
         if (this.heartbeat) {
