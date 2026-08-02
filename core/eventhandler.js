@@ -2027,6 +2027,12 @@ module.exports = function(RED) {
             const guard = hostFilter(expectedHost);
             guard._mcpOwner = node.id;
 
+            if (clientSecret) {
+                node.warn('MCP: a client secret is configured, so /oauth/register hands it out to every '
+                    + 'caller (legacy confidential-client mode) — the secret is effectively public. '
+                    + 'Switch the IdP client to public (PKCE) and clear the secret field.');
+            }
+
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
             const protectedResourceHandler = (_req, res) => {
