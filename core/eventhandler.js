@@ -1926,15 +1926,11 @@ module.exports = function(RED) {
             args = args || {};
             opts = opts || {};
 
-            const notConfigured = getNotConfiguredError(toolName);
-            if (notConfigured) {
-                node.debug('tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
-                return toolOk(JSON.stringify(notConfigured));
-            }
-
             // Read/write gating, only when the caller supplied a gate — i.e. the MCP route,
             // where the claims behind it were actually verified. Admin tools carry their own
-            // check inside dispatchAdminTools and are skipped here.
+            // check inside dispatchAdminTools and are skipped here. Checked before the
+            // not_configured answer, or a caller without the read claim could still map out
+            // which hardware categories (and location name) exist by probing control tools.
             if (opts.gate && !MCP_ADMIN_TOOL_NAMES.has(toolName)) {
                 const dynamic = node.mcpRegisteredTools[toolName];
                 const allowed = dynamic
@@ -1945,6 +1941,12 @@ module.exports = function(RED) {
                     return rpcErr(-32000, 'Access denied: the "' + toolName + '" tool requires a permission '
                         + 'your token does not have. This is a permission restriction, not a tool error.');
                 }
+            }
+
+            const notConfigured = getNotConfiguredError(toolName);
+            if (notConfigured) {
+                node.debug('tools/call: ' + toolName + ' not_configured at ' + (config.locationName || ''));
+                return toolOk(JSON.stringify(notConfigured));
             }
 
             let r;
