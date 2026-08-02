@@ -15,23 +15,25 @@
 }(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    // `t` is what a picker shows and `d` what an info line says, kept apart so a dropdown of
+    // fourteen entries stays scannable and the explanation appears once, for the one chosen.
     // kind drives the order the editor offers these in, given the group's HAType. Nothing is
     // ever hidden — a mixed group may legitimately want to count booleans.
     var FUNCTIONS = [
-        { v: 'latest',      t: 'latest — the most recently updated member',  kind: 'any' },
-        { v: 'min',         t: 'min — the lowest value',                     kind: 'number' },
-        { v: 'max',         t: 'max — the highest value',                    kind: 'number' },
-        { v: 'average',     t: 'average — the mean of all values',           kind: 'number' },
-        { v: 'median',      t: 'median — the middle value',                  kind: 'number' },
-        { v: 'sum',         t: 'sum — all values added together',            kind: 'number' },
-        { v: 'range',       t: 'range — highest minus lowest',               kind: 'number' },
-        { v: 'anyTrue',     t: 'any true — at least one member is true',     kind: 'boolean' },
-        { v: 'allTrue',     t: 'all true — every member is true',            kind: 'boolean' },
-        { v: 'anyFalse',    t: 'any false — at least one member is false',   kind: 'boolean' },
-        { v: 'allFalse',    t: 'all false — no member is true',              kind: 'boolean' },
-        { v: 'countTrue',   t: 'count true — how many are true',             kind: 'boolean' },
-        { v: 'countFalse',  t: 'count false — how many are false',           kind: 'boolean' },
-        { v: 'percentTrue', t: 'percent true — share that are true (0–100)', kind: 'boolean' }
+        { v: 'latest',      t: 'latest',       d: 'the most recently updated member',  kind: 'any' },
+        { v: 'min',         t: 'min',          d: 'the lowest value',                  kind: 'number' },
+        { v: 'max',         t: 'max',          d: 'the highest value',                 kind: 'number' },
+        { v: 'average',     t: 'average',      d: 'the mean of all values',            kind: 'number' },
+        { v: 'median',      t: 'median',       d: 'the middle value',                  kind: 'number' },
+        { v: 'sum',         t: 'sum',          d: 'all values added together',         kind: 'number' },
+        { v: 'range',       t: 'range',        d: 'highest minus lowest',              kind: 'number' },
+        { v: 'anyTrue',     t: 'any true',     d: 'at least one member is true',       kind: 'boolean' },
+        { v: 'allTrue',     t: 'all true',     d: 'every member is true',              kind: 'boolean' },
+        { v: 'anyFalse',    t: 'any false',    d: 'at least one member is false',      kind: 'boolean' },
+        { v: 'allFalse',    t: 'all false',    d: 'no member is true',                 kind: 'boolean' },
+        { v: 'countTrue',   t: 'count true',   d: 'how many are true',                 kind: 'boolean' },
+        { v: 'countFalse',  t: 'count false',  d: 'how many are false',                kind: 'boolean' },
+        { v: 'percentTrue', t: 'percent true', d: 'share that are true (0–100)',       kind: 'boolean' }
     ];
 
     // Which flavour of value a group's HAType tends to want, used to preselect a function for
@@ -54,6 +56,33 @@
         return SUGGESTION[KIND_BY_HATYPE[haType] || 'any'];
     }
 
+    // The value a group reports when nobody asks for anything in particular. Unlike suggestFor
+    // this returns null for a HAType with no opinion — 'other', the modes, colours, scenes.
+    // A mixed group having no standing value is more honest than one whose value is whichever
+    // member happened to report last, which is what 'latest' would make of it.
+    //
+    // 'any true' is the boolean default because it answers the question actually asked of a set
+    // of switches, and because it is honest standing still: false means everything is off and
+    // nothing else. 'all true' would report 38 of 39 lamps as false.
+    function defaultFunction(haType) {
+        var kind = KIND_BY_HATYPE[haType];
+        return kind ? SUGGESTION[kind] : null;
+    }
+
+    // The functions worth offering for a group of this HAType. Derived from the type rather than
+    // from live values because the editor cannot see what members currently hold — but a
+    // temperature item will not start reporting booleans, so the type is the stable signal.
+    // 'latest' fits anything and is always offered; an untyped group offers everything.
+    function functionsForHaType(haType) {
+        var kind = KIND_BY_HATYPE[haType];
+        var out = [];
+        for (var i = 0; i < FUNCTIONS.length; i++) {
+            var f = FUNCTIONS[i];
+            if (!kind || f.kind === 'any' || f.kind === kind) { out.push(f.v); }
+        }
+        return out;
+    }
+
     function kindOf(fn) {
         for (var i = 0; i < FUNCTIONS.length; i++) {
             if (FUNCTIONS[i].v === fn) { return FUNCTIONS[i].kind; }
@@ -68,6 +97,14 @@
             if (FUNCTIONS[i].v === fn) { return FUNCTIONS[i].t; }
         }
         return fn;
+    }
+
+    // What the function means, for the info line under a picker.
+    function describe(fn) {
+        for (var i = 0; i < FUNCTIONS.length; i++) {
+            if (FUNCTIONS[i].v === fn) { return FUNCTIONS[i].d; }
+        }
+        return '';
     }
 
     // Float noise is not a value anyone wants to see in a status badge or compare against:
@@ -199,6 +236,34 @@
         };
     }
 
+    // Which sample the value came from, for the functions where the value IS one member's:
+    // latest is that member by definition, and min/max name the extreme. For a mean or a count
+    // no member owns the answer, so this returns null rather than picking one — "the coldest
+    // room is the laundry" is worth saying; "the average came from the hallway" is not true.
+    //
+    // Ties go to the first sample in member order, which is stable across reads.
+    function valueSource(fn, samples) {
+        samples = Array.isArray(samples) ? samples : [];
+        if (fn === 'latest') {
+            var best = null;
+            for (var i = 0; i < samples.length; i++) {
+                if (samples[i].state === undefined) { continue; }
+                if (!best || (samples[i].updatedAt || 0) > (best.updatedAt || 0)) { best = samples[i]; }
+            }
+            return best;
+        }
+        if (fn !== 'min' && fn !== 'max') { return null; }
+        var want = aggregate(fn, samples);
+        if (want === undefined) { return null; }
+        for (var k = 0; k < samples.length; k++) {
+            var st = samples[k].state;
+            if (typeof st !== 'number' && typeof st !== 'string') { continue; }
+            if (typeof st === 'string' && st.trim() === '') { continue; }
+            if (Number(st) === want) { return samples[k]; }
+        }
+        return null;
+    }
+
     // One step of a group's state record, mirroring what hal2Thing.updateState does to a
     // thing item (core/thing.js:218-231) — because hal2Event's change filters compare
     // state against laststate and must behave identically for both.
@@ -222,13 +287,17 @@
     return {
         FUNCTIONS: FUNCTIONS,
         aggregate: aggregate,
+        valueSource: valueSource,
         usableCount: usableCount,
         suitableFunctions: suitableFunctions,
         sampleKinds: sampleKinds,
         nextRecord: nextRecord,
         suggestFor: suggestFor,
+        defaultFunction: defaultFunction,
+        functionsForHaType: functionsForHaType,
         kindOf: kindOf,
         isFunction: isFunction,
-        label: label
+        label: label,
+        describe: describe
     };
 }));

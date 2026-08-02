@@ -37,7 +37,9 @@ Control and observe several Things at once with **Groups**. A group's identity �
 
 ### A group's own value
 
-Give a group a **Value** and it stops being write-only: it gains a state of its own, computed from its members, that **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's. *Indoor temperature → average* is one number for the whole house; *All lights → any true* is one boolean for "is anything on".
+A group whose members carry state has a value of its own, which **Value**, **Gate**, **Event** and **Bayes** nodes can read exactly like an Item's — and **each of them chooses how**. The same members answer different questions: *any true* asks "is a lamp on?", *all true* asks "did the command to turn them all on work?", *count true* asks "how many are on?". Two Event nodes can therefore watch the same group for two different things, which one shared value could never do.
+
+What a group reports when nobody asks for anything in particular is **derived from its HAType** — a temperature group averages, a light or switch group answers *any true*. There is nothing to configure; a HAType with no natural summary (Other, the modes, colours) simply has no default, and the reading nodes each pick a function.
 
 | Function | Result |
 |---|---|
@@ -52,7 +54,7 @@ Give a group a **Value** and it stops being write-only: it gains a state of its 
 
 Four rules decide what goes into the calculation:
 
-- **Only members with a state.** A command-only Item has nothing to contribute, and the Value field is disabled for a group that has no stateful members at all.
+- **Only members with a state.** A command-only Item has nothing to contribute; a group with none at all cannot be read.
 - **No offline members.** A device that has dropped off the network is left out rather than voting with the value it had before it went quiet — so `any true` goes false when the last reachable lamp disappears, instead of reporting a light that may well be dark.
 - **Only values of the right kind.** The numeric functions skip anything that is not a number (a boolean member never counts as 1), and the boolean functions are strict about `true` / `false` — hal2 normalises `ON`/`1` in the ThingType's ingress function, so by the time a state reaches a group it is a real boolean or it is not one at all.
 - **Nothing eligible means no value.** A group with no live member reporting reads as *undefined*, not `0` or `false`, so a silent group can never be mistaken for a real "off" in a Gate.
@@ -61,7 +63,7 @@ A group behaves like an Item in every other respect: it emits on each member upd
 
 A group has a **HAType** that sets the command contract for its members. Compatibility is directional: `Switch` and `Light` are interchangeable (both are boolean On/Off), and a `Dimmer` item may also join an On/Off group (turning a dimmer off is well-defined) — but a switch or light cannot join a `Dimmer` group, since an On/Off device can't honour a 0–100 level. The Thing editor only offers compatible groups for each Item, and the Event handler only offers HATypes its existing members can all honour. For genuinely mixed groups there is an **Other** type that accepts any Item.
 
-A group without a Value stays exactly what it was: a command target, invisible to the reading nodes.
+A group with no stateful members stays exactly what it was: a command target, invisible to the reading nodes.
 
 ### Groups over MCP
 
@@ -78,12 +80,10 @@ can be empty. A sensor group reads and cannot be commanded; a scene group is the
 Commanding never writes the value — the value follows from what the members report back.
 
 **The function is not fixed.** `get_groups` takes a `function` argument that computes a different
-one from the same members for that call only, which is what makes a group answer more than one
-question: *any true* asks "is a lamp on?", *all true* asks "did the command to turn them all on
-work?", *count true* asks "how many are on?" — one group, three questions. The configured Value
-stays the group's own, is what the flow nodes read, and is what `get_all_states` reports; the reply
-names `configured_function` whenever the two differ, so an ad-hoc reading is never mistaken for the
-setting.
+one from the same members for that call only — the same freedom the flow nodes have. The group's
+derived default is what `get_all_states` reports and what a call without a `function` returns; the
+reply names `configured_function` whenever the two differ, so an ad-hoc reading is never mistaken
+for the group's own.
 
 A function that does not apply is **refused rather than answered**: asking a temperature group
 whether all its members are true comes back as an error naming what the members hold and listing
@@ -92,10 +92,19 @@ than about the question. Partial coverage is a different matter and is answered:
 *average* uses the dimmers and ignores the on/off members, so the reply carries `used` beside
 `live` and a mean over 10 of 39 members can be read as what it is.
 
-This also means a group is readable **as soon as it has members that carry state**, whether or not
-anyone has picked a Value for it. Command groups usually do: switchable devices report back. They
-show up with `readable: true` and a member count and no value, which is the invitation to ask for a
-function.
+A group is readable **as soon as it has members that carry state**. Command groups usually are:
+switchable devices report back.
+
+**Every function is tracked, not just the default.** The engine keeps a record per function the
+group's HAType can serve, so `last_change` and `last_update` are that function's own — a Gate can
+ask "has *all true* been steady for ten minutes?" and get a real answer. Deriving them from the
+members instead would be wrong for `min`, `max` and `any true`, where a member can change without
+moving the value at all: on a nine-sensor group the derived answer was 26 minutes off.
+
+Where one member owns the value — `latest`, `min`, `max` — the reply names it as `source`, so "the
+coldest room is the laundry" is one read. A mean or a count belongs to nobody and carries no
+`source` rather than an arbitrary one. `last_changed_by` names the member that last moved the
+value, which is a different question and only the same one for `latest`.
 
 Give a group **Tags** and **Notes** on the Groups tab and both reach the assistant. This is worth
 doing: the name is usually all it has to go on, and "All lights" does not say whether the outdoor

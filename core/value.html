@@ -31,6 +31,10 @@
             <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
+        <div class="form-row" id="row-group-function">
+            <label for="node-input-groupFunction" style="width:95px; padding-right:10px;"><i class="fa fa-calculator"></i> Value</label>
+            <select id="node-input-groupFunction" style="width:calc(100% - 170px)"></select>
+        </div>
         <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
             <small id="group-tip"></small>
         </div>
@@ -159,6 +163,7 @@
                 }
             },
             typeSel:        { value: 'hal2Thing' },
+            groupFunction:  { value: '' },
             action:         {},
             // For a Group source `thing` carries the group id and `item` mirrors it, exactly
             // as hal2Event stores a group — so the required-item validation keeps working.
@@ -215,6 +220,16 @@
             var savedType = this.thingType;
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;
+            var savedFunction = this.groupFunction || '';
+            var groupHaType = null, groupStray = false;
+            // The picker stays short; what the chosen function means is said once, here.
+            function syncFunctionTip(show) {
+                $("#group-tip").text(!show ? '' : halGroupFunctionTip(
+                    groupHaType, $("#node-input-groupFunction").val(), groupStray,
+                    'The saved function does not fit this group\'s members — it will read as no value.'));
+                $("#row-group-tip").toggle(!!show);
+            }
+            $("#node-input-groupFunction").change(function() { syncFunctionTip(true); });
 
             var thingsList = halGetThings(RED,'status');
             if (thingsList.length == 0 && groupsList.length == 0) {
@@ -232,6 +247,7 @@
                 $("#row-thing").toggle(!group);
                 $("#row-event-handler").toggle(group);
                 $("#row-eh-tip").toggle(group);
+                $("#row-group-function").toggle(group);
                 $("#row-group-tip").toggle(group);
                 $("#div-item").toggle(!group);
                 if (group) {
@@ -309,10 +325,16 @@
                         $("#node-input-item").val(gid);
                     }
                     var g = groupsList.filter(function(x) { return x.id === gid; })[0];
+                    // The current pick if there is one, so changing group does not throw away
+                    // a function you just chose.
+                    var stray = halFillGroupFunctions($("#node-input-groupFunction"), g && g.haType,
+                                                      $("#node-input-groupFunction").val() || savedFunction);
+                    $("#row-group-function").toggle(!!g);
+                    groupHaType = g && g.haType;
+                    groupStray  = stray;
                     // Hidden rather than blank when there is no group to describe — an empty
                     // tip box reads as something failing to load.
-                    $("#group-tip").text(g ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : '');
-                    $("#row-group-tip").toggle(!!g);
+                    syncFunctionTip(!!g);
                     return;
                 }
                 if ($("#node-input-thing").val() == '0') {

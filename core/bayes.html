@@ -442,7 +442,7 @@
                     var itemSel = $('<select/>', { class: "bs-item", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(thingWrap);
                     var groupWrap = $('<span/>', { class: "bs-group-wrap",
                         style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
-                    var groupSel = $('<select/>', { class: "bs-group", style: "flex:1 1 0; min-width:0;" }).appendTo(groupWrap);
+                    var groupSel = $('<select/>', { class: "bs-group", style: "flex:5 1 0; min-width:0;" }).appendTo(groupWrap);
                     groupsList.forEach(function(g) {
                         groupSel.append($("<option></option>").val(g.id).text(g.name));
                     });
@@ -450,6 +450,8 @@
                         groupSel.append($("<option></option>").val('').text('- no groups with a value -'));
                     }
                     groupSel.val(step.group || (groupsList[0] && groupsList[0].id) || '');
+                    var groupFnSel = $('<select/>', { class: "bs-groupfn", style: "flex:3 1 0; min-width:0; margin-left:4px;" })
+                        .appendTo(groupWrap);
                     var propWrap = $('<span/>', { class: "bs-prop-wrap",
                         style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
                     $('<input/>', { class: "bs-prop", type: "text", placeholder: "variable name", style: "width:100%;" })
@@ -575,15 +577,29 @@
                     };
                     opSel.change(opHandler);
 
+                    var groupStray = false;
+                    // Refilling resets the select to the value passed in, so this runs only when
+                    // the group changes — wiring it to the function select's own change put the
+                    // previous value straight back on every pick.
+                    var syncGroupOptions = function() {
+                        var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
+                        if (!g) { return; }
+                        groupStray = halFillGroupFunctions(groupFnSel, g.haType,
+                                                           groupFnSel.val() || step.groupFunction || '');
+                    };
                     var syncGroupTip = function() {
                         var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
                         var show = srcSel.val() === 'group' && !!g;
                         if (show) {
-                            groupTip.html($('<small/>').text('Value: ' + window.hal2GroupAggregate.label(g.aggregate)));
+                            groupTip.html($('<small/>').text(halGroupFunctionTip(
+                                g.haType, groupFnSel.val(), groupStray,
+                                'The saved function does not fit this group\'s members — this step will read as no evidence.')));
                         }
                         groupTipRow.toggle(show);
                     };
-                    groupSel.change(syncGroupTip);
+                    groupSel.change(function() { syncGroupOptions(); syncGroupTip(); });
+                    groupFnSel.change(syncGroupTip);
+                    syncGroupOptions();
 
                     var srcHandler = function() {
                         var src = srcSel.val();
@@ -659,6 +675,7 @@
                             src:      src,
                             thing:    el.find('.bs-thing option:selected').val(),
                             group:    el.find('.bs-group option:selected').val() || '',
+                            groupFunction: el.find('.bs-groupfn option:selected').val() || '',
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
                             operator: el.find('.bs-op option:selected').val(),

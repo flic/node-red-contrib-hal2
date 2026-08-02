@@ -14,6 +14,7 @@ module.exports = function(RED) {
         this.outputValue    = config.outputValue;
         this.outputType     = config.outputType;
         this.typeSel        = config.typeSel;
+        this.groupFunction  = config.groupFunction || '';
         this.ratelimit      = config.ratelimit;
         this.ratetype       = config.ratetype;
         this.rate           = Number(config.rate);
@@ -28,6 +29,11 @@ module.exports = function(RED) {
         var contextStore = this.eventHandler.contextStore;
 
         var eventTimestamp = nodeContext.get('eventTimestamp',contextStore) || {};
+        // Only used when this node reads a group with a function of its own. The engine keeps
+        // state/laststate for the group's default; a node that asked for something else has to
+        // remember its own previous value to know whether anything changed — and to persist it,
+        // or a restart would read as a change.
+        var groupLast = nodeContext.get('groupLast',contextStore);
 
         var eventDelay = {};
         var rateLimited = 0;
@@ -163,6 +169,40 @@ module.exports = function(RED) {
                 // A group emits under its own id with its own aggregated state, so the item
                 // filter does not apply — the group is the item.
                 if (node.typeSel != 'hal2Group' && itemid != node.item) { return; }
+
+                // With a function of this node's own, the group's emission is a wake-up and the
+                // value is computed here. Two Event nodes can then watch the same group for
+                // different things — "is a lamp on" and "did they all come on" — which one
+                // shared value could never answer.
+                if (node.typeSel == 'hal2Group' && node.groupFunction) {
+                    var read = node.eventHandler.readGroup(thingid, node.groupFunction);
+                    var value = read ? read.value : undefined;
+                    // Nothing to report is not a change to nothing: a function that stops
+                    // fitting its members, or a group gone quiet, must not fire an event.
+                    if (value === undefined) { return; }
+                    // The whole group block is rebuilt, not just the value: the engine's
+                    // emission describes the group's default, and every field in it —
+                    // function, live, the timestamps, the provenance — belongs to that
+                    // function rather than to the one this node asked for.
+                    var grp = Object.assign({}, event.group, {
+                        function   : node.groupFunction,
+                        members    : read.members,
+                        live       : read.live,
+                        last_update: read.last_update,
+                        last_change: read.last_change
+                    });
+                    if (read.source)          { grp.source = read.source; }
+                    else                      { delete grp.source; }
+                    if (read.last_changed_by) { grp.last_changed_by = read.last_changed_by; }
+                    else                      { delete grp.last_changed_by; }
+                    event = Object.assign({}, event, {
+                        state: value, laststate: groupLast, payload: value, group: grp
+                    });
+                    if (groupLast !== value) {
+                        groupLast = value;
+                        nodeContext.set('groupLast', groupLast, contextStore);
+                    }
+                }
                 if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
                 if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){

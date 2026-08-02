@@ -23,6 +23,17 @@ module.exports = function(RED) {
                     node.warn('Rule skipped: a group rule needs an event handler on this node');
                     return null;
                 }
+                // Each rule reads the group its own way; without a function of its own it
+                // falls back to whatever the group reports by default.
+                if (rule.function) {
+                    var read = node.eventHandler.readGroup(rule.thing, rule.function);
+                    if (!read || read.value === undefined) { return null; }
+                    // The engine tracks a record per function, so these are the real
+                    // timestamps for this function rather than the default's or a derived
+                    // guess — which could not be right for min, max or anyTrue.
+                    return { state: read.value, laststate: read.laststate,
+                             last_update: read.last_update, last_change: read.last_change };
+                }
                 var rec = node.eventHandler.getGroupState(rule.thing);
                 // No record, or no live member reporting: the rule has nothing to compare
                 // and does not match, rather than matching against a stale or invented value.

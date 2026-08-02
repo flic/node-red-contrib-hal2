@@ -361,6 +361,26 @@ module.exports = function(RED) {
         // asked for — "any true" says whether a lamp is on, "all true" says whether the command
         // to turn them all on worked. Both are one read away from the same group.
         node.groupReaders = {};
+        // Public: read a group with whichever function the caller wants, computed now. Returns
+        // undefined for an unknown group, and a { value } that is undefined when the function
+        // does not fit the members — which every consumer already treats as "no value".
+        node.readGroup = function (groupId, fn) {
+            const read = node.groupReaders[groupId];
+            if (!read) { return undefined; }
+            const out = read(fn);
+            // A tracked record exists for every function the group's HAType can serve, so the
+            // timestamps and provenance are the real ones rather than something derived at
+            // read time — which could not be right for min, max or anyTrue.
+            const rec = node.groupState[groupId + '|' + fn];
+            if (rec) {
+                out.laststate       = rec.laststate;
+                out.last_update     = rec.last_update;
+                out.last_change     = rec.last_change;
+                out.source          = rec.source;
+                out.last_changed_by = rec.last_changed_by;
+            }
+            return out;
+        };
 
         // groupId -> { ratelimit, aggregate, name, legacy } merged from the registry and any
         // legacy hal2Group nodes belonging to this handler. The registry wins on collision
@@ -372,7 +392,10 @@ module.exports = function(RED) {
                 if (!g || !g.id) continue;
                 defs.set(g.id, {
                     ratelimit: Number(g.ratelimit) || 0,
-                    aggregate: groupAggregate.isFunction(g.aggregate) ? g.aggregate : null,
+                    // Derived, never configured: one choice could not serve every reader, so the
+                    // readers choose and this is only what the group reports unasked. null for a
+                    // HAType with no opinion, which is more honest than picking one for it.
+                    aggregate: groupAggregate.defaultFunction(g.haType),
                     name: g.name || g.id,
                     haType: g.haType || '',
                     notes: g.notes || '',
@@ -385,7 +408,7 @@ module.exports = function(RED) {
                 if (defs.has(cfg.id)) return;
                 defs.set(cfg.id, {
                     ratelimit: Number(cfg.ratelimit) || 0,
-                    aggregate: null,
+                    aggregate: null,          // a legacy node has no HAType to derive from
                     name: cfg.name || cfg.id,
                     haType: '',
                     notes: '',
@@ -451,29 +474,74 @@ module.exports = function(RED) {
                 if (!common.isThingAlive(thing)) continue;
                 samples.push({
                     state: thing.state ? thing.state[m.item] : undefined,
-                    updatedAt: (thing.heartbeat && thing.heartbeat[m.item]) || 0
+                    updatedAt: (thing.heartbeat && thing.heartbeat[m.item]) || 0,
+                    thing_id: m.thing, thing_name: thing.name,
+                    item_id: m.item, item_name: item.name
                 });
             }
             return { samples, eligible };
         }
 
         // Recompute one group's value and, unless we are priming at startup, announce it.
-        // The record mirrors a thing item's: laststate and last_change only move when the
-        // value actually changed, so hal2Event's change filters behave identically whether
-        // they watch a thing or a group (core/thing.js:218-231).
+        //
+        // The emission is a wake-up first and a value second. Consumers that brought their own
+        // function compute it themselves from the same members — the engine never holds a value
+        // per function — so a group with no derived default still has to emit, or a node reading
+        // it its own way would never hear that anything moved.
+        //
+        // When there is a default, the record mirrors a thing item's: laststate and last_change
+        // only move when the value actually changed, so hal2Event's change filters behave
+        // identically whether they watch a thing or a group (core/thing.js:218-231).
+        // The key a (group, function) record is kept under. The bare group id stays the
+        // default's, so everything that already reads groupState[groupId] is untouched.
+        function stateKey(groupId, fn) { return groupId + '|' + fn; }
+
+        function trackedFunctions(def) {
+            return groupAggregate.functionsForHaType(def.haType);
+        }
+
         function recomputeGroup(groupId, def, groupMembers, trigger) {
             const { samples, eligible } = groupSamples(groupMembers);
-            const value = groupAggregate.aggregate(def.aggregate, samples);
-            const step  = groupAggregate.nextRecord(node.groupState[groupId], value, Date.now());
+            const now = Date.now();
+            const who = s => s && { thing_id: s.thing_id, thing_name: s.thing_name,
+                                    item_id: s.item_id, item_name: s.item_name };
 
-            const rec = Object.assign({}, step, {
-                members: eligible,
-                live:    samples.length,
-                fn:      def.aggregate,
-                name:    def.name
-            });
-            delete rec.changed;          // a transient of the step, not part of the record
-            node.groupState[groupId] = rec;
+            // Every function the group's HAType can serve gets its own record. Deriving
+            // last_change from the members instead would be wrong for min, max and anyTrue —
+            // a member can change without moving them — and a Gate comparing against a wrong
+            // one fails silently, which is the worst way for a timestamp to be wrong.
+            const write = (key, fn) => {
+                const value = groupAggregate.aggregate(fn, samples);
+                const step  = groupAggregate.nextRecord(node.groupState[key], value, now);
+                const src   = groupAggregate.valueSource(fn, samples);
+                const r = Object.assign({}, step, {
+                    members: eligible, live: samples.length, fn: fn, name: def.name
+                });
+                delete r.changed;        // a transient of the step, not part of the record
+                if (src) { r.source = who(src); }
+                // Who moved it, kept only when this function's value actually changed —
+                // otherwise it would name whoever reported last, which is a different claim.
+                if (step.changed && trigger) { r.last_changed_by = trigger; }
+                else if (node.groupState[key] && node.groupState[key].last_changed_by) {
+                    r.last_changed_by = node.groupState[key].last_changed_by;
+                }
+                node.groupState[key] = r;
+                return r;
+            };
+
+            let rec;
+            for (const fn of trackedFunctions(def)) {
+                const r = write(stateKey(groupId, fn), fn);
+                if (fn === def.aggregate) { rec = Object.assign({}, r); }
+            }
+            if (def.aggregate) {
+                node.groupState[groupId] = rec;   // the default keeps the bare key
+            } else {
+                // No standing value to keep, but the wake-up still carries who is worth hearing.
+                rec = { state: undefined, laststate: undefined, members: eligible,
+                        live: samples.length, fn: null, name: def.name,
+                        last_update: now, last_change: null };
+            }
             persistGroupState();
 
             if (!trigger) { return rec; }   // startup priming stays silent
@@ -491,7 +559,11 @@ module.exports = function(RED) {
                 },
                 // Which member moved the group. Kept because "the hall light is what turned
                 // the group on" is exactly the context an event flow wants next.
-                member: trigger
+                member: trigger && {
+                    thing: { id: trigger.thing_id, name: trigger.thing_name },
+                    item:  { id: trigger.item_id,  name: trigger.item_name },
+                    heartbeat: trigger.heartbeat
+                }
             };
             node.debug('Group ' + def.name + ' (' + def.aggregate + ') = ' + JSON.stringify(rec.state));
             // Emitted straight onto the bus rather than through publishUpdate: a group's
@@ -577,10 +649,10 @@ module.exports = function(RED) {
                 node.subscribe('command', groupId, commandListener);
                 node.groupWirings.push({ event: 'command', id: groupId, listener: commandListener, throttle: throttle });
 
-                // Update: maintain the group's own value and emit it. A group without an
-                // aggregation is command-only and has nothing to observe; the sweep below
-                // clears any record it used to have.
-                if (!def.aggregate) { continue; }
+                // Update: maintain the group's own value and emit it. A group with no
+                // state-capable member has nothing to observe at all; one that merely has no
+                // derived default still emits, because a consumer can bring its own function.
+                if (caps.stateMembers === 0) { continue; }
 
                 const updateListener = function (thingtypeid, thingid, itemid, payload) {
                     const isMember = groupMembers.some(m => m.thing === thingid && m.item === itemid);
@@ -589,8 +661,8 @@ module.exports = function(RED) {
                     // counting a device for as long as it stayed silent.
                     if (!isMember && itemid !== HEARTBEAT_ITEM) return;
                     const trigger = {
-                        thing: { id: thingid, name: (payload && payload.thing && payload.thing.name) || thingid },
-                        item:  { id: itemid,  name: (payload && payload.item  && payload.item.name)  || itemid },
+                        thing_id: thingid, thing_name: (payload && payload.thing && payload.thing.name) || thingid,
+                        item_id:  itemid,  item_name:  (payload && payload.item  && payload.item.name)  || itemid,
                         heartbeat: !isMember
                     };
                     recomputeGroup(groupId, def, groupMembers, trigger);
@@ -601,14 +673,26 @@ module.exports = function(RED) {
                     node.groupWirings.push({ event: 'update', id: t, listener: updateListener });
                 }
 
-                // Prime the value so the group can be read before any member moves.
-                recomputeGroup(groupId, def, groupMembers, null);
-                valueGroups.push(def.name + ' (' + def.aggregate + ')');
+                // Prime the value so the group can be read before any member moves. Only
+                // meaningful where there is a default to keep.
+                if (def.aggregate) {
+                    recomputeGroup(groupId, def, groupMembers, null);
+                    valueGroups.push(def.name + ' (' + def.aggregate + ')');
+                }
             }
             // Drop records for groups that no longer exist or lost their aggregation, so a
             // stale value cannot be read from a deleted group after a redeploy.
-            for (const id of Object.keys(node.groupState)) {
-                if (!defs.has(id) || !defs.get(id).aggregate) { delete node.groupState[id]; }
+            for (const key of Object.keys(node.groupState)) {
+                const sep = key.lastIndexOf('|');
+                const id  = sep === -1 ? key : key.slice(0, sep);
+                const fn  = sep === -1 ? null : key.slice(sep + 1);
+                if (!defs.has(id)) { delete node.groupState[key]; continue; }
+                const def = defs.get(id);
+                // A bare key is the default's; a composite one survives only while its
+                // function still fits the group's HAType.
+                if (fn === null ? !def.aggregate : trackedFunctions(def).indexOf(fn) === -1) {
+                    delete node.groupState[key];
+                }
             }
             persistGroupState();
             node.groupInfo = info;
