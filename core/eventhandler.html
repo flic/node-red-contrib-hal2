@@ -494,9 +494,10 @@
                         var defFn = window.hal2GroupAggregate.defaultFunction(haNow);
                         message += '<br><b>Default value</b><br>';
                         message += defFn
-                            ? window.hal2GroupAggregate.label(defFn) +
-                              ' &mdash; derived from the HAType. Value, Gate, Event and Bayes nodes ' +
-                              'can each read this group with a different function. Offline members are left out.<br>'
+                            ? window.hal2GroupAggregate.label(defFn) + ' &mdash; ' +
+                              window.hal2GroupAggregate.describe(defFn) +
+                              '. Derived from the HAType; Value, Gate, Event and Bayes nodes can each read ' +
+                              'this group with a different function. Offline members are left out.<br>'
                             : 'None &mdash; this HAType implies no default. The reading nodes must each pick a function.<br>';
 
                         message += '<br><b>Used in</b>';

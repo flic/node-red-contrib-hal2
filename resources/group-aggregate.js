@@ -15,23 +15,25 @@
 }(typeof self !== 'undefined' ? self : this, function () {
     'use strict';
 
+    // `t` is what a picker shows and `d` what an info line says, kept apart so a dropdown of
+    // fourteen entries stays scannable and the explanation appears once, for the one chosen.
     // kind drives the order the editor offers these in, given the group's HAType. Nothing is
     // ever hidden — a mixed group may legitimately want to count booleans.
     var FUNCTIONS = [
-        { v: 'latest',      t: 'latest — the most recently updated member',  kind: 'any' },
-        { v: 'min',         t: 'min — the lowest value',                     kind: 'number' },
-        { v: 'max',         t: 'max — the highest value',                    kind: 'number' },
-        { v: 'average',     t: 'average — the mean of all values',           kind: 'number' },
-        { v: 'median',      t: 'median — the middle value',                  kind: 'number' },
-        { v: 'sum',         t: 'sum — all values added together',            kind: 'number' },
-        { v: 'range',       t: 'range — highest minus lowest',               kind: 'number' },
-        { v: 'anyTrue',     t: 'any true — at least one member is true',     kind: 'boolean' },
-        { v: 'allTrue',     t: 'all true — every member is true',            kind: 'boolean' },
-        { v: 'anyFalse',    t: 'any false — at least one member is false',   kind: 'boolean' },
-        { v: 'allFalse',    t: 'all false — no member is true',              kind: 'boolean' },
-        { v: 'countTrue',   t: 'count true — how many are true',             kind: 'boolean' },
-        { v: 'countFalse',  t: 'count false — how many are false',           kind: 'boolean' },
-        { v: 'percentTrue', t: 'percent true — share that are true (0–100)', kind: 'boolean' }
+        { v: 'latest',      t: 'latest',       d: 'the most recently updated member',  kind: 'any' },
+        { v: 'min',         t: 'min',          d: 'the lowest value',                  kind: 'number' },
+        { v: 'max',         t: 'max',          d: 'the highest value',                 kind: 'number' },
+        { v: 'average',     t: 'average',      d: 'the mean of all values',            kind: 'number' },
+        { v: 'median',      t: 'median',       d: 'the middle value',                  kind: 'number' },
+        { v: 'sum',         t: 'sum',          d: 'all values added together',         kind: 'number' },
+        { v: 'range',       t: 'range',        d: 'highest minus lowest',              kind: 'number' },
+        { v: 'anyTrue',     t: 'any true',     d: 'at least one member is true',       kind: 'boolean' },
+        { v: 'allTrue',     t: 'all true',     d: 'every member is true',              kind: 'boolean' },
+        { v: 'anyFalse',    t: 'any false',    d: 'at least one member is false',      kind: 'boolean' },
+        { v: 'allFalse',    t: 'all false',    d: 'no member is true',                 kind: 'boolean' },
+        { v: 'countTrue',   t: 'count true',   d: 'how many are true',                 kind: 'boolean' },
+        { v: 'countFalse',  t: 'count false',  d: 'how many are false',                kind: 'boolean' },
+        { v: 'percentTrue', t: 'percent true', d: 'share that are true (0–100)',       kind: 'boolean' }
     ];
 
     // Which flavour of value a group's HAType tends to want, used to preselect a function for
@@ -95,6 +97,14 @@
             if (FUNCTIONS[i].v === fn) { return FUNCTIONS[i].t; }
         }
         return fn;
+    }
+
+    // What the function means, for the info line under a picker.
+    function describe(fn) {
+        for (var i = 0; i < FUNCTIONS.length; i++) {
+            if (FUNCTIONS[i].v === fn) { return FUNCTIONS[i].d; }
+        }
+        return '';
     }
 
     // Float noise is not a value anyone wants to see in a status badge or compare against:
@@ -258,6 +268,7 @@
         functionsForHaType: functionsForHaType,
         kindOf: kindOf,
         isFunction: isFunction,
-        label: label
+        label: label,
+        describe: describe
     };
 }));

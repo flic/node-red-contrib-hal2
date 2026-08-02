@@ -64,6 +64,19 @@ function halFillGroupFunctions(sel, haType, saved) {
     return stray;
 }
 
+// The line under a group's function picker: what the chosen function means, or what the
+// group falls back to when none is chosen. `stray` is halFillGroupFunctions' return value.
+function halGroupFunctionTip(haType, chosen, stray, strayNote) {
+    var ga = (typeof window !== 'undefined') && window.hal2GroupAggregate;
+    if (!ga) { return ''; }
+    if (stray) { return strayNote; }
+    if (chosen) { return ga.label(chosen) + ' — ' + ga.describe(chosen); }
+    var deflt = ga.defaultFunction(haType);
+    return deflt
+        ? 'Following the group: ' + ga.label(deflt) + ' — ' + ga.describe(deflt) + '.'
+        : 'This group has no default for its HAType — pick a function or it reads as no value.';
+}
+
 function halTypeMQTT() {
     return {
         value: "mqtt",

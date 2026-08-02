@@ -156,9 +156,18 @@ describe('group-aggregate metadata', function () {
             assert.strictEqual(ga.kindOf(f.v), f.kind);
             assert.strictEqual(ga.isFunction(f.v), true);
             assert.ok(f.t && f.t.length, f.v + ' has a label');
+            assert.ok(f.d && f.d.length, f.v + ' has a description');
+            // The two are kept apart so a picker of fourteen stays scannable and the
+            // explanation appears once, for the one chosen. A label that swallowed its own
+            // description would put the whole table in every dropdown again.
+            assert.ok(!f.t.includes('—'), f.v + ': the label is the short name only');
+            assert.strictEqual(ga.label(f.v), f.t);
+            assert.strictEqual(ga.describe(f.v), f.d);
         }
         assert.strictEqual(ga.isFunction('nope'), false);
         assert.strictEqual(ga.kindOf('nope'), null);
+        assert.strictEqual(ga.label('nope'), 'nope', 'an unknown name is still printable');
+        assert.strictEqual(ga.describe('nope'), '');
     });
 
     it('suggests a function that matches the HAType', function () {

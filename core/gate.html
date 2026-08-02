@@ -167,6 +167,16 @@
 
                     var isGroupRule = function() { return groupIds[thingsField.val()] === true; };
 
+                    var groupHaType = null, groupStray = false;
+                    // The picker stays short; what the chosen function means is said once, here.
+                    var syncFunctionTip = function(show) {
+                        rowGroupTip.html($('<small/>').text(!show ? '' : halGroupFunctionTip(
+                            groupHaType, groupFnField.val(), groupStray,
+                            'The saved function does not fit this group\'s members — this rule will never match.')));
+                        rowGroupTip.toggle(!!show);
+                    };
+                    groupFnField.change(function() { syncFunctionTip(true); });
+
                     thingsField.change(function() {
                         var thing;
                         var thingType;
@@ -181,10 +191,9 @@
                             var g = groupsList.filter(function(x) { return x.id === thingsField.val(); })[0];
                             var stray = halFillGroupFunctions(groupFnField, g && g.haType, rule.function || '');
                             rowGroupFn.toggle(!!g);
-                            rowGroupTip.html($('<small/>').text(!g ? ''
-                                : stray ? 'The saved function does not fit this group\'s members — this rule will never match.'
-                                        : 'Each rule reads its group with its own function.'));
-                            rowGroupTip.toggle(!!g);
+                            groupHaType = g && g.haType;
+                            groupStray  = stray;
+                            syncFunctionTip(!!g);
                             return;
                         }
                         rowGroupTip.hide();

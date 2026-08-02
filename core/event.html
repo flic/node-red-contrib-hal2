@@ -208,6 +208,15 @@
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;
             var savedFunction = this.groupFunction || '';
+            var groupHaType = null, groupStray = false;
+            // The picker stays short; what the chosen function means is said once, here.
+            function syncFunctionTip(show) {
+                $("#group-tip").text(!show ? '' : halGroupFunctionTip(
+                    groupHaType, $("#node-input-groupFunction").val(), groupStray,
+                    'The saved function does not fit this group\'s members — this node will never fire.'));
+                $("#row-group-tip").toggle(!!show);
+            }
+            $("#node-input-groupFunction").change(function() { syncFunctionTip(true); });
 
             //get all things and sort them alphabetically
             var thingsList = halGetThings(RED,'status');
@@ -332,10 +341,9 @@
                     var stray = halFillGroupFunctions($("#node-input-groupFunction"),
                                                       g && g.haType, savedFunction);
                     $("#row-group-function").toggle(!!g);
-                    $("#group-tip").text(!g ? ''
-                        : stray ? 'The saved function does not fit this group\'s members — this node will never fire.'
-                                : 'This node watches the value it picks here, so two Event nodes can watch the same group for different things.');
-                    $("#row-group-tip").toggle(!!g);
+                    groupHaType = g && g.haType;
+                    groupStray  = stray;
+                    syncFunctionTip(!!g);
                     return;
                 }
                 $("#row-group-tip").hide();

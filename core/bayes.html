@@ -582,13 +582,14 @@
                         var show = srcSel.val() === 'group' && !!g;
                         if (show) {
                             var stray = halFillGroupFunctions(groupFnSel, g.haType, step.groupFunction || '');
-                            groupTip.html($('<small/>').text(stray
-                                ? 'The saved function does not fit this group\'s members — this step will read as no evidence.'
-                                : 'Each step reads its group with its own function.'));
+                            groupTip.html($('<small/>').text(halGroupFunctionTip(
+                                g.haType, groupFnSel.val(), stray,
+                                'The saved function does not fit this group\'s members — this step will read as no evidence.')));
                         }
                         groupTipRow.toggle(show);
                     };
                     groupSel.change(syncGroupTip);
+                    groupFnSel.change(syncGroupTip);
 
                     var srcHandler = function() {
                         var src = srcSel.val();
