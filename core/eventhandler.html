@@ -392,6 +392,7 @@
                     var rowName    = $('<div/>').appendTo(container);
                     var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
                     var rowType    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    var rowSummary = $('<div/>', { style: "margin-top:4px; margin-left:115px; margin-right:10px; color:#888; font-size:12px; white-space:normal; line-height:1.4;" }).appendTo(rowDetails);
                     var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowTags    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowNotes   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
@@ -554,11 +555,60 @@
                         }
                     });
                     haTypeProperty.val(currentHaType);
+                    // The default follows the HAType, so the line has to follow the select.
+                    haTypeProperty.change(syncSummary);
+                    syncSummary();
 
-                    // What this group reports when nobody asks for anything in particular is
-                    // derived from its HAType — see defaultFunction() in group-aggregate.js.
-                    // It is not configured here: one choice could never serve every reader, so
-                    // the reading nodes each pick their own and this is only the fallback.
+                    // What the group can actually do, in the same terms MCP reports it: how many
+                    // members can be read, how many can be commanded, and what it says by itself.
+                    // The two counts are separate sets and either can be empty — a sensor group
+                    // reads and takes no commands, a scene group is the reverse — which is the
+                    // one thing about groups that surprises people.
+                    var memberCounts = (function() {
+                        var gid = idProperty.val(), state = 0, command = 0, total = 0;
+                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                        for (var t in things) {
+                            var thing = RED.nodes.node(things[t].id);
+                            if (!thing || !Array.isArray(thing.groups)) { continue; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+                            for (var g in thing.groups) {
+                                if (thing.groups[g].group !== gid) { continue; }
+                                total += 1;
+                                if (!tt || !Array.isArray(tt.items)) { continue; }
+                                var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
+                                if (!it) { continue; }
+                                // Item 1 is the heartbeat: it decides whether a member counts,
+                                // it is never a value of its own.
+                                if (thing.groups[g].item !== '1' && halStatusItem(it)) { state += 1; }
+                                if (halCommandItem(it)) { command += 1; }
+                            }
+                        }
+                        return { state: state, command: command, total: total };
+                    })();
+
+                    var syncSummary = function() {
+                        var c = memberCounts;
+                        if (c.total === 0) {
+                            rowSummary.text('No members yet — add them from the Groups section of a Thing.');
+                            return;
+                        }
+                        var ga = window.hal2GroupAggregate;
+                        var deflt = ga.defaultFunction(haTypeProperty.val());
+                        var parts = [c.total + ' member' + (c.total === 1 ? '' : 's') + ': ' +
+                                     c.state + ' readable, ' + c.command + ' commandable.'];
+                        if (c.state === 0) {
+                            parts.push('Nothing to read — this group can only be commanded.');
+                        } else {
+                            // Per-group facts only. That every reader can choose its own function
+                            // is a rule about groups, not about this one, and the tab intro says it.
+                            parts.push(deflt
+                                ? 'Reports ' + ga.label(deflt) + ' (' + ga.describe(deflt) + ') by itself.'
+                                : 'This HAType implies no default, so every reader must pick a function.');
+                            parts.push('Offline members are left out.');
+                        }
+                        rowSummary.text(parts.join(' '));
+                    };
 
                     var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
                         .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);
