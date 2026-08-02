@@ -57,7 +57,7 @@ function halFillGroupFunctions(sel, haType, saved) {
     // Kept short enough to read inside the field: which default applies, and why a stray no
     // longer fits, are both said in full on the tip line under it.
     sel.children().remove();
-    sel.append($('<option></option>').val('').text(deflt ? '(group default)' : '(no default)'));
+    sel.append($('<option></option>').val('').text(deflt ? '(default)' : '(no default)'));
     fits.forEach(function (v) { sel.append($('<option></option>').val(v).text(ga.label(v))); });
     if (stray) { sel.append($('<option></option>').val(saved).text(ga.label(saved) + ' (unfit)')); }
     sel.val(saved || '');
