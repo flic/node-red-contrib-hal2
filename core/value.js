@@ -77,7 +77,9 @@ module.exports = function(RED) {
             if (node.groupFunction) {
                 var read = node.eventHandler.readGroup(node.thing, node.groupFunction);
                 rec = read && { state: read.value, members: read.members, live: read.live,
-                                fn: node.groupFunction, name: node.thing };
+                                fn: node.groupFunction, name: node.thing,
+                                last_update: read.last_update, last_change: read.last_change,
+                                source: read.source, last_changed_by: read.last_changed_by };
             } else {
                 rec = node.eventHandler.getGroupState(node.thing);
             }
@@ -106,6 +108,10 @@ module.exports = function(RED) {
                     members: rec.members, live: rec.live,
                     last_update: rec.last_update, last_change: rec.last_change
                 };
+                // Whose value it is, for the functions where one member owns it, and who
+                // moved it last. Absent rather than null when neither applies.
+                if (rec.source)          { msg.group.source = rec.source; }
+                if (rec.last_changed_by) { msg.group.last_changed_by = rec.last_changed_by; }
             }
             node.send(msg);
         }

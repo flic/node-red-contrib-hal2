@@ -64,12 +64,45 @@ describe('group-tools groupEntry', function () {
 
     it('computes a function asked for on the call', function () {
         const e = gt.groupEntry(UNSET, undefined, msToIso,
-                                { value: true, live: 37, members: 39, fn: 'anyTrue' });
+                                { value: true, live: 37, members: 39, fn: 'anyTrue', last_change: 5000 });
         assert.strictEqual(e.value, true);
         assert.strictEqual(e.function, 'anyTrue');
         assert.strictEqual(e.live, 37);
         assert.ok(!('configured_function' in e), 'nothing configured to differ from');
-        assert.ok(!('last_change' in e), 'only tracked for the configured function');
+        // The engine keeps a record per function, so this is anyTrue's own last_change and
+        // not the default's — the whole reason a Gate can compare against it.
+        assert.strictEqual(e.last_change, new Date(5000).toISOString());
+    });
+
+    it('names whose value it is, where one member owns it', function () {
+        const laundry = { thing_id: 't1', thing_name: 'Tvättstuga Sensor', item_id: 'i', item_name: 'Temperature' };
+        const e = gt.groupEntry(SENSORS, undefined, msToIso,
+            { value: 24.48, live: 9, members: 9, fn: 'min', source: laundry });
+        assert.deepStrictEqual(e.source, laundry, '"the coldest room is the laundry"');
+    });
+
+    it('leaves source out where no member owns the value', function () {
+        // A mean belongs to nobody; naming a member for it would invite reading it as one.
+        const e = gt.groupEntry(SENSORS, undefined, msToIso,
+            { value: 25.28, live: 9, members: 9, fn: 'average' });
+        assert.ok(!('source' in e));
+    });
+
+    it('names who moved it last, separately from whose value it is', function () {
+        // The two answer different questions and only coincide for latest: the member that
+        // reported most recently is rarely the one holding the minimum.
+        const laundry = { thing_id: 't1', thing_name: 'Tvättstuga Sensor' };
+        const maja    = { thing_id: 't2', thing_name: 'Maja Sensor' };
+        const e = gt.groupEntry(SENSORS, undefined, msToIso,
+            { value: 24.48, live: 9, members: 9, fn: 'min', source: laundry, last_changed_by: maja });
+        assert.deepStrictEqual(e.source, laundry);
+        assert.deepStrictEqual(e.last_changed_by, maja);
+    });
+
+    it('takes provenance from the maintained record when no function was asked for', function () {
+        const hall = { thing_id: 't3', thing_name: 'Hall Sensor' };
+        const e = gt.groupEntry(SENSORS, state({ state: 21, last_changed_by: hall }), msToIso);
+        assert.deepStrictEqual(e.last_changed_by, hall);
     });
 
     it('names the configured function when a different one was asked for', function () {

@@ -28,10 +28,11 @@ module.exports = function(RED) {
                 if (rule.function) {
                     var read = node.eventHandler.readGroup(rule.thing, rule.function);
                     if (!read || read.value === undefined) { return null; }
-                    // A computed read has no history behind it, so the last_* operators have
-                    // nothing to answer with — better than answering with the default's.
-                    return { state: read.value, laststate: undefined,
-                             last_update: undefined, last_change: undefined };
+                    // The engine tracks a record per function, so these are the real
+                    // timestamps for this function rather than the default's or a derived
+                    // guess — which could not be right for min, max or anyTrue.
+                    return { state: read.value, laststate: read.laststate,
+                             last_update: read.last_update, last_change: read.last_change };
                 }
                 var rec = node.eventHandler.getGroupState(rule.thing);
                 // No record, or no live member reporting: the rule has nothing to compare

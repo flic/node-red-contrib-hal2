@@ -233,6 +233,8 @@ const MCP_TOOLS = [
                       'The default is derived from the group\'s ha_type, not configured by anyone: a temperature group reports its average, a light or switch group whether any member is true. A group whose ha_type implies no default has no standing value and no function field — pass function to read it, and members > 0 is what says it is worth asking. ' +
                       'readable:true means the group has members that carry a state, so it can be read. controllable:true means control_group can command it. The two are independent: sensors contribute a value and take no commands, a switch may take commands and report nothing back. ' +
                       'members is how many members carry a state, live how many are contributing right now — a gap between them means devices are offline. ' +
+                      'last_change is tracked per function, so it is this function\'s own: "all true" and "any true" over the same group change at different moments. ' +
+                      'source names the member the value came from, present only for latest, min and max where one member owns it — use it to answer "which room is coldest?" without reading every member. last_changed_by names the member that last moved the value, which is a different question and only the same one for latest. ' +
                       'notes and tags say what the group actually covers, which the name usually does not ("All lights" does not tell you whether the outdoor lights are included) — read them before assuming, and use the tag filter to select the set you mean.',
         inputSchema : {
             type       : 'object',

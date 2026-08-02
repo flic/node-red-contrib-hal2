@@ -236,6 +236,34 @@
         };
     }
 
+    // Which sample the value came from, for the functions where the value IS one member's:
+    // latest is that member by definition, and min/max name the extreme. For a mean or a count
+    // no member owns the answer, so this returns null rather than picking one — "the coldest
+    // room is the laundry" is worth saying; "the average came from the hallway" is not true.
+    //
+    // Ties go to the first sample in member order, which is stable across reads.
+    function valueSource(fn, samples) {
+        samples = Array.isArray(samples) ? samples : [];
+        if (fn === 'latest') {
+            var best = null;
+            for (var i = 0; i < samples.length; i++) {
+                if (samples[i].state === undefined) { continue; }
+                if (!best || (samples[i].updatedAt || 0) > (best.updatedAt || 0)) { best = samples[i]; }
+            }
+            return best;
+        }
+        if (fn !== 'min' && fn !== 'max') { return null; }
+        var want = aggregate(fn, samples);
+        if (want === undefined) { return null; }
+        for (var k = 0; k < samples.length; k++) {
+            var st = samples[k].state;
+            if (typeof st !== 'number' && typeof st !== 'string') { continue; }
+            if (typeof st === 'string' && st.trim() === '') { continue; }
+            if (Number(st) === want) { return samples[k]; }
+        }
+        return null;
+    }
+
     // One step of a group's state record, mirroring what hal2Thing.updateState does to a
     // thing item (core/thing.js:218-231) — because hal2Event's change filters compare
     // state against laststate and must behave identically for both.
@@ -259,6 +287,7 @@
     return {
         FUNCTIONS: FUNCTIONS,
         aggregate: aggregate,
+        valueSource: valueSource,
         usableCount: usableCount,
         suitableFunctions: suitableFunctions,
         sampleKinds: sampleKinds,

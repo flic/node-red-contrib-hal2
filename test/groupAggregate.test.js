@@ -314,3 +314,43 @@ describe('group-aggregate functionsForHaType', function () {
         }
     });
 });
+
+describe('group-aggregate valueSource', function () {
+    // Which member the value came from, for the functions where one member owns it.
+    const m = (state, updatedAt, name) => ({ state, updatedAt, thing_name: name });
+    const TEMPS = [m(24.48, 100, 'Laundry'), m(26.87, 300, 'Kitchen'), m(25.44, 200, 'Maja')];
+
+    it('names the extreme for min and max', function () {
+        assert.strictEqual(ga.valueSource('min', TEMPS).thing_name, 'Laundry');
+        assert.strictEqual(ga.valueSource('max', TEMPS).thing_name, 'Kitchen');
+    });
+
+    it('names the most recently updated member for latest', function () {
+        assert.strictEqual(ga.valueSource('latest', TEMPS).thing_name, 'Kitchen');
+    });
+
+    it('names nobody where no member owns the value', function () {
+        // A mean or a count is not any member's; picking one would invite reading it as one.
+        for (const fn of ['average', 'median', 'sum', 'range', 'countTrue', 'anyTrue', 'percentTrue']) {
+            assert.strictEqual(ga.valueSource(fn, TEMPS), null, fn);
+        }
+    });
+
+    it('agrees with the value it explains', function () {
+        for (const fn of ['min', 'max', 'latest']) {
+            assert.strictEqual(Number(ga.valueSource(fn, TEMPS).state), ga.aggregate(fn, TEMPS), fn);
+        }
+    });
+
+    it('is null when there is nothing to source', function () {
+        assert.strictEqual(ga.valueSource('min', []), null);
+        assert.strictEqual(ga.valueSource('min', [m('warm', 1, 'X')]), null, 'no numeric member');
+        assert.strictEqual(ga.valueSource('latest', [m(undefined, 9, 'X')]), null);
+    });
+
+    it('breaks a tie by member order, so repeated reads agree', function () {
+        const tied = [m(5, 1, 'First'), m(5, 2, 'Second')];
+        assert.strictEqual(ga.valueSource('min', tied).thing_name, 'First');
+        assert.strictEqual(ga.valueSource('min', tied).thing_name, 'First');
+    });
+});

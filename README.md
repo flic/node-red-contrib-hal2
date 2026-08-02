@@ -95,6 +95,17 @@ than about the question. Partial coverage is a different matter and is answered:
 A group is readable **as soon as it has members that carry state**. Command groups usually are:
 switchable devices report back.
 
+**Every function is tracked, not just the default.** The engine keeps a record per function the
+group's HAType can serve, so `last_change` and `last_update` are that function's own — a Gate can
+ask "has *all true* been steady for ten minutes?" and get a real answer. Deriving them from the
+members instead would be wrong for `min`, `max` and `any true`, where a member can change without
+moving the value at all: on a nine-sensor group the derived answer was 26 minutes off.
+
+Where one member owns the value — `latest`, `min`, `max` — the reply names it as `source`, so "the
+coldest room is the laundry" is one read. A mean or a count belongs to nobody and carries no
+`source` rather than an arbitrary one. `last_changed_by` names the member that last moved the
+value, which is a different question and only the same one for `latest`.
+
 Give a group **Tags** and **Notes** on the Groups tab and both reach the assistant. This is worth
 doing: the name is usually all it has to go on, and "All lights" does not say whether the outdoor
 lights are in it. A note does, and `get_groups` takes a `tag` filter so the assistant can ask for
