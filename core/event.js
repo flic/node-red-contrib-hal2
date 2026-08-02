@@ -180,7 +180,24 @@ module.exports = function(RED) {
                     // Nothing to report is not a change to nothing: a function that stops
                     // fitting its members, or a group gone quiet, must not fire an event.
                     if (value === undefined) { return; }
-                    event = Object.assign({}, event, { state: value, laststate: groupLast, payload: value });
+                    // The whole group block is rebuilt, not just the value: the engine's
+                    // emission describes the group's default, and every field in it —
+                    // function, live, the timestamps, the provenance — belongs to that
+                    // function rather than to the one this node asked for.
+                    var grp = Object.assign({}, event.group, {
+                        function   : node.groupFunction,
+                        members    : read.members,
+                        live       : read.live,
+                        last_update: read.last_update,
+                        last_change: read.last_change
+                    });
+                    if (read.source)          { grp.source = read.source; }
+                    else                      { delete grp.source; }
+                    if (read.last_changed_by) { grp.last_changed_by = read.last_changed_by; }
+                    else                      { delete grp.last_changed_by; }
+                    event = Object.assign({}, event, {
+                        state: value, laststate: groupLast, payload: value, group: grp
+                    });
                     if (groupLast !== value) {
                         groupLast = value;
                         nodeContext.set('groupLast', groupLast, contextStore);
