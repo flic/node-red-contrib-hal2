@@ -442,7 +442,7 @@
                     var itemSel = $('<select/>', { class: "bs-item", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(thingWrap);
                     var groupWrap = $('<span/>', { class: "bs-group-wrap",
                         style: "flex:3 1 0; min-width:0; display:flex; margin-left:4px;" }).appendTo(line1);
-                    var groupSel = $('<select/>', { class: "bs-group", style: "flex:1 1 0; min-width:0;" }).appendTo(groupWrap);
+                    var groupSel = $('<select/>', { class: "bs-group", style: "flex:5 1 0; min-width:0;" }).appendTo(groupWrap);
                     groupsList.forEach(function(g) {
                         groupSel.append($("<option></option>").val(g.id).text(g.name));
                     });
@@ -450,7 +450,7 @@
                         groupSel.append($("<option></option>").val('').text('- no groups with a value -'));
                     }
                     groupSel.val(step.group || (groupsList[0] && groupsList[0].id) || '');
-                    var groupFnSel = $('<select/>', { class: "bs-groupfn", style: "flex:1 1 0; min-width:0; margin-left:4px;" })
+                    var groupFnSel = $('<select/>', { class: "bs-groupfn", style: "flex:3 1 0; min-width:0; margin-left:4px;" })
                         .appendTo(groupWrap);
                     var propWrap = $('<span/>', { class: "bs-prop-wrap",
                         style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
