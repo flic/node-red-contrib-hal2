@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
 
 function mockRes() {
     return {
@@ -116,6 +116,44 @@ describe('lib/httpGuards hostFilter', function () {
         const mw = hostFilter('mcp.furtenbach.se:8443');
         assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'mcp.furtenbach.se:8443' } })), undefined);
         assert.strictEqual(runHost(mw, mockReq({ headers: { host: 'mcp.furtenbach.se' } })), 'route');
+    });
+});
+
+describe('lib/httpGuards removeOwnedRoutes', function () {
+    // Express-router shape: router.stack is a list of layers; a route layer carries
+    // { route: { path, methods, stack: [{ handle }] } }. Ownership sits on a middleware
+    // tagged with _mcpOwner, the way the registration sites tag their hostFilter guard.
+    function routeLayer(method, path, ownerId) {
+        const handle = () => {};
+        if (ownerId !== undefined) handle._mcpOwner = ownerId;
+        return { route: { path, methods: { [method]: true }, stack: [{ handle }] } };
+    }
+
+    it('removes only the owner\'s route when two nodes share a path (Host-split)', function () {
+        const router = { stack: [
+            routeLayer('post', '/mcp', 'nodeA'),
+            routeLayer('post', '/mcp', 'nodeB')
+        ] };
+        removeOwnedRoutes(router, 'post', '/mcp', 'nodeA');
+        assert.strictEqual(router.stack.length, 1);
+        assert.strictEqual(router.stack[0].route.stack[0].handle._mcpOwner, 'nodeB');
+    });
+
+    it('leaves untagged routes and other methods/paths alone', function () {
+        const router = { stack: [
+            { name: 'query' },                                  // non-route layer
+            routeLayer('post', '/mcp', undefined),              // someone else's, untagged
+            routeLayer('get',  '/mcp', 'nodeA'),                // same path, other method
+            routeLayer('post', '/other', 'nodeA'),              // same owner, other path
+            routeLayer('post', '/mcp', 'nodeA')
+        ] };
+        removeOwnedRoutes(router, 'post', '/mcp', 'nodeA');
+        assert.strictEqual(router.stack.length, 4);
+    });
+
+    it('tolerates a missing or shapeless router', function () {
+        assert.doesNotThrow(() => removeOwnedRoutes(undefined, 'post', '/mcp', 'x'));
+        assert.doesNotThrow(() => removeOwnedRoutes({}, 'post', '/mcp', 'x'));
     });
 });
 

@@ -4,7 +4,7 @@ const crypto          = require('crypto');
 const analyzePatterns = require('./analyzePatterns');
 const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
-const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
 
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
@@ -56,14 +56,6 @@ function httpRequest(method, hostname, port, path, headers, body) {
         req.on('error', reject);
         if (data) req.write(data);
         req.end();
-    });
-}
-
-function removeRoute(RED, method, path) {
-    if (!RED.httpNode || !RED.httpNode._router) return;
-    RED.httpNode._router.stack = RED.httpNode._router.stack.filter(layer => {
-        if (!layer.route) return true;
-        return !(layer.route.path === path && layer.route.methods[method]);
     });
 }
 
@@ -2005,6 +1997,12 @@ module.exports = function(RED) {
             // hal2MCPServer; warns once if the proxy's client IPs aren't trusted.
             const { rateLimit, maxBody } = createHttpGuards({ warn: msg => node.warn(msg) });
 
+            // One guard for every route this node registers, tagged so the close handler can
+            // remove exactly these — several EventHandlers may share the same paths when Host
+            // filtering splits them, and a path-only removal would strip the siblings too.
+            const guard = hostFilter(expectedHost);
+            guard._mcpOwner = node.id;
+
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
             const protectedResourceHandler = (_req, res) => {
@@ -2019,7 +2017,7 @@ module.exports = function(RED) {
             };
             for (const p of resourceMetadataPaths) {
                 node.log('MCP registering route: GET ' + p);
-                RED.httpNode.get(p, hostFilter(expectedHost), rateLimit('wk', 120), protectedResourceHandler);
+                RED.httpNode.get(p, guard, rateLimit('wk', 120), protectedResourceHandler);
             }
 
             // ── OAuth: /.well-known/oauth-authorization-server ────────────────
@@ -2042,13 +2040,13 @@ module.exports = function(RED) {
             };
             for (const p of wellKnownPaths('oauth-authorization-server')) {
                 node.log('MCP registering route: GET ' + p);
-                RED.httpNode.get(p, hostFilter(expectedHost), rateLimit('wk', 120), authServerHandler);
+                RED.httpNode.get(p, guard, rateLimit('wk', 120), authServerHandler);
             }
 
             // ── DCR: /oauth/register ──────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
-            RED.httpNode.post(mcpPrefix + '/oauth/register', hostFilter(expectedHost), rateLimit('register', 20), (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/oauth/register', guard, rateLimit('register', 20), (req, res) => {
                 const requested       = req.body || {};
                 // Never echo attacker-controlled redirect_uris. Constrain any requested URIs to the
                 // configured allowlist so this endpoint can't be used to poison the OAuth callback;
@@ -2078,7 +2076,7 @@ module.exports = function(RED) {
             // ── MCP: /mcp ─────────────────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/mcp');
-            RED.httpNode.post(mcpPrefix + '/mcp', hostFilter(expectedHost), rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/mcp', guard, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
                 // Bearer token validation
                 const claims = await requireBearer(req, res);
                 if (!claims) return;
@@ -2174,10 +2172,11 @@ module.exports = function(RED) {
             if (config.mcpEnabled) {
                 auth.clearCache();
                 node.log('MCP removing routes with prefix: "' + mcpPrefix + '"');
-                for (const p of resourceMetadataPaths)                        { removeRoute(RED, 'get', p); }
-                for (const p of wellKnownPaths('oauth-authorization-server')) { removeRoute(RED, 'get', p); }
-                removeRoute(RED, 'post', mcpPrefix + '/oauth/register');
-                removeRoute(RED, 'post', mcpPrefix + '/mcp');
+                const router = RED.httpNode && RED.httpNode._router;
+                for (const p of resourceMetadataPaths)                        { removeOwnedRoutes(router, 'get', p, node.id); }
+                for (const p of wellKnownPaths('oauth-authorization-server')) { removeOwnedRoutes(router, 'get', p, node.id); }
+                removeOwnedRoutes(router, 'post', mcpPrefix + '/oauth/register', node.id);
+                removeOwnedRoutes(router, 'post', mcpPrefix + '/mcp', node.id);
             }
         });
     }

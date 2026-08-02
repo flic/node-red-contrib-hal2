@@ -1,20 +1,6 @@
 const crypto = require('crypto');
-const { createHttpGuards, hostFilter } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
 const { handleRpc } = require('../lib/mcp-rpc');
-
-// Remove only THIS node's registration for the path. Several standalone servers may share a
-// path when hostname filtering splits them by Host header, so matching on path alone would
-// let a partial deploy of one node silently strip its siblings' routes. Ownership is read off
-// the tagged hostFilter middleware each chain starts with; untagged layers are left alone.
-function removeRoute(RED, path, ownerId) {
-    if (!RED.httpNode || !RED.httpNode._router) return;
-    RED.httpNode._router.stack = RED.httpNode._router.stack.filter(layer => {
-        if (!layer.route) return true;
-        if (layer.route.path !== path || !layer.route.methods['post']) return true;
-        return !(layer.route.stack || []).some(l =>
-            l.handle && l.handle._mcpOwner !== undefined && l.handle._mcpOwner === ownerId);
-    });
-}
 
 module.exports = function (RED) {
 
@@ -148,7 +134,7 @@ module.exports = function (RED) {
         };
 
         const guard = hostFilter(expectedHost);
-        // Tag the first middleware so removeRoute can tell this node's chain from a sibling's.
+        // Tag the first middleware so removeOwnedRoutes can tell this node's chain from a sibling's.
         guard._mcpOwner = node.id;
 
         RED.httpNode.post(mcpPath, guard, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
@@ -169,7 +155,7 @@ module.exports = function (RED) {
                 pending.reject(new Error('MCP server closing'));
             }
             node.mcpPendingCalls = {};
-            removeRoute(RED, mcpPath, node.id);
+            removeOwnedRoutes(RED.httpNode && RED.httpNode._router, 'post', mcpPath, node.id);
         });
     }
 
