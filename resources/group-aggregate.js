@@ -54,6 +54,33 @@
         return SUGGESTION[KIND_BY_HATYPE[haType] || 'any'];
     }
 
+    // The value a group reports when nobody asks for anything in particular. Unlike suggestFor
+    // this returns null for a HAType with no opinion — 'other', the modes, colours, scenes.
+    // A mixed group having no standing value is more honest than one whose value is whichever
+    // member happened to report last, which is what 'latest' would make of it.
+    //
+    // 'any true' is the boolean default because it answers the question actually asked of a set
+    // of switches, and because it is honest standing still: false means everything is off and
+    // nothing else. 'all true' would report 38 of 39 lamps as false.
+    function defaultFunction(haType) {
+        var kind = KIND_BY_HATYPE[haType];
+        return kind ? SUGGESTION[kind] : null;
+    }
+
+    // The functions worth offering for a group of this HAType. Derived from the type rather than
+    // from live values because the editor cannot see what members currently hold — but a
+    // temperature item will not start reporting booleans, so the type is the stable signal.
+    // 'latest' fits anything and is always offered; an untyped group offers everything.
+    function functionsForHaType(haType) {
+        var kind = KIND_BY_HATYPE[haType];
+        var out = [];
+        for (var i = 0; i < FUNCTIONS.length; i++) {
+            var f = FUNCTIONS[i];
+            if (!kind || f.kind === 'any' || f.kind === kind) { out.push(f.v); }
+        }
+        return out;
+    }
+
     function kindOf(fn) {
         for (var i = 0; i < FUNCTIONS.length; i++) {
             if (FUNCTIONS[i].v === fn) { return FUNCTIONS[i].kind; }
@@ -227,6 +254,8 @@
         sampleKinds: sampleKinds,
         nextRecord: nextRecord,
         suggestFor: suggestFor,
+        defaultFunction: defaultFunction,
+        functionsForHaType: functionsForHaType,
         kindOf: kindOf,
         isFunction: isFunction,
         label: label

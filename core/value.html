@@ -31,6 +31,10 @@
             <select id="node-input-thing" style="width:calc(100% - 170px)"></select>
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
+        <div class="form-row" id="row-group-function">
+            <label for="node-input-groupFunction" style="width:95px; padding-right:10px;"><i class="fa fa-calculator"></i> Value</label>
+            <select id="node-input-groupFunction" style="width:calc(100% - 170px)"></select>
+        </div>
         <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
             <small id="group-tip"></small>
         </div>
@@ -159,6 +163,7 @@
                 }
             },
             typeSel:        { value: 'hal2Thing' },
+            groupFunction:  { value: '' },
             action:         {},
             // For a Group source `thing` carries the group id and `item` mirrors it, exactly
             // as hal2Event stores a group — so the required-item validation keeps working.
@@ -215,6 +220,7 @@
             var savedType = this.thingType;
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;
+            var savedFunction = this.groupFunction || '';
 
             var thingsList = halGetThings(RED,'status');
             if (thingsList.length == 0 && groupsList.length == 0) {
@@ -232,6 +238,7 @@
                 $("#row-thing").toggle(!group);
                 $("#row-event-handler").toggle(group);
                 $("#row-eh-tip").toggle(group);
+                $("#row-group-function").toggle(group);
                 $("#row-group-tip").toggle(group);
                 $("#div-item").toggle(!group);
                 if (group) {
@@ -309,9 +316,14 @@
                         $("#node-input-item").val(gid);
                     }
                     var g = groupsList.filter(function(x) { return x.id === gid; })[0];
+                    var stray = halFillGroupFunctions($("#node-input-groupFunction"),
+                                                      g && g.haType, savedFunction);
+                    $("#row-group-function").toggle(!!g);
                     // Hidden rather than blank when there is no group to describe — an empty
                     // tip box reads as something failing to load.
-                    $("#group-tip").text(g ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : '');
+                    $("#group-tip").text(!g ? ''
+                        : stray ? 'The saved function does not fit this group\'s members — it will read as no value.'
+                                : 'Each node reads a group with its own function; leave it on the default to follow the group.');
                     $("#row-group-tip").toggle(!!g);
                     return;
                 }

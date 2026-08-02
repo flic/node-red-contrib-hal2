@@ -450,6 +450,8 @@
                         groupSel.append($("<option></option>").val('').text('- no groups with a value -'));
                     }
                     groupSel.val(step.group || (groupsList[0] && groupsList[0].id) || '');
+                    var groupFnSel = $('<select/>', { class: "bs-groupfn", style: "flex:1 1 0; min-width:0; margin-left:4px;" })
+                        .appendTo(groupWrap);
                     var propWrap = $('<span/>', { class: "bs-prop-wrap",
                         style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(line1);
                     $('<input/>', { class: "bs-prop", type: "text", placeholder: "variable name", style: "width:100%;" })
@@ -579,7 +581,10 @@
                         var g = groupsList.filter(function(x) { return x.id === groupSel.val(); })[0];
                         var show = srcSel.val() === 'group' && !!g;
                         if (show) {
-                            groupTip.html($('<small/>').text('Value: ' + window.hal2GroupAggregate.label(g.aggregate)));
+                            var stray = halFillGroupFunctions(groupFnSel, g.haType, step.groupFunction || '');
+                            groupTip.html($('<small/>').text(stray
+                                ? 'The saved function does not fit this group\'s members — this step will read as no evidence.'
+                                : 'Each step reads its group with its own function.'));
                         }
                         groupTipRow.toggle(show);
                     };
@@ -659,6 +664,7 @@
                             src:      src,
                             thing:    el.find('.bs-thing option:selected').val(),
                             group:    el.find('.bs-group option:selected').val() || '',
+                            groupFunction: el.find('.bs-groupfn option:selected').val() || '',
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
                             operator: el.find('.bs-op option:selected').val(),

@@ -43,6 +43,27 @@ function halNumericOperator(op) {
     return ['lt', 'lte', 'gt', 'gte'].indexOf(op) >= 0;
 }
 
+// Fill a <select> with the value functions a group can serve, given its HAType. The saved
+// value is always kept even when it no longer fits — the same rule the group HAType select
+// follows, so a node can never be trapped by a group whose members changed under it. Returns
+// true when the saved value is one of those strays, so the caller can say so on the row.
+function halFillGroupFunctions(sel, haType, saved) {
+    var ga = (typeof window !== 'undefined') && window.hal2GroupAggregate;
+    if (!ga) { return false; }
+    var fits = ga.functionsForHaType(haType);
+    var stray = !!saved && fits.indexOf(saved) < 0;
+    var deflt = ga.defaultFunction(haType);
+
+    sel.children().remove();
+    sel.append($('<option></option>').val('').text(deflt
+        ? '(group default: ' + deflt + ')'
+        : '(group default: none for this HAType)'));
+    fits.forEach(function (v) { sel.append($('<option></option>').val(v).text(ga.label(v))); });
+    if (stray) { sel.append($('<option></option>').val(saved).text(saved + ' — does not fit this group')); }
+    sel.val(saved || '');
+    return stray;
+}
+
 function halTypeMQTT() {
     return {
         value: "mqtt",
@@ -126,11 +147,25 @@ function halGetGroups(RED, eventHandlerId, filter) {
     }
 
     if (filter === 'value') {
-        var ga = (typeof window !== 'undefined') && window.hal2GroupAggregate;
-        groupsList = groupsList.filter(function(x) {
-            if (!x || !x.aggregate) { return false; }
-            return ga ? ga.isFunction(x.aggregate) : true;
-        });
+        // Readable means "has members that carry a state" — not "someone configured a
+        // function", which is no longer a thing anyone does. The reading nodes each pick a
+        // function; what decides whether a group can be read at all is its membership.
+        var readable = {};
+        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+        for (var t in things) {
+            var thing = RED.nodes.node(things[t].id);
+            if (!thing || !Array.isArray(thing.groups)) { continue; }
+            var tt = null;
+            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+            if (!tt || !Array.isArray(tt.items)) { continue; }
+            for (var g in thing.groups) {
+                var m = thing.groups[g];
+                if (!m || !m.group || m.item === '1') { continue; }   // heartbeat is a filter, not a value
+                var it = tt.items.find(function(x) { return x.id === m.item; });
+                if (it && halStatusItem(it)) { readable[m.group] = true; }
+            }
+        }
+        groupsList = groupsList.filter(function(x) { return x && readable[x.id]; });
     }
 
     groupsList.sort(function(a, b) {

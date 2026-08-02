@@ -110,6 +110,11 @@
                     // is 80px (border-box, padding included) and the fields are
                     // calc(100% - 110px), so this lines up with them exactly; max-width has to
                     // go because form-tips caps itself at 450px.
+                    var rowGroupFn = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
+                    $('<div/>', { style: "display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;", class: "fa fa-calculator" })
+                        .appendTo(rowGroupFn).append(' Value');
+                    var groupFnField = $('<select/>', { class: "node-input-rule-function", style: "width:calc(100% - 110px)" })
+                        .appendTo(rowGroupFn);
                     var rowGroupTip = $('<div/>', { class: "form-tips",
                         style: "margin-top:8px; margin-left:80px; width:calc(100% - 110px); max-width:none; box-sizing:border-box; white-space:normal;" })
                         .appendTo(container).hide();
@@ -174,12 +179,16 @@
                             itemsField.append($("<option></option>").val(thingsField.val()).text(thingsField.val()));
                             itemsField.val(thingsField.val());
                             var g = groupsList.filter(function(x) { return x.id === thingsField.val(); })[0];
-                            rowGroupTip.html($('<small/>').text(g
-                                ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : ''));
+                            var stray = halFillGroupFunctions(groupFnField, g && g.haType, rule.function || '');
+                            rowGroupFn.toggle(!!g);
+                            rowGroupTip.html($('<small/>').text(!g ? ''
+                                : stray ? 'The saved function does not fit this group\'s members — this rule will never match.'
+                                        : 'Each rule reads its group with its own function.'));
                             rowGroupTip.toggle(!!g);
                             return;
                         }
                         rowGroupTip.hide();
+                        rowGroupFn.hide();
                         rowItem.show();
                         if (thingsField.val() == 'dynamic') {
                             rowTypes.show();
@@ -408,7 +417,10 @@
                 var type  = rule.find(".node-input-rule-value").typedInput('type');
 
                 var r = {thing:thing, thingtype:thingtype, item:item, operator:operator, value:value, type:type};
-                if (savedGroups[thing]) { r.category = 'hal2Group'; }
+                if (savedGroups[thing]) {
+                    r.category = 'hal2Group';
+                    r.function = rule.find(".node-input-rule-function option:selected").val() || '';
+                }
                 node.rules.push(r);
             });
 

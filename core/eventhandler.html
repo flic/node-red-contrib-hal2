@@ -39,11 +39,12 @@
         <div id="hal2eh-tab-groups" style="display:none">
             <div class="form-row">
                 <p>Groups let you control and observe several Things at once. Membership is set per item on each
-                Thing; a group's identity lives here. Give a group a <b>Value</b> and it gains a state of its own,
-                computed from its members — <i>average</i> over a temperature group, <i>any true</i> over the
-                lights — which Value, Gate, Event and Bayes nodes can then read exactly like a Thing's item.
-                Members whose Thing is offline are left out of the calculation. Pick a <b>HAType</b> to keep a
-                group homogeneous — only
+                Thing; a group's identity lives here. A group with members that carry state has a value of its
+                own, and Value, Gate, Event and Bayes nodes each choose how to read it — <i>average</i> over a
+                temperature group, <i>any true</i> for "is a lamp on", <i>all true</i> for "did they all come on".
+                What the group reports when nobody asks for anything in particular is derived from its
+                <b>HAType</b>. Members whose Thing is offline are left out of every calculation. Pick a
+                <b>HAType</b> to keep a group homogeneous — only
                 items of that type can join. Choose <b>Other / Mixed</b> for a free-form group that accepts any
                 item; then it is your responsibility that the members can handle the broadcast command.</p>
             </div>
@@ -262,9 +263,10 @@
     ThingTypes can reference by id, so logic is defined once instead of copied per type. Each has an
     info button showing which ThingTypes use it.</li>
     <li><strong>Groups</strong>: group items across Things by HAType (e.g. all "light" items) so they
-    can be controlled together by <code>hal2Action</code>. Give a group a <b>Value</b> — average, any
-    true, count true, … — and it also gains a state of its own that <code>hal2Value</code>,
-    <code>hal2Gate</code>, <code>hal2Event</code> and <code>hal2Bayes</code> can read like any item.</li>
+    can be controlled together by <code>hal2Action</code>. A group whose members carry state also has
+    a value, which <code>hal2Value</code>, <code>hal2Gate</code>, <code>hal2Event</code> and
+    <code>hal2Bayes</code> each read with a function of their own choosing — average, any true,
+    count true, and the rest.</li>
     <li><strong>History</strong>: optional SQLite logging of item state changes with a retention
     window. Powers the <code>get_history</code> (incl. server-side bucketed downsampling) and
     <code>analyze_patterns</code> tools.</li>
@@ -390,8 +392,6 @@
                     var rowName    = $('<div/>').appendTo(container);
                     var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
                     var rowType    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
-                    var rowValue   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
-                    var rowValueTip= $('<div/>', { style: "margin-top:4px; margin-left:115px; margin-right:10px; color:#888; font-size:12px; white-space:normal; line-height:1.4;" }).appendTo(rowDetails);
                     var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowTags    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowNotes   = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
@@ -417,8 +417,6 @@
                         .appendTo(rowName).append(' Group');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-bookmark" })
                         .appendTo(rowType).append(' HAType');
-                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-calculator" })
-                        .appendTo(rowValue).append(' Value');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-clock-o" })
                         .appendTo(rowRate).append(' Rate limit');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-tags" })
@@ -492,12 +490,14 @@
                             message += '<br>No things are members of this group.<br>';
                         }
 
-                        var fnNow = $(container).find(".node-config-eh-group-aggregate-property").val();
-                        message += '<br><b>Value</b><br>';
-                        message += fnNow
-                            ? window.hal2GroupAggregate.label(fnNow) +
-                              '<br>Readable by Value, Gate, Event and Bayes nodes. Offline members are left out.<br>'
-                            : 'No value — this group can be commanded but not read.<br>';
+                        var haNow = $(container).find(".node-config-eh-group-hatype-property").val();
+                        var defFn = window.hal2GroupAggregate.defaultFunction(haNow);
+                        message += '<br><b>Default value</b><br>';
+                        message += defFn
+                            ? window.hal2GroupAggregate.label(defFn) +
+                              ' &mdash; derived from the HAType. Value, Gate, Event and Bayes nodes ' +
+                              'can each read this group with a different function. Offline members are left out.<br>'
+                            : 'None &mdash; this HAType implies no default. The reading nodes must each pick a function.<br>';
 
                         message += '<br><b>Used in</b>';
                         if (usageRows) {
@@ -554,62 +554,10 @@
                     });
                     haTypeProperty.val(currentHaType);
 
-                    // How many members currently carry state. Only ever reported, never used
-                    // to gate the field: a group is created before anything joins it, so
-                    // disabling the choice until it has members would make it unreachable at
-                    // exactly the moment you want to set it.
-                    var stateMembers = (function() {
-                        var n = 0;
-                        var gid = idProperty.val();
-                        var things = RED.nodes.filterNodes({ type: "hal2Thing" });
-                        for (var t in things) {
-                            var thing = RED.nodes.node(things[t].id);
-                            if (!thing || !Array.isArray(thing.groups)) { continue; }
-                            var tt = null;
-                            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
-                            for (var g in thing.groups) {
-                                if (thing.groups[g].group !== gid) { continue; }
-                                if (thing.groups[g].item === '1') { continue; }   // heartbeat is a filter, not a value
-                                if (tt && Array.isArray(tt.items)) {
-                                    var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
-                                    if (it && halStatusItem(it)) { n += 1; }
-                                }
-                            }
-                        }
-                        return n;
-                    })();
-
-                    var valueProperty = $('<select/>', { class: "node-config-eh-group-aggregate-property", style: "width:calc(100% - 125px)" })
-                        .appendTo(rowValue);
-                    valueProperty.append($("<option></option>").val('').text('(none — command-only group)'));
-                    (function() {
-                        var ga = window.hal2GroupAggregate;
-                        // Ordered by what this HAType usually wants, never filtered: a mixed
-                        // group may legitimately want to count booleans.
-                        var wanted = ga.kindOf(ga.suggestFor(haTypeProperty.val() || group.haType));
-                        var fns = ga.FUNCTIONS.slice().sort(function(a, b) {
-                            var ra = (a.kind === wanted) ? 0 : (a.kind === 'any' ? 1 : 2);
-                            var rb = (b.kind === wanted) ? 0 : (b.kind === 'any' ? 1 : 2);
-                            return ra - rb;
-                        });
-                        fns.forEach(function(f) {
-                            valueProperty.append($("<option></option>").val(f.v).text(f.t));
-                        });
-                    })();
-                    valueProperty.val(window.hal2GroupAggregate.isFunction(group.aggregate) ? group.aggregate : '');
-
-                    var syncValueRow = function() {
-                        if (!valueProperty.val()) {
-                            rowValueTip.text('Without a value the group can only be commanded, not read or watched.');
-                        } else if (stateMembers === 0) {
-                            rowValueTip.text('No members with a state yet — add some from the Thing editor.');
-                        } else {
-                            rowValueTip.text('Computed from ' + stateMembers + ' member' + (stateMembers === 1 ? '' : 's') +
-                                ' with a state. Offline members are left out.');
-                        }
-                    };
-                    valueProperty.change(syncValueRow);
-                    syncValueRow();
+                    // What this group reports when nobody asks for anything in particular is
+                    // derived from its HAType — see defaultFunction() in group-aggregate.js.
+                    // It is not configured here: one choice could never serve every reader, so
+                    // the reading nodes each pick their own and this is only the fallback.
 
                     var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
                         .appendTo(rowRate).val(typeof group.ratelimit === 'undefined' ? 0 : group.ratelimit);
@@ -783,7 +731,6 @@
                         id:        item.find(".node-config-eh-group-id-property").val(),
                         name:      name,
                         haType:    item.find(".node-config-eh-group-hatype-property").val(),
-                        aggregate: item.find(".node-config-eh-group-aggregate-property").val() || '',
                         tags:      halParseTags(item.find(".node-config-eh-group-tags-property").val()),
                         ratelimit: Number(item.find(".node-config-eh-group-ratelimit-property").val()) || 0,
                         notes:     item.find(".node-config-eh-group-notes-property").val() || ''

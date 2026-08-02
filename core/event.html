@@ -26,6 +26,11 @@
             <button id="thing-filter-button"><i class="fa fa-filter"></i></button>
         </div>
 
+        <div class="form-row" id="row-group-function">
+            <label for="node-input-groupFunction"><i class="fa fa-calculator"></i> Value</label>
+            <select id="node-input-groupFunction" style="width:calc(100% - 170px)"></select>
+        </div>
+
         <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
             <small id="group-tip"></small>
         </div>
@@ -150,6 +155,7 @@
             topic:          { value:"" },
             thing:          { value: "", required: true },
             typeSel:        {},
+            groupFunction:  { value: '' },
             item:           { value: "", required: true },
             operator:       { value: "", required: true },
             change:         { value: "1" },
@@ -201,6 +207,7 @@
             var savedThing = this.thing;
             var savedItem = this.item;
             var savedTypeSel = this.typeSel;
+            var savedFunction = this.groupFunction || '';
 
             //get all things and sort them alphabetically
             var thingsList = halGetThings(RED,'status');
@@ -322,11 +329,17 @@
                         $("#node-input-item").val(gid);
                     }
                     var g = groupsList.filter(function(x) { return x.id === gid; })[0];
-                    $("#group-tip").text(g ? 'Value: ' + window.hal2GroupAggregate.label(g.aggregate) : '');
+                    var stray = halFillGroupFunctions($("#node-input-groupFunction"),
+                                                      g && g.haType, savedFunction);
+                    $("#row-group-function").toggle(!!g);
+                    $("#group-tip").text(!g ? ''
+                        : stray ? 'The saved function does not fit this group\'s members — this node will never fire.'
+                                : 'This node watches the value it picks here, so two Event nodes can watch the same group for different things.');
                     $("#row-group-tip").toggle(!!g);
                     return;
                 }
                 $("#row-group-tip").hide();
+                $("#row-group-function").hide();
 
                 let thing = RED.nodes.node($("#node-input-thing").val());
                 if (typeof thing === 'undefined') { return }

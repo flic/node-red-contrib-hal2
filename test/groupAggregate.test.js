@@ -235,3 +235,73 @@ describe('group-aggregate nextRecord', function () {
         assert.strictEqual(ga.nextRecord({ state: false }, false, 300).changed, false);
     });
 });
+
+describe('group-aggregate defaultFunction', function () {
+    // What a group reports when nobody asks for anything in particular. Unlike suggestFor it
+    // has no opinion where none is warranted, which is what keeps a mixed group from claiming
+    // a meaningless "latest".
+    it('has an opinion for the typed HATypes', function () {
+        assert.strictEqual(ga.defaultFunction('temperature'), 'average');
+        assert.strictEqual(ga.defaultFunction('humidity'), 'average');
+        assert.strictEqual(ga.defaultFunction('dimmer'), 'average');
+        assert.strictEqual(ga.defaultFunction('light'), 'anyTrue');
+        assert.strictEqual(ga.defaultFunction('switch'), 'anyTrue');
+        assert.strictEqual(ga.defaultFunction('contact'), 'anyTrue');
+    });
+
+    it('answers null where no default is warranted', function () {
+        // 'other' is the mixed/untyped mode, and a mode or a colour has no natural summary.
+        for (const ha of ['other', 'ac mode', 'fan mode', 'scene', 'color', 'room', '', undefined]) {
+            assert.strictEqual(ga.defaultFunction(ha), null, String(ha));
+        }
+    });
+
+    it('never names a function that does not exist', function () {
+        for (const ha of ['temperature', 'light', 'switch', 'dimmer', 'co2', 'presence']) {
+            assert.strictEqual(ga.isFunction(ga.defaultFunction(ha)), true, ha);
+        }
+    });
+
+    it('boolean groups default to any true, not all true', function () {
+        // any true is honest standing still: false means everything is off and nothing else.
+        // all true would report 38 of 39 lamps as false, which reads as "all dark".
+        assert.strictEqual(ga.defaultFunction('light'), 'anyTrue');
+        assert.notStrictEqual(ga.defaultFunction('light'), 'allTrue');
+    });
+});
+
+describe('group-aggregate functionsForHaType', function () {
+    it('offers the numeric family plus latest for a numeric type', function () {
+        const fns = ga.functionsForHaType('temperature');
+        assert.deepStrictEqual(fns, ['latest', 'min', 'max', 'average', 'median', 'sum', 'range']);
+        assert.ok(!fns.includes('anyTrue'), 'no boolean function on a numeric group');
+    });
+
+    it('offers the boolean family plus latest for a boolean type', function () {
+        const fns = ga.functionsForHaType('light');
+        assert.ok(fns.includes('anyTrue') && fns.includes('percentTrue'));
+        assert.ok(!fns.includes('average'), 'no numeric function on a boolean group');
+    });
+
+    it('offers everything for an untyped group', function () {
+        // Nothing is known about what the members hold, so nothing is ruled out.
+        assert.deepStrictEqual(ga.functionsForHaType('other').length, ga.FUNCTIONS.length);
+        assert.deepStrictEqual(ga.functionsForHaType(undefined).length, ga.FUNCTIONS.length);
+    });
+
+    it('always offers latest, whatever the type', function () {
+        for (const ha of ['temperature', 'light', 'other', 'ac mode', 'dimmer']) {
+            assert.ok(ga.functionsForHaType(ha).includes('latest'), ha);
+        }
+    });
+
+    it('agrees with defaultFunction', function () {
+        // A group must be able to keep reporting what it reports by default; offering a
+        // default that is not in the list would be a contradiction the editor could not show.
+        for (const f of ga.FUNCTIONS) { assert.ok(f.v); }
+        for (const ha of ['temperature', 'humidity', 'light', 'switch', 'dimmer', 'motion', 'contact', 'co2']) {
+            const d = ga.defaultFunction(ha);
+            assert.ok(ga.functionsForHaType(ha).includes(d), ha + ' → ' + d);
+        }
+    });
+});

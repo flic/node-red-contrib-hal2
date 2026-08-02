@@ -72,7 +72,8 @@ module.exports = function(RED) {
                     // step is always a plain condition wherever it sits.
                     if (src === 'time') { pattern = 'is'; }
                     return {
-                        src, thing: s.thing, item: s.item, group: s.group, prop: s.prop,
+                        src, thing: s.thing, item: s.item, group: s.group,
+                        groupFunction: s.groupFunction || '', prop: s.prop,
                         start: s.start, end: s.end,
                         days: Array.isArray(s.days) ? s.days.map(Number) : undefined,
                         operator: s.operator, value: s.value, valueType: s.valueType || 'str',
@@ -101,9 +102,12 @@ module.exports = function(RED) {
         function stepNames(step) {
             switch (step.src) {
                 case 'group': {
-                    const rec = node.eventHandler && typeof node.eventHandler.getGroupState === 'function'
-                        ? node.eventHandler.getGroupState(step.group) : null;
-                    return { source: (rec && rec.name) || step.group };
+                    // The registry, not the state record: a group with no default value has no
+                    // record, and labelling it by its id helps nobody.
+                    const groups = (node.eventHandler && typeof node.eventHandler.getGroups === 'function')
+                        ? node.eventHandler.getGroups() : [];
+                    const g = groups.find(x => x.id === step.group);
+                    return { source: (g && g.name) || step.group };
                 }
                 case 'flow':   return { source: 'flow.' + step.prop };
                 case 'global': return { source: 'global.' + step.prop };
@@ -152,10 +156,17 @@ module.exports = function(RED) {
         // why they are restricted to condition steps (see the pattern guard above).
         function resolveState(step) {
             switch (step.src) {
-                // The group engine keeps the aggregate; undefined when no live member is
-                // reporting, which the estimator already treats as "no evidence".
+                // Undefined when no live member is reporting, or when the step's function does
+                // not fit the members — both of which the estimator treats as "no evidence".
                 case 'group': {
-                    const rec = node.eventHandler && typeof node.eventHandler.getGroupState === 'function'
+                    if (!node.eventHandler) { return undefined; }
+                    // The step's own function, or the group's default. Either way a fresh read:
+                    // the step is re-read on every wake-up regardless.
+                    if (step.groupFunction && typeof node.eventHandler.readGroup === 'function') {
+                        const read = node.eventHandler.readGroup(step.group, step.groupFunction);
+                        return read ? read.value : undefined;
+                    }
+                    const rec = typeof node.eventHandler.getGroupState === 'function'
                         ? node.eventHandler.getGroupState(step.group) : null;
                     return rec ? rec.state : undefined;
                 }

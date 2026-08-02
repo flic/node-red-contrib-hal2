@@ -3,6 +3,7 @@ module.exports = function(RED) {
         RED.nodes.createNode(this,config);
         this.eventHandler = RED.nodes.getNode(config.eventHandler);
         this.typeSel = config.typeSel;
+        this.groupFunction = config.groupFunction || '';
         this.action = config.action;
         this.thing = config.thing;
         this.thingType = config.thingType;
@@ -71,9 +72,17 @@ module.exports = function(RED) {
                 node.error('No event handler configured — a group source needs one');
                 return;
             }
-            var rec = node.eventHandler.getGroupState(node.thing);
+            // A function of this node's own, or the group's derived default when none is set.
+            var rec;
+            if (node.groupFunction) {
+                var read = node.eventHandler.readGroup(node.thing, node.groupFunction);
+                rec = read && { state: read.value, members: read.members, live: read.live,
+                                fn: node.groupFunction, name: node.thing };
+            } else {
+                rec = node.eventHandler.getGroupState(node.thing);
+            }
             if (!rec) {
-                node.error('Group '+node.thing+' has no value — give it one on the Event handler\'s Groups tab');
+                node.error('Group '+node.thing+' is not readable — it has no members that carry a state');
                 return;
             }
             // No live member has a state: nothing to report, which is the same silence a
