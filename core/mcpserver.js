@@ -70,7 +70,7 @@ module.exports = function (RED) {
                     + 'Rename the tools so each name is unique.');
             }
             node.mcpRegisteredTools[name] = {
-                description, schema, timeoutMs: timeoutSec * 1000,
+                description, schema, timeoutMs: (timeoutSec || 30) * 1000,   // NaN/0 → default, as on the EventHandler
                 requiredValue: requiredValue || '', ownerId
             };
         };
