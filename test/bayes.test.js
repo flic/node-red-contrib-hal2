@@ -992,3 +992,56 @@ describe('unusable operator and value pairings', function() {
         assert.strictEqual(byId(b.evaluate(stateOf({ a: 'x' }), 0), 'j').status, 'condition-false');
     });
 });
+
+describe('a prior above the on-threshold', function() {
+    // "Assume the house is quiet until something says otherwise": the node rests on and rules
+    // push it off. The estimate always handled this; what did not was every report of it,
+    // because requiredGain came out negative and two negatives divide positive — so a rule
+    // pushing the output down was described as pushing it up.
+    const P = { prior: 0.93, pOn: 0.80, pOff: 0.35, clamp: 6 };
+    const veto = (id, strength) => ({ id, lr: 1 / scale.strengthLr(strength), halfLifeMs: null,
+                                      steps: [step('is', { thing: id })] });
+    const make = rules => createBayes(cfgOf(Object.assign({}, P, { rules })));
+
+    it('measures the way to off, since that is the way it can move', function() {
+        const gain = scale.requiredGain(P.prior, P.pOn, P.pOff);
+        assert.ok(gain < 0, 'the reachable threshold is below the prior');
+        assert.strictEqual(scale.restsOn(P.prior, P.pOn), true);
+
+        // One decisive veto is just enough — which is what the estimate does too.
+        const share = scale.shareOfWay(1 / scale.strengthLr('decisive'), P.prior, P.pOn, P.clamp, P.pOff);
+        assert.ok(Math.abs(share - 1.06) < 0.02, share);
+    });
+
+    it('reports a rule that pushes the output down as a positive share', function() {
+        // The bug as reported: decisive-false read as +283 % of the way to ON.
+        const b = make([veto('motion', 'decisive')]);
+        const r = b.evaluate(stateOf({ motion: true }), 0);
+        assert.strictEqual(r.binary, false, 'the estimate was always right');
+        assert.ok(Math.abs(byId(r, 'motion').share - 106) < 1, byId(r, 'motion').share);
+    });
+
+    it('keeps shares additive against the one denominator', function() {
+        const b = make([veto('tv', 'slight'), veto('motion', 'decisive')]);
+        const r = b.evaluate(stateOf({ tv: true, motion: true }), 0);
+        const sum = active(r).reduce((t, x) => t + x.share, 0);
+        assert.ok(Math.abs(sum - r.share) < 0.2, sum + ' vs ' + r.share);
+    });
+
+    it('rests on and is pushed off, not the other way round', function() {
+        const b = make([veto('tv', 'slight'), veto('motion', 'decisive')]);
+        assert.strictEqual(b.evaluate(stateOf({}), 0).binary, true, 'silence reads as on');
+        assert.strictEqual(b.evaluate(stateOf({ tv: true }), MIN).binary, true, 'a slight veto is not enough');
+        assert.strictEqual(b.evaluate(stateOf({ motion: true }), 2 * MIN).binary, false, 'a decisive one is');
+        assert.strictEqual(b.evaluate(stateOf({}), 3 * MIN).binary, true, 'and it comes back');
+    });
+
+    it('leaves an ordinary configuration exactly as it was', function() {
+        // The fix must not move the normal case: prior below the threshold still measures up.
+        assert.strictEqual(scale.restsOn(0.2, 0.85), false);
+        const withOff = scale.shareOfWay(10, 0.2, 0.85, 6, 0.30);
+        const without = scale.shareOfWay(10, 0.2, 0.85, 6);
+        assert.strictEqual(withOff, without);
+        assert.ok(Math.abs(withOff - 0.7378) < 1e-3);
+    });
+});

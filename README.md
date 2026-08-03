@@ -305,11 +305,23 @@ slow to report, *now or soon* makes the step wait rather than fail. Only a step 
 
 Each rule pushes toward true or false with a word strength — **slight** (LR 1.5), **moderate**
 (3), **strong** (10), **decisive** (30), **certain** (400). The editor shows every rule as a
-*share of the way* from the prior to the on-threshold, and shares add exactly: 74 % + 35 % =
+*share of the way* from the prior to the threshold the node can actually cross, and shares add
+exactly: 74 % + 35 % =
 109 % turns the output on. This is also how shared sensors are disambiguated without any
 special logic: give the door/motion arrival rule a share too small to cross the line alone, so
 it only matters together with the node's own strong indicator — someone else arriving contributes
-35 % to this node and nothing happens. A **certain** rule overrides history: firing it clears
+35 % to this node and nothing happens.
+
+**A prior above the on-threshold is a supported configuration, and a useful one.** The node then
+rests *on* and rules push it off, which is how you say "assume the house is quiet until something
+says otherwise" — no rule has to argue the resting case, and silence is the answer rather than
+something to be reconstructed. Shares are then measured toward the off-threshold, since that is
+the only line the estimate can cross, and the editor's summary says so. The constraint to keep in
+mind is that the prior must be reachable in one hop by your strongest veto: at prior 0.93 with an
+off-threshold of 0.35, one **decisive** rule is 106 % of the way and just enough, while 0.95 would
+need **certain**.
+
+A **certain** rule overrides history: firing it clears
 opposing evidence, and a stored certain statement is cleared by any later contradicting rule.
 
 ### Weights that follow the reading

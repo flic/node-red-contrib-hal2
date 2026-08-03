@@ -179,7 +179,9 @@
     <p>The strength <b>scaled&hellip;</b> makes a rule's weight depend on the measured value instead
     of being constant. Give two points &mdash; <i>value 20 or less &rarr; weight 150 %</i>,
     <i>value 60 or more &rarr; weight 0 %</i> &mdash; and the weight is interpolated between them and
-    clamped outside. A rule's <b>weight</b> is its share of the way to on, the same percentage the
+    clamped outside. A rule's <b>weight</b> is its share of the way to the threshold this
+    configuration can cross &mdash; normally to on, but a prior above the on-threshold rests the
+    output on, and then the share is measured to off. It is the same percentage the
     bars show: 100 % is exactly enough to flip the output when nothing opposes it. Soil moisture is the natural
     example: watering in direct sun is normally a bad idea, but critically dry soil should override
     it, which only works if the dryness rule grows heavier as the reading falls.</p>
@@ -787,7 +789,7 @@
 
                     var scaled = (rule.strength === 'scaled' && rule.steps.length === 1);
                     var lr = effectiveLr(rule);
-                    var share = scaled ? maxScaleShare(rule) : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                    var share = scaled ? maxScaleShare(rule) : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp, p.pOff);
                     var sPct = pct(share);
 
                     container.find('.br-scale-span').toggle(scaled);
@@ -808,11 +810,15 @@
                     bar.css({ width: Math.min(100, Math.abs(share) * 100) + '%',
                               background: share >= 0 ? '#4b8' : '#c66' });
 
+                    // Which way "the way" runs: a prior above the on-threshold rests on, so a
+                    // rule earns its share by pushing the output down rather than up.
+                    var toward  = scale.restsOn(p.prior, p.pOn) ? 'off' : 'on';
+                    var against = toward === 'on' ? 'off' : 'on';
                     var capt = scaled
-                        ? 'up to ' + sPct + ' %' + (share >= 1 ? ' — enough alone' : ' of the way to on')
+                        ? 'up to ' + sPct + ' %' + (share >= 1 ? ' — enough alone' : ' of the way to ' + toward)
                         : (sPct >= 0
-                            ? sPct + ' % of the way to on' + (share >= 1 ? ' — enough on its own' : '')
-                            : sPct + ' % (pushes toward off)');
+                            ? sPct + ' % of the way to ' + toward + (share >= 1 ? ' — enough on its own' : '')
+                            : sPct + ' % (pushes toward ' + against + ')');
                     container.find('.br-share-caption').text(capt);
 
                     var custom = Number(rule.lr) > 0;
@@ -851,7 +857,7 @@
                         var scaledRule = (rule.strength === 'scaled' && rule.steps.length === 1);
                         var lr = effectiveLr(rule);
                         var share = scaledRule ? maxScaleShare(rule)
-                                               : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp);
+                                               : scale.shareOfWay(lr, p.prior, p.pOn, p.clamp, p.pOff);
                         if (scaledRule) { anyScaled = true; }
                         if (share > 0) {
                             totalPos += share;
@@ -862,12 +868,25 @@
                         }
                     });
 
+                    // A prior above the on-threshold rests the output ON, so the summary is about
+                    // what turns it off. Saying "turns on" there would describe the opposite of
+                    // what the node does.
+                    var inverted = scale.restsOn(p.prior, p.pOn);
                     var lines = [];
+                    if (inverted) {
+                        lines.push('<b>Rests on</b> — the prior (' + p.prior + ') is above the on-threshold (' +
+                            p.pOn + '), so the output starts on and rules push it off.');
+                    }
                     lines.push('<b>Together: ' + (anyScaled ? 'up to ' : '') + pct(totalPos) + ' %</b> → ' +
-                        (totalPos >= 1 ? 'turns on.' : 'not enough to turn on.') + ' ' +
+                        (totalPos >= 1 ? (inverted ? 'turns off.' : 'turns on.')
+                                       : ('not enough to turn ' + (inverted ? 'off.' : 'on.'))) + ' ' +
                         (anyAlone ? 'At least one rule is enough on its own.' : 'No single rule is enough on its own.'));
 
-                    if ($("#node-input-latch").is(':checked')) {
+                    if (inverted) {
+                        // Decay runs the other way too: with nothing pushing, the estimate
+                        // returns to the prior, which is above the threshold.
+                        lines.push('With no rule active the estimate returns to the prior, so silence reads as on.');
+                    } else if ($("#node-input-latch").is(':checked')) {
                         var hold = $("#node-input-maxHold").val();
                         lines.push('Once on, the output stays on until a "makes it false" rule fires' +
                             (Number(hold) > 0 ? ' (or after ' + hold + ' h without supporting evidence).' : '.'));
