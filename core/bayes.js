@@ -54,7 +54,7 @@ module.exports = function(RED) {
                     : scale.fadeSeconds(r.fade) * 1000;
                 const steps = (r.steps || []).map((s, si) => {
                     const src = ['thing', 'group', 'flow', 'global', 'env', 'time'].indexOf(s.src) >= 0 ? s.src : 'thing';
-                    let pattern = ['cycle', 'is', 'isOrBecomes', 'becomes'].indexOf(s.pattern) >= 0 ? s.pattern : 'is';
+                    let pattern = ['cycle', 'is', 'isOrBecomes', 'becomes', 'held'].indexOf(s.pattern) >= 0 ? s.pattern : 'is';
                     // Polled sources have no change event, so an edge on them could only be
                     // sampled on the tick and would be missed outright between two ticks. A
                     // group is not polled — it emits on the bus exactly like a thing — so it
@@ -79,7 +79,8 @@ module.exports = function(RED) {
                         operator: s.operator, value: s.value, valueType: s.valueType || 'str',
                         pattern,
                         cycleMaxMs: sec(s.cycleMax, 180),
-                        windowMs: sec(s.window, 120)
+                        windowMs: sec(s.window, 120),
+                        holdMs: sec(s.hold, 600)
                     };
                 }).filter(s => {
                     if (s.src === 'thing') { return s.thing && s.item; }

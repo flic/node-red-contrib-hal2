@@ -120,6 +120,11 @@
             its window runs out; "soon" is exactly that <i>within N s</i>. Use it for sensors that
             report late. Only offered after the first step, since it needs a previous step to be soon
             after. Reads <i>and&hellip;</i></li>
+        <li><b>for a while</b> &mdash; a condition that must have been continuously true for its own
+            duration before it counts, set on the timing line. Separates a brief blip from a
+            settled state &mdash; a trip to the bathroom from getting up for the day &mdash; where
+            the reading itself is identical and only time tells them apart. The clock restarts
+            whenever the condition drops. Reads <i>and&hellip;</i></li>
         <li><b>on change</b> &mdash; an event: the condition must actually turn true, being already
             true does not count. Reads <i>then&hellip;</i></li>
         <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
@@ -269,9 +274,9 @@
     (function() {
         var scale = window.hal2BayesScale;
         var btime = window.hal2BayesTime;
-        var PATTERNS = { is: 'now', isOrBecomes: 'now or soon',
+        var PATTERNS = { is: 'now', isOrBecomes: 'now or soon', held: 'for a while',
                          becomes: 'on change', cycle: 'on a full cycle' };
-        var ALL_PATTERNS = ['is', 'isOrBecomes', 'becomes', 'cycle'];
+        var ALL_PATTERNS = ['is', 'isOrBecomes', 'held', 'becomes', 'cycle'];
         // Rebuilds only when the option set actually differs, so a selection survives
         // every refresh. `keep` is what the value should be if it is still offered.
         function setPatternOptions(patSel, allowed, keep) {
@@ -396,7 +401,8 @@
                 }
 
                 function isCondition(st) {
-                    return !!st && (st.pattern === 'is' || st.pattern === 'isOrBecomes');
+                    return !!st && (st.pattern === 'is' || st.pattern === 'isOrBecomes' ||
+                                    st.pattern === 'held');
                 }
                 function isContinuous(rule) {
                     // A rule made only of level checks is the continuous case: one weight that
@@ -551,6 +557,16 @@
                     });
 
 
+                    // How long a "for a while" condition has to have held. Its own number
+                    // rather than the step window: the window bounds when a step may happen,
+                    // this bounds how long it must already have been happening.
+                    var holdSpan = $('<span/>', { class: "bs-hold-span" }).appendTo(timing);
+                    $('<span/>', { class: "bs-hold-sep" }).appendTo(holdSpan).text(' · ');
+                    $('<span/>').appendTo(holdSpan).text('has held for ');
+                    $('<input/>', { class: "bs-hold", type: "number", min: "1", step: "any", style: "width:55px;" })
+                        .appendTo(holdSpan).val(step.hold === undefined ? 600 : step.hold);
+                    $('<span/>').appendTo(holdSpan).text(' s');
+
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
                     $('<span/>').appendTo(cycleSpan).text('on then off within ');
@@ -685,6 +701,7 @@
                             valueType: el.find('.bs-val').typedInput('type'),
                             pattern:  el.find('.bs-pattern option:selected').val(),
                             cycleMax: el.find('.bs-cyclemax').val(),
+                            hold:     el.find('.bs-hold').val(),
                             window:   el.find('.bs-window').val()
                         };
                         // The window fields only mean something on a time step.
@@ -727,8 +744,8 @@
                                     // coercing it would quietly turn "then the door opens" into
                                     // "and the door is open". Leave it, and let the warning say so.
                                     : (i > 0 && condFirst && isCondition(rule.steps[i])) ? ['is']
-                                    : (src === 'thing' || src === 'group') ? (i === 0 ? ['is', 'becomes', 'cycle'] : ALL_PATTERNS)
-                                    : (i === 0 ? ['is'] : ['is', 'isOrBecomes']);
+                                    : (src === 'thing' || src === 'group') ? (i === 0 ? ['is', 'held', 'becomes', 'cycle'] : ALL_PATTERNS)
+                                    : (i === 0 ? ['is', 'held'] : ['is', 'isOrBecomes', 'held']);
                         var patSel = el.find('.bs-pattern');
                         var wasPat = patSel.val();
                         setPatternOptions(patSel, allowed, wasPat);
@@ -743,18 +760,21 @@
 
                         var pat = patSel.val();
                         // A condition reads "and …"; an event reads "then …".
-                        var isCond = (pat === 'is' || pat === 'isOrBecomes');
+                        var isCond = (pat === 'is' || pat === 'isOrBecomes' || pat === 'held');
                         el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
-                        var showWindow = i > 0 && pat !== 'is';
+                        var showWindow = i > 0 && pat !== 'is' && pat !== 'held';
                         var showCycle = (pat === 'cycle');
+                        var showHold  = (pat === 'held');
                         timing.find('.bs-window-span').toggle(showWindow);
                         timing.find('.bs-cycle-span').toggle(showCycle);
+                        timing.find('.bs-hold-span').toggle(showHold);
                         timing.find('.bs-cycle-sep').toggle(showWindow && showCycle);
+                        timing.find('.bs-hold-sep').toggle(showWindow && showHold);
                         timing.find('.bs-days-span').toggle(isTime);
                         timing.find('.bs-days-sep').toggle(isTime && showWindow);
                         // The dot only earns its place when something follows the qualifier.
-                        timing.find('.bs-pat-sep').toggle(allowed.length > 1 && (showWindow || showCycle || isTime));
-                        timing.toggle(allowed.length > 1 || showWindow || showCycle || isTime);
+                        timing.find('.bs-pat-sep').toggle(allowed.length > 1 && (showWindow || showCycle || showHold || isTime));
+                        timing.toggle(allowed.length > 1 || showWindow || showCycle || showHold || isTime);
 
                         // Pin down what bounds the step, so "soon" is never left undefined.
                         timing.find('.bs-window-lead').text(pat === 'isOrBecomes'

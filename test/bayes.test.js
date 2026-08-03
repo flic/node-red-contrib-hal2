@@ -1045,3 +1045,84 @@ describe('a prior above the on-threshold', function() {
         assert.ok(Math.abs(withOff - 0.7378) < 1e-3);
     });
 });
+
+describe('a condition that must have held', function() {
+    // "Up for ten minutes" rather than "up right now" — what separates a bathroom trip from
+    // getting up for the day. It is a property of time, not of the reading, so it cannot be
+    // decided by the condition alone.
+    const heldRule = (id, lr, holdMs) => ({ id, lr, halfLifeMs: null,
+        steps: [step('held', { thing: id, holdMs: holdMs })] });
+    const TEN = 10 * MIN;
+
+    it('does not count until the condition has held long enough', function() {
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        const R = stateOf({ up: true });
+
+        assert.strictEqual(active(b.evaluate(R, 0)).length, 0, 'just became true');
+        assert.strictEqual(active(b.evaluate(R, 5 * MIN)).length, 0, 'halfway');
+        assert.strictEqual(active(b.evaluate(R, TEN)).length, 1, 'exactly at the limit');
+        assert.strictEqual(active(b.evaluate(R, 30 * MIN)).length, 1, 'and stays');
+    });
+
+    it('starts over when the condition drops', function() {
+        // The bathroom trip: up, back to bed, up again — the clock restarts each time, so a
+        // string of short absences never adds up to a long one.
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        const state = { up: true };
+        const R = stateOf(state);
+        b.evaluate(R, 0);
+        b.handleEvent(hit('up', 0), true, 0);
+
+        state.up = false;
+        b.handleEvent(hit('up', 0), false, 8 * MIN);
+        assert.strictEqual(active(b.evaluate(R, 8 * MIN)).length, 0);
+
+        state.up = true;
+        b.handleEvent(hit('up', 0), true, 9 * MIN);
+        assert.strictEqual(active(b.evaluate(R, 17 * MIN)).length, 0,
+            '8 minutes then 8 more is not 10 in a row');
+        assert.strictEqual(active(b.evaluate(R, 19 * MIN)).length, 1, 'ten from the restart');
+    });
+
+    it('starts the clock when it first sees the condition true', function() {
+        // True while the node was down, or true at the very first evaluation: a hold that has
+        // not been observed has not been observed, so it counts from now rather than forever.
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        const R = stateOf({ up: true });
+        assert.strictEqual(active(b.evaluate(R, 1000 * MIN)).length, 0, 'not credited on sight');
+        assert.strictEqual(active(b.evaluate(R, 1010 * MIN)).length, 1, 'ten minutes later');
+    });
+
+    it('makes a rule of held steps continuous, not a sequence', function() {
+        // Otherwise it would go to the sequence machinery and never fire — a condition is not
+        // an event, whether or not it has to last.
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 10, halfLifeMs: null, steps: [
+            step('held', { thing: 'a', holdMs: TEN }),
+            step('is',   { thing: 'b' })
+        ]}]}));
+        const R = stateOf({ a: true, b: true });
+        assert.strictEqual(byId(b.evaluate(R, 0), 'r').status, 'condition-false', 'a has not held yet');
+        assert.strictEqual(byId(b.evaluate(R, TEN), 'r').status, 'contributing');
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: true, b: false }), TEN), 'r').status,
+            'condition-false', 'still an AND');
+    });
+
+    it('a zero duration behaves exactly like an ordinary condition', function() {
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, 0)] }));
+        assert.strictEqual(active(b.evaluate(stateOf({ up: true }), 0)).length, 1);
+        assert.strictEqual(active(b.evaluate(stateOf({ up: false }), MIN)).length, 0);
+    });
+
+    it('survives a restart with the hold intact', function() {
+        // The edge is persisted with the rest of the state, so a deploy does not reset a
+        // condition that has genuinely been true for an hour.
+        const a = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        a.handleEvent(hit('up', 0), true, 0);
+        const saved = a.serialize();
+
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        b.restore(saved, 20 * MIN);
+        assert.strictEqual(active(b.evaluate(stateOf({ up: true }), 20 * MIN)).length, 1,
+            'twenty minutes of holding survived the restart');
+    });
+});
