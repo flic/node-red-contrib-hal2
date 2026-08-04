@@ -2,6 +2,7 @@
 <script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-scale.js"></script>
 <script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-time.js"></script>
 <script type="text/javascript" src="resources/node-red-contrib-hal2/group-aggregate.js"></script>
+<script type="text/javascript" src="resources/node-red-contrib-hal2/bayes-label.js"></script>
 
 <script type="text/x-red" data-template-name="hal2Bayes">
     <div class="form-row">
@@ -104,6 +105,9 @@
     estimates one thing, so use one node per person.</p>
 
     <h3>Rules</h3>
+    <p>Each rule collapses to one line &mdash; what it says and what it does about it, in the same
+    phrasing the snapshot on output 2 uses &mdash; and opens when you click it. A rule you add opens
+    by itself, since you added it to configure it.</p>
     <p>Everything is a <b>rule</b>, built from steps. Each step names a source and a condition, then
     says <i>when</i> that condition has to hold. A source is normally a <b>thing</b> item, but it can
     also be a <b>group</b> &mdash; the value a group computes from its members, so "any window is
@@ -274,6 +278,7 @@
     (function() {
         var scale = window.hal2BayesScale;
         var btime = window.hal2BayesTime;
+        var blabel = window.hal2BayesLabel;
         var PATTERNS = { is: 'now', isOrBecomes: 'now or soon', held: 'for a while',
                          becomes: 'on change', cycle: 'on a full cycle' };
         var ALL_PATTERNS = ['is', 'isOrBecomes', 'held', 'becomes', 'cycle'];
@@ -717,6 +722,40 @@
                 }
 
                 // Recompute the lead words, field visibility, bar and captions of one rule.
+                // The names bayes-label needs, resolved from the editor's own view of the flow.
+                // Mirrors stepNames() in core/bayes.js, which does the same against RED.nodes at
+                // runtime — one phrasing, two places that can see the names.
+                function stepNamesEditor(step) {
+                    switch (step.src) {
+                        case 'group': {
+                            var g = groupsList.filter(function(x) { return x.id === step.group; })[0];
+                            return { source: (g && g.name) || step.group };
+                        }
+                        case 'flow':   return { source: 'flow.' + step.prop };
+                        case 'global': return { source: 'global.' + step.prop };
+                        case 'env':    return { source: 'env.' + step.prop };
+                        case 'time':   return { window: btime.describe(step) };
+                        default: {
+                            var thing = step.thing ? RED.nodes.node(step.thing) : null;
+                            if (!thing) { return { source: step.thing || '(no thing)' }; }
+                            var tt = null;
+                            try { tt = RED.nodes.node(thing.thingType); } catch (e) {}
+                            var it = (tt && Array.isArray(tt.items))
+                                ? tt.items.find(function(x) { return x.id === step.item; }) : null;
+                            return { source: thing.name + (it ? ' · ' + it.name : '') };
+                        }
+                    }
+                }
+
+                // The collapsed line: what the rule says, and what it does about it.
+                function ruleSummary(rule, share, scaled) {
+                    if (!rule.steps.length || !stepValid(rule.steps[0])) { return '(incomplete rule)'; }
+                    var sentence = blabel.describeRule(rule, rule.steps.map(stepNamesEditor));
+                    var weight = (scaled ? 'scaled' : (rule.strength || 'moderate'));
+                    var pctTxt = isFinite(share) ? '  ·  ' + pct(Math.abs(share)) + ' %' : '';
+                    return sentence + '  →  makes it ' + (rule.direction || 'true') + ', ' + weight + pctTxt;
+                }
+
                 function refreshRuleView(container) {
                     var rule = harvestRule(container);
                     var cont = isContinuous(rule);
@@ -840,6 +879,7 @@
                             ? sPct + ' % of the way to ' + toward + (share >= 1 ? ' — enough on its own' : '')
                             : sPct + ' % (pushes toward ' + against + ')');
                     container.find('.br-share-caption').text(capt);
+                    container.find('.br-summary').text(ruleSummary(rule, share, scaled));
 
                     var custom = Number(rule.lr) > 0;
                     container.find('.br-strength').prop('disabled', custom)
@@ -938,18 +978,40 @@
                         $('<input/>', { type: 'hidden', class: "br-id" }).appendTo(container).val(rule.id);
                         container.css({ overflow: 'hidden' });
 
-                        var stepsDiv = $('<div/>', { class: "bayes-steps" }).appendTo(container);
+                        // A rule is a dozen controls; a list of them is unreadable. The row
+                        // collapses to one sentence — the same phrasing the snapshot uses, from
+                        // resources/bayes-label.js — and opens on demand, the way ThingType items
+                        // and the Groups tab already work.
+                        var headRow = $('<div/>', { style: "white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" })
+                            .appendTo(container);
+                        var expandButton = $('<span/>', { style: "margin-right:8px; cursor:pointer; color:#888;" })
+                            .html('<i class="fa fa-angle-right"></i>').appendTo(headRow);
+                        var summarySpan = $('<span/>', { class: "br-summary" }).appendTo(headRow);
+                        var body = $('<div/>', { class: "br-body", style: "margin-top:6px;" }).appendTo(container);
+
+                        expandButton.click(function(e) {
+                            e.preventDefault();
+                            var icon = this.firstElementChild;
+                            var open = icon.className === "fa fa-angle-down";
+                            icon.className = open ? "fa fa-angle-right" : "fa fa-angle-down";
+                            body.toggle(!open);
+                        });
+                        // Opening the row is also how you read the summary in full when the
+                        // sentence is too long for one line.
+                        summarySpan.css('cursor', 'pointer').click(function() { expandButton.click(); });
+
+                        var stepsDiv = $('<div/>', { class: "bayes-steps" }).appendTo(body);
                         (rule.steps || []).forEach(function(s) { addStepRow(stepsDiv, container, s); });
 
                         $('<button type="button" class="red-ui-button red-ui-button-small" style="margin-top:6px; margin-left:50px;"><i class="fa fa-plus"></i> step</button>')
-                            .appendTo(container)
+                            .appendTo(body)
                             .on('click', function(e) {
                                 e.preventDefault();
                                 addStepRow(stepsDiv, container, { operator: 'true', pattern: 'is', cycleMax: 180, window: 120 });
                                 refreshRuleView(container);
                             });
 
-                        var outRow = $('<div/>', { style: "margin-top:8px;" }).appendTo(container);
+                        var outRow = $('<div/>', { style: "margin-top:8px;" }).appendTo(body);
                         $('<span/>', { style: "display:inline-block; width:50px; color:#888; text-align:right; padding-right:8px; box-sizing:border-box;" })
                             .appendTo(outRow).text('→');
                         $('<span/>', { style: "margin-right:6px;" }).appendTo(outRow).text('makes it');
@@ -971,7 +1033,7 @@
                         $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
 
                         var sc = rule.scale || {};
-                        var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(container);
+                        var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(body);
                         // Each row states its own meaning — "value 20 or less → weight 100 %" —
                         // so no column header is needed and the clamping sits where it applies.
                         // "value" and "weight" name the two roles; the % scale itself is
@@ -998,24 +1060,24 @@
                         var scaleHint = $('<div/>', { class: "br-scale-hint",
                             style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" }).appendTo(scaleRow);
 
-                        var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px;" }).appendTo(container);
+                        var advRow = $('<div/>', { class: "hal2bayes-adv", style: "margin-top:6px;" }).appendTo(body);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(advRow);
                         $('<span/>', { style: "color:#888;" }).appendTo(advRow).text('LR');
                         $('<input/>', { class: "br-lr", type: "number", min: "0.001", step: "any", placeholder: "auto", style: "width:80px; margin-left:4px;" })
                             .appendTo(advRow).val(rule.lr);
 
-                        var barRow = $('<div/>', { style: "margin-top:6px;" }).appendTo(container);
+                        var barRow = $('<div/>', { style: "margin-top:6px;" }).appendTo(body);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(barRow);
                         var barOuter = $('<span/>', { class: "br-bar-outer",
                             style: "display:inline-block; width:120px; height:10px; border:1px solid #bbb; border-radius:3px; vertical-align:middle; overflow:hidden;" }).appendTo(barRow);
                         $('<span/>', { class: "br-bar-inner", style: "display:block; height:100%;" }).appendTo(barOuter);
                         $('<span/>', { class: "br-share-caption", style: "margin-left:8px; color:#555;" }).appendTo(barRow);
 
-                        var decayRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(container);
+                        var decayRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(body);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(decayRow);
                         $('<span/>', { class: "br-decay-caption", style: "color:#999; font-size:0.9em;" }).appendTo(decayRow);
 
-                        var warnRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(container);
+                        var warnRow = $('<div/>', { style: "margin-top:2px;" }).appendTo(body);
                         $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(warnRow);
                         $('<span/>', { class: "br-warning", style: "color:#a60; font-size:0.9em;" }).appendTo(warnRow).hide();
 
@@ -1023,6 +1085,9 @@
                         strSel.val(rule.strength || 'moderate');
                         // A stored half-life means the rule was authored with a custom fade.
                         fadeSel.val(Number(rule.halfLife) > 0 ? 'custom' : (rule.fade || 'normal'));
+
+                        var isNew = !(opt && (opt.id || (opt.steps && opt.steps.length)));
+                        if (isNew) { expandButton.click(); } else { body.hide(); }
 
                         container.on('change input', function() { refreshRuleView(container); });
                         refreshRuleView(container);

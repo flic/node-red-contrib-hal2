@@ -240,6 +240,11 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Rules
 
+Each rule collapses to a single line stating what it says and what it does about it — the same
+phrasing `bayes-label.js` gives the snapshot on output 2, so a rule reads the same on screen as it
+does in the debug panel — and opens when clicked. A dozen controls per rule is unreadable as a
+list; one sentence per rule is not.
+
 Everything is a **rule**, built from steps. Each step names a source and a condition, then says
 *when* that condition has to hold. A source is normally a **thing** item, but it can also be a
 **flow**, **global** or **env** variable — for facts that live elsewhere in the flow, such as
