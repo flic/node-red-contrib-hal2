@@ -614,13 +614,21 @@
                     var opHandler = function() {
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false');
+                        // This runs on every operator change and at construction, so it is the
+                        // last writer of the type list — anything missing here is missing, however
+                        // carefully it was offered elsewhere.
                         if (op === 'regex') {
                             valField.typedInput('types', ['re']).typedInput('type', 're');
                         } else if (halNumericOperator(op)) {
-                            valField.typedInput('types', ['num']).typedInput('type', 'num');
+                            valField.typedInput('types', ['num', halTypeState()]);
+                            if (valField.typedInput('type') !== 'state') {
+                                valField.typedInput('type', 'num');
+                            }
                         } else {
-                            valField.typedInput('types', ['str', 'num', 'bool', 're']);
+                            valField.typedInput('types', ['str', 'num', 'bool', 're', halTypeState()]);
                         }
+                        cmpRow.toggle(op !== 'true' && op !== 'false' &&
+                                      valField.typedInput('type') === 'state');
                     };
                     opSel.change(opHandler);
 

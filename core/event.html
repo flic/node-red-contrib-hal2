@@ -31,13 +31,6 @@
             <select id="node-input-groupFunction" style="width:calc(100% - 170px)"></select>
         </div>
 
-        <div class="form-row" id="row-compare-source" hidden>
-            <label for="node-input-compareThing"><i class="fa fa-sitemap"></i> Compare</label>
-            <select id="node-input-compareThing" style="width:calc(55% - 60px)"></select>
-            <select id="node-input-compareItem" style="width:calc(45% - 60px); margin-left:4px;"></select>
-            <select id="node-input-compareFn" style="width:calc(45% - 60px); margin-left:4px;"></select>
-        </div>
-
         <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
             <small id="group-tip"></small>
         </div>
@@ -67,6 +60,13 @@
             <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
             <input type="text" id="node-input-compareValue" style="width:calc(100% - 219px)>
             <input type="hidden" id="node-input-compareType">
+        </div>
+
+        <div class="form-row" id="row-compare-source" hidden>
+            <label for="node-input-compareThing"><i class="fa fa-sitemap"></i> Compare</label>
+            <select id="node-input-compareThing" style="width:calc(55% - 60px)"></select>
+            <select id="node-input-compareItem" style="width:calc(45% - 60px); margin-left:4px;"></select>
+            <select id="node-input-compareFn" style="width:calc(45% - 60px); margin-left:4px;"></select>
         </div>
 
         <div class="form-row">
@@ -188,6 +188,9 @@
         },
         paletteLabel: "event",
         oneditprepare: async function () {
+            // Assigned further down, once the compare field exists; the operator handler and the
+            // value's own change event both call it so one rule decides the row's visibility.
+            var syncCompareRow = function() {};
             var operators = halOperators([{ v: "always", t: "always"}]);
 
             var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
@@ -490,10 +493,13 @@
                 thingsList, groupsList, this.compareSource);
             $("#node-input-compareThing").change(syncCompareSource);
             syncCompareSource();
-            $('#node-input-compareValue').on('change', function() {
+            syncCompareRow = function() {
+                var op = $("#node-input-operator").val();
+                var takesValue = op !== 'always' && op !== 'true' && op !== 'false';
                 $("#row-compare-source").toggle(
-                    $('#node-input-compareValue').typedInput('type') === 'state');
-            });
+                    takesValue && $('#node-input-compareValue').typedInput('type') === 'state');
+            };
+            $('#node-input-compareValue').on('change', syncCompareRow);
             // The type is restored even when there is no value to restore: `state` carries none
             // (hasValue:false), so gating this on compareValue would load every saved state
             // comparison back as whatever type the field happened to default to.
@@ -555,11 +561,14 @@
                         $('#node-input-compareValue').typedInput('type','re');
                     } else {
                         $('#node-input-compareValue').typedInput('types',['num',halTypeState()]);
-                        $('#node-input-compareValue').typedInput('type','num');                        
+                        if ($('#node-input-compareValue').typedInput('type') !== 'state') {
+                            $('#node-input-compareValue').typedInput('type','num');
+                        }
                     }
                 } else {
                     $('#node-input-compareValue').typedInput('types',['str','num','json',halTypeState()]);
                 }
+                syncCompareRow();
             });
         },
         oneditsave: function () {

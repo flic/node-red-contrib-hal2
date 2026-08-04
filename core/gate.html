@@ -369,14 +369,11 @@
                                 valueField.typedInput('type','re');
                             } else {
                                 valueField.typedInput('types',['msg','flow','global','num','env',halTypeState()]);
-                                valueField.typedInput('type',rule.ct);                        
                             }
                         } else if (type == "last_update_gte" || type == "last_update_lte" || type == "last_change_gte" || type == "last_change_lte") {
                             valueField.typedInput('types',['num','msg','flow','global','env']);
-                            valueField.typedInput('type',rule.ct);
                         } else {
                             valueField.typedInput('types',['msg','flow','global','str','num','env',halTypeState()]);
-                            valueField.typedInput('type',rule.ct);
                         }
                     });
 
@@ -384,11 +381,18 @@
                     if (Object.keys(rule).length !== 0) {
                         thingsField.val(rule.thing);
                         operatorField.val(rule.operator);
-                        valueField.typedInput('value',rule.value);
-                        valueField.typedInput('type',rule.type);
                         if (typeof rule.thingtype !== 'undefined') { typesField.val(rule.thingtype); }
                     }
+                    // The operator decides which types the value field offers, so it has to run
+                    // before the saved type is put back: typedInput drops a type that is not in
+                    // the current list, and the list here starts as Node-RED's built-in set,
+                    // which has no 'state'. Restoring first lost every saved state comparison.
                     operatorField.trigger('change');
+                    if (Object.keys(rule).length !== 0) {
+                        valueField.typedInput('value', rule.value === undefined ? '' : rule.value);
+                        if (rule.type) { valueField.typedInput('type', rule.type); }
+                    }
+                    rowCmp.toggle(valueField.typedInput('type') === 'state');
                     thingsField.trigger('change');
                     itemsField.trigger('change');
                 },
