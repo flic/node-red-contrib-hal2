@@ -747,13 +747,18 @@
                     }
                 }
 
-                // The collapsed line: what the rule says, and what it does about it.
+                // The collapsed row, in two lines: what the rule says and does, then how much it
+                // weighs. Broken there rather than truncated, so a long sentence stays readable.
                 function ruleSummary(rule, share, scaled) {
-                    if (!rule.steps.length || !stepValid(rule.steps[0])) { return '(incomplete rule)'; }
+                    if (!rule.steps.length || !stepValid(rule.steps[0])) {
+                        return { text: '(incomplete rule)', share: '' };
+                    }
                     var sentence = blabel.describeRule(rule, rule.steps.map(stepNamesEditor));
                     var weight = (scaled ? 'scaled' : (rule.strength || 'moderate'));
-                    var pctTxt = isFinite(share) ? '  ·  ' + pct(Math.abs(share)) + ' %' : '';
-                    return sentence + '  →  makes it ' + (rule.direction || 'true') + ', ' + weight + pctTxt;
+                    return {
+                        text : sentence + '  →  makes it ' + (rule.direction || 'true') + ', ' + weight,
+                        share: isFinite(share) ? pct(Math.abs(share)) + ' %' : ''
+                    };
                 }
 
                 function refreshRuleView(container) {
@@ -879,7 +884,9 @@
                             ? sPct + ' % of the way to ' + toward + (share >= 1 ? ' — enough on its own' : '')
                             : sPct + ' % (pushes toward ' + against + ')');
                     container.find('.br-share-caption').text(capt);
-                    container.find('.br-summary').text(ruleSummary(rule, share, scaled));
+                    var sum = ruleSummary(rule, share, scaled);
+                    container.find('.br-summary').text(sum.text);
+                    container.find('.br-summary-share').text(sum.share);
 
                     var custom = Number(rule.lr) > 0;
                     container.find('.br-strength').prop('disabled', custom)
@@ -982,11 +989,16 @@
                         // collapses to one sentence — the same phrasing the snapshot uses, from
                         // resources/bayes-label.js — and opens on demand, the way ThingType items
                         // and the Groups tab already work.
-                        var headRow = $('<div/>', { style: "white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" })
+                        var headRow = $('<div/>', { style: "display:flex; align-items:baseline;" })
                             .appendTo(container);
-                        var expandButton = $('<span/>', { style: "margin-right:8px; cursor:pointer; color:#888;" })
+                        var expandButton = $('<span/>', { style: "flex:0 0 auto; margin-right:8px; cursor:pointer; color:#888;" })
                             .html('<i class="fa fa-angle-right"></i>').appendTo(headRow);
-                        var summarySpan = $('<span/>', { class: "br-summary" }).appendTo(headRow);
+                        var headText = $('<div/>', { style: "flex:1 1 0; min-width:0; line-height:1.4;" })
+                            .appendTo(headRow);
+                        var summarySpan = $('<span/>', { class: "br-summary", style: "display:block;" })
+                            .appendTo(headText);
+                        var summaryShare = $('<span/>', { class: "br-summary-share",
+                            style: "display:block; color:#888;" }).appendTo(headText);
                         var body = $('<div/>', { class: "br-body", style: "margin-top:6px;" }).appendTo(container);
 
                         expandButton.click(function(e) {
@@ -998,7 +1010,7 @@
                         });
                         // Opening the row is also how you read the summary in full when the
                         // sentence is too long for one line.
-                        summarySpan.css('cursor', 'pointer').click(function() { expandButton.click(); });
+                        headText.css('cursor', 'pointer').click(function() { expandButton.click(); });
 
                         var stepsDiv = $('<div/>', { class: "bayes-steps" }).appendTo(body);
                         (rule.steps || []).forEach(function(s) { addStepRow(stepsDiv, container, s); });
