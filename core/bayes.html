@@ -523,19 +523,45 @@
                     // The comparison source, when the value is another live reading rather than a
                     // constant. Its own line: line 2 already carries the operator and the value,
                     // and this is a source picker of the same weight as the one on line 1.
+                    // The source on one row and what is read from it on the next, mirroring the
+                    // separate rows the other two nodes use. Each spans flex:1 1 0 between the
+                    // 50px lead and the 34px remove-button pad, which is exactly the width line 1
+                    // gives its thing and item selects together — so the two sides of the
+                    // comparison line up down the dialog instead of stepping in and out.
                     var cmpRow = $('<div/>', { class: "bs-cmp-row",
                         style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
                     $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box; color:#888;" })
                         .appendTo(cmpRow).text('vs');
-                    var cmpSel  = $('<select/>', { class: "bs-cmp", style: "flex:5 1 0; min-width:0;" }).appendTo(cmpRow);
-                    var cmpItem = $('<select/>', { class: "bs-cmpitem", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(cmpRow);
-                    var cmpFn   = $('<select/>', { class: "bs-cmpfn", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(cmpRow);
+                    var cmpSel  = $('<select/>', { class: "bs-cmp", style: "flex:1 1 0; min-width:0;" }).appendTo(cmpRow);
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(cmpRow);
-                    var syncCmp = halFillSourcePicker(cmpSel, cmpItem, cmpFn, thingsList, groupsList, step.cmp);
+
+                    var cmpRow2 = $('<div/>', { class: "bs-cmp-row2",
+                        style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(cmpRow2);
+                    var cmpItem = $('<select/>', { class: "bs-cmpitem", style: "flex:1 1 0; min-width:0;" }).appendTo(cmpRow2);
+                    var cmpFn   = $('<select/>', { class: "bs-cmpfn", style: "flex:1 1 0; min-width:0;" }).appendTo(cmpRow2);
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(cmpRow2);
+
+                    var cmpTipRow = $('<div/>', { class: "bs-cmp-tip-row",
+                        style: "display:flex; align-items:center; margin-top:6px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(cmpTipRow);
+                    var cmpTip = $('<div/>', { class: "form-tips bs-cmp-tip",
+                        style: "flex:1 1 0; min-width:0; max-width:none; box-sizing:border-box; white-space:normal;" })
+                        .appendTo(cmpTipRow);
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(cmpTipRow);
+
+                    var syncCmp = halFillSourcePicker(cmpSel, cmpItem, cmpFn, thingsList, groupsList, step.cmp,
+                        function(text) { cmpTip.text(text); cmpTipRow.toggle(!!text && cmpRow.is(':visible')); });
+                    // One place decides the whole block, so the three rows cannot drift apart.
+                    function showCmp(on) {
+                        cmpRow.toggle(on);
+                        cmpRow2.toggle(on);
+                        cmpTipRow.toggle(on && !!cmpTip.text());
+                    }
                     cmpSel.change(syncCmp);
                     syncCmp();
                     valField.on('change', function() {
-                        cmpRow.toggle(valField.typedInput('type') === 'state');
+                        showCmp(valField.typedInput('type') === 'state');
                     });
                     // Line 3 — when the condition has to hold, plus the numbers that bound it.
                     // Deliberately off the condition line: that one says *what*, this says
@@ -627,8 +653,8 @@
                         } else {
                             valField.typedInput('types', ['str', 'num', 'bool', 're', halTypeState()]);
                         }
-                        cmpRow.toggle(op !== 'true' && op !== 'false' &&
-                                      valField.typedInput('type') === 'state');
+                        showCmp(op !== 'true' && op !== 'false' &&
+                                valField.typedInput('type') === 'state');
                     };
                     opSel.change(opHandler);
 
@@ -839,7 +865,11 @@
                         patSel.toggle(allowed.length > 1);
                         var takesValue = !isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0;
                         el.find('.bs-val-wrap').toggle(takesValue);
-                        el.find('.bs-cmp-row').toggle(takesValue && el.find('.bs-val').typedInput('type') === 'state');
+                        // All three compare rows, not just the first: refreshRuleView runs on
+                        // every change and would otherwise leave the item and tip rows behind.
+                        var showsCmp = takesValue && el.find('.bs-val').typedInput('type') === 'state';
+                        el.find('.bs-cmp-row, .bs-cmp-row2').toggle(showsCmp);
+                        el.find('.bs-cmp-tip-row').toggle(showsCmp && !!el.find('.bs-cmp-tip').text());
 
                         var pat = patSel.val();
                         // A condition reads "and …"; an event reads "then …".
