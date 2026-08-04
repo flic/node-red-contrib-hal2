@@ -992,3 +992,137 @@ describe('unusable operator and value pairings', function() {
         assert.strictEqual(byId(b.evaluate(stateOf({ a: 'x' }), 0), 'j').status, 'condition-false');
     });
 });
+
+describe('a prior above the on-threshold', function() {
+    // "Assume the house is quiet until something says otherwise": the node rests on and rules
+    // push it off. The estimate always handled this; what did not was every report of it,
+    // because requiredGain came out negative and two negatives divide positive — so a rule
+    // pushing the output down was described as pushing it up.
+    const P = { prior: 0.93, pOn: 0.80, pOff: 0.35, clamp: 6 };
+    const veto = (id, strength) => ({ id, lr: 1 / scale.strengthLr(strength), halfLifeMs: null,
+                                      steps: [step('is', { thing: id })] });
+    const make = rules => createBayes(cfgOf(Object.assign({}, P, { rules })));
+
+    it('measures the way to off, since that is the way it can move', function() {
+        const gain = scale.requiredGain(P.prior, P.pOn, P.pOff);
+        assert.ok(gain < 0, 'the reachable threshold is below the prior');
+        assert.strictEqual(scale.restsOn(P.prior, P.pOn), true);
+
+        // One decisive veto is just enough — which is what the estimate does too.
+        const share = scale.shareOfWay(1 / scale.strengthLr('decisive'), P.prior, P.pOn, P.clamp, P.pOff);
+        assert.ok(Math.abs(share - 1.06) < 0.02, share);
+    });
+
+    it('reports a rule that pushes the output down as a positive share', function() {
+        // The bug as reported: decisive-false read as +283 % of the way to ON.
+        const b = make([veto('motion', 'decisive')]);
+        const r = b.evaluate(stateOf({ motion: true }), 0);
+        assert.strictEqual(r.binary, false, 'the estimate was always right');
+        assert.ok(Math.abs(byId(r, 'motion').share - 106) < 1, byId(r, 'motion').share);
+    });
+
+    it('keeps shares additive against the one denominator', function() {
+        const b = make([veto('tv', 'slight'), veto('motion', 'decisive')]);
+        const r = b.evaluate(stateOf({ tv: true, motion: true }), 0);
+        const sum = active(r).reduce((t, x) => t + x.share, 0);
+        assert.ok(Math.abs(sum - r.share) < 0.2, sum + ' vs ' + r.share);
+    });
+
+    it('rests on and is pushed off, not the other way round', function() {
+        const b = make([veto('tv', 'slight'), veto('motion', 'decisive')]);
+        assert.strictEqual(b.evaluate(stateOf({}), 0).binary, true, 'silence reads as on');
+        assert.strictEqual(b.evaluate(stateOf({ tv: true }), MIN).binary, true, 'a slight veto is not enough');
+        assert.strictEqual(b.evaluate(stateOf({ motion: true }), 2 * MIN).binary, false, 'a decisive one is');
+        assert.strictEqual(b.evaluate(stateOf({}), 3 * MIN).binary, true, 'and it comes back');
+    });
+
+    it('leaves an ordinary configuration exactly as it was', function() {
+        // The fix must not move the normal case: prior below the threshold still measures up.
+        assert.strictEqual(scale.restsOn(0.2, 0.85), false);
+        const withOff = scale.shareOfWay(10, 0.2, 0.85, 6, 0.30);
+        const without = scale.shareOfWay(10, 0.2, 0.85, 6);
+        assert.strictEqual(withOff, without);
+        assert.ok(Math.abs(withOff - 0.7378) < 1e-3);
+    });
+});
+
+describe('a condition that must have held', function() {
+    // "Up for ten minutes" rather than "up right now" — what separates a bathroom trip from
+    // getting up for the day. It is a property of time, not of the reading, so it cannot be
+    // decided by the condition alone.
+    const heldRule = (id, lr, holdMs) => ({ id, lr, halfLifeMs: null,
+        steps: [step('held', { thing: id, holdMs: holdMs })] });
+    const TEN = 10 * MIN;
+
+    it('does not count until the condition has held long enough', function() {
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        const R = stateOf({ up: true });
+
+        assert.strictEqual(active(b.evaluate(R, 0)).length, 0, 'just became true');
+        assert.strictEqual(active(b.evaluate(R, 5 * MIN)).length, 0, 'halfway');
+        assert.strictEqual(active(b.evaluate(R, TEN)).length, 1, 'exactly at the limit');
+        assert.strictEqual(active(b.evaluate(R, 30 * MIN)).length, 1, 'and stays');
+    });
+
+    it('starts over when the condition drops', function() {
+        // The bathroom trip: up, back to bed, up again — the clock restarts each time, so a
+        // string of short absences never adds up to a long one.
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        const state = { up: true };
+        const R = stateOf(state);
+        b.evaluate(R, 0);
+        b.handleEvent(hit('up', 0), true, 0);
+
+        state.up = false;
+        b.handleEvent(hit('up', 0), false, 8 * MIN);
+        assert.strictEqual(active(b.evaluate(R, 8 * MIN)).length, 0);
+
+        state.up = true;
+        b.handleEvent(hit('up', 0), true, 9 * MIN);
+        assert.strictEqual(active(b.evaluate(R, 17 * MIN)).length, 0,
+            '8 minutes then 8 more is not 10 in a row');
+        assert.strictEqual(active(b.evaluate(R, 19 * MIN)).length, 1, 'ten from the restart');
+    });
+
+    it('starts the clock when it first sees the condition true', function() {
+        // True while the node was down, or true at the very first evaluation: a hold that has
+        // not been observed has not been observed, so it counts from now rather than forever.
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        const R = stateOf({ up: true });
+        assert.strictEqual(active(b.evaluate(R, 1000 * MIN)).length, 0, 'not credited on sight');
+        assert.strictEqual(active(b.evaluate(R, 1010 * MIN)).length, 1, 'ten minutes later');
+    });
+
+    it('makes a rule of held steps continuous, not a sequence', function() {
+        // Otherwise it would go to the sequence machinery and never fire — a condition is not
+        // an event, whether or not it has to last.
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 10, halfLifeMs: null, steps: [
+            step('held', { thing: 'a', holdMs: TEN }),
+            step('is',   { thing: 'b' })
+        ]}]}));
+        const R = stateOf({ a: true, b: true });
+        assert.strictEqual(byId(b.evaluate(R, 0), 'r').status, 'condition-false', 'a has not held yet');
+        assert.strictEqual(byId(b.evaluate(R, TEN), 'r').status, 'contributing');
+        assert.strictEqual(byId(b.evaluate(stateOf({ a: true, b: false }), TEN), 'r').status,
+            'condition-false', 'still an AND');
+    });
+
+    it('a zero duration behaves exactly like an ordinary condition', function() {
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, 0)] }));
+        assert.strictEqual(active(b.evaluate(stateOf({ up: true }), 0)).length, 1);
+        assert.strictEqual(active(b.evaluate(stateOf({ up: false }), MIN)).length, 0);
+    });
+
+    it('survives a restart with the hold intact', function() {
+        // The edge is persisted with the rest of the state, so a deploy does not reset a
+        // condition that has genuinely been true for an hour.
+        const a = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        a.handleEvent(hit('up', 0), true, 0);
+        const saved = a.serialize();
+
+        const b = createBayes(cfgOf({ rules: [heldRule('up', 10, TEN)] }));
+        b.restore(saved, 20 * MIN);
+        assert.strictEqual(active(b.evaluate(stateOf({ up: true }), 20 * MIN)).length, 1,
+            'twenty minutes of holding survived the restart');
+    });
+});

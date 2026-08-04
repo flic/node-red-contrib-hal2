@@ -27,7 +27,8 @@
     // 'isOrBecomes' carry none: the lead word already said they are conditions.
     var PATTERNS = {
         becomes: 'on change',
-        cycle: 'on a full cycle'
+        cycle: 'on a full cycle',
+        held: 'for a while'
     };
 
     // The lead word, matching what the editor prints in .bs-lead (core/bayes.html). A rule
@@ -35,14 +36,15 @@
     // "When …", and later steps read "and" or "then" depending on their own pattern.
     function lead(step, index, continuous) {
         if (index === 0) { return continuous ? 'While' : 'When'; }
-        return (step.pattern === 'is' || step.pattern === 'isOrBecomes') ? 'and' : 'then';
+        return isCondition(step) ? 'and' : 'then';
     }
 
     // A rule is continuous when every step is a level check — the same test the estimator uses
     // to decide whether a rule holds a weight or fires one (lib/bayes.js). Several conditions
     // read as one "While A and B": they all have to hold at once.
     function isCondition(step) {
-        return !!step && (step.pattern === 'is' || step.pattern === 'isOrBecomes');
+        return !!step && (step.pattern === 'is' || step.pattern === 'isOrBecomes' ||
+                          step.pattern === 'held');
     }
     function isContinuous(rule) {
         return !!(rule && rule.steps && rule.steps.length && rule.steps.every(isCondition));

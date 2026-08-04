@@ -58,15 +58,33 @@
         return 1200; // normal
     }
 
-    // The log-odds gain a rule set must supply to take the estimate from the
-    // prior to the on-threshold.
-    function requiredGain(prior, pOn) { return logit(pOn) - logit(prior); }
+    // The log-odds a rule set must supply to flip the output from where it rests.
+    //
+    // Normally the node rests off — the prior sits below the on-threshold — and the distance
+    // that matters is up to pOn. But a prior *above* pOn is a legitimate and useful
+    // configuration: the node rests on and evidence pushes it off, which is how you say "assume
+    // the house is quiet until something says otherwise". There the distance that matters is
+    // down to pOff, and measuring against pOn instead makes the gain negative — which silently
+    // turns every negative rule into a positive share, because two negatives divide positive.
+    //
+    // So the reference is whichever threshold the node would actually cross. Both branches
+    // return a signed gain, so a rule pushing the way the node can move always reports a
+    // positive share, and shares still add: there is one denominator either way.
+    function requiredGain(prior, pOn, pOff) {
+        if (pOff !== undefined && logit(prior) >= logit(pOn)) {
+            return logit(pOff) - logit(prior);        // rests on; the way out is down
+        }
+        return logit(pOn) - logit(prior);
+    }
+
+    // Which way this configuration can move from rest, for wording that has to follow.
+    function restsOn(prior, pOn) { return logit(prior) >= logit(pOn); }
 
     // Share of the way to "on" for an effective likelihood ratio (direction
     // already applied — lr < 1 yields a negative share). Returned as a fraction
     // (0.74 = 74 %).
-    function shareOfWay(lr, prior, pOn, clamp) {
-        return clampLn(Math.log(lr), clamp) / requiredGain(prior, pOn);
+    function shareOfWay(lr, prior, pOn, clamp, pOff) {
+        return clampLn(Math.log(lr), clamp) / requiredGain(prior, pOn, pOff);
     }
 
     // Maps a measured value onto a share, linearly between two points and clamped to the
@@ -96,8 +114,8 @@
     }
 
     // Inverse of shareOfWay: a share back to the log-odds it contributes.
-    function shareToLn(share, prior, pOn, clamp) {
-        return clampLn(share * requiredGain(prior, pOn), clamp);
+    function shareToLn(share, prior, pOn, clamp, pOff) {
+        return clampLn(share * requiredGain(prior, pOn, pOff), clamp);
     }
 
     // Scenario estimate for the summary line: all continuous rules inactive, the
@@ -138,6 +156,7 @@
         strengthLr: strengthLr,
         fadeSeconds: fadeSeconds,
         requiredGain: requiredGain,
+        restsOn: restsOn,
         shareOfWay: shareOfWay,
         scaleShare: scaleShare,
         shareToLn: shareToLn,
