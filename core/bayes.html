@@ -515,7 +515,8 @@
                     // that width). Otherwise it measures outerWidth() at construction — which runs
                     // while the Rules tab is still display:none, so the measurement is 0.
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
-                        .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
+                        .appendTo(valWrap).typedInput({ default: step.valueType || 'str',
+                            types: ['str', 'num', 'bool', 're', halTypeState()] });
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
 

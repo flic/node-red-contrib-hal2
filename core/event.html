@@ -494,9 +494,11 @@
                 $("#row-compare-source").toggle(
                     $('#node-input-compareValue').typedInput('type') === 'state');
             });
-            if (this.compareValue) {
-                $("#node-input-compareValue").typedInput('value',this.compareValue).typedInput('type',this.compareType);                           
-            }
+            // The type is restored even when there is no value to restore: `state` carries none
+            // (hasValue:false), so gating this on compareValue would load every saved state
+            // comparison back as whatever type the field happened to default to.
+            $("#node-input-compareValue").typedInput('value', this.compareValue || '');
+            if (this.compareType) { $("#node-input-compareValue").typedInput('type', this.compareType); }
 
             //On change, update
             $("<option value='0'>on update</option>").appendTo("#node-input-change");
@@ -552,11 +554,11 @@
                         $('#node-input-compareValue').typedInput('types',['re']);
                         $('#node-input-compareValue').typedInput('type','re');
                     } else {
-                        $('#node-input-compareValue').typedInput('types',['num']);
+                        $('#node-input-compareValue').typedInput('types',['num',halTypeState()]);
                         $('#node-input-compareValue').typedInput('type','num');                        
                     }
                 } else {
-                    $('#node-input-compareValue').typedInput('types',['str','num','json']);
+                    $('#node-input-compareValue').typedInput('types',['str','num','json',halTypeState()]);
                 }
             });
         },
