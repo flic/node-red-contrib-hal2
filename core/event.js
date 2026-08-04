@@ -11,6 +11,7 @@ module.exports = function(RED) {
         this.change         = config.change;
         this.compareValue   = config.compareValue;
         this.compareType    = config.compareType;
+        this.compareSource  = config.compareSource || null;
         this.outputValue    = config.outputValue;
         this.outputType     = config.outputType;
         this.typeSel        = config.typeSel;
@@ -54,8 +55,26 @@ module.exports = function(RED) {
             'otherwise':function (a,b,c)    { return c === 0 }
         }, rules.COMPARE);
 
-        // Copy so per-node use can never mutate the shared converter table.
-        var convertTo = Object.assign({}, rules.CONVERTERS);
+        // Copy so per-node use can never mutate the shared converter table. `state` compares
+        // against another live reading rather than a constant, resolved at trigger time so the
+        // two sides cannot disagree because one was stored earlier.
+        var convertTo = Object.assign({
+            'state': function () {
+                var spec = node.compareSource;
+                if (!spec) { return undefined; }
+                if (spec.src === 'group') {
+                    if (!node.eventHandler || typeof node.eventHandler.readGroup !== 'function') { return undefined; }
+                    if (spec.groupFunction) {
+                        var read = node.eventHandler.readGroup(spec.group, spec.groupFunction);
+                        return read ? read.value : undefined;
+                    }
+                    var rec = node.eventHandler.getGroupState(spec.group);
+                    return rec ? rec.state : undefined;
+                }
+                var thing = RED.nodes.getNode(spec.thing);
+                return (thing && thing.state) ? thing.state[spec.item] : undefined;
+            }
+        }, rules.CONVERTERS);
 
         function showState() {
             var now = Date.now();
@@ -205,7 +224,9 @@ module.exports = function(RED) {
                 }
                 if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
                 if (node.change == '1' && event.state === event.laststate) { return; }
-                if (compare[node.operator](event.state,convertTo[node.compareType](node.compareValue),event.laststate)){
+                var cv = convertTo[node.compareType](node.compareValue);
+                if (node.compareType === 'state' && cv === undefined) { showState(); return; }
+                if (compare[node.operator](event.state,cv,event.laststate)){
                     if (node.delay) {
                         if (typeof eventDelay[thingid] != 'undefined') {
                             if (node.delayExtend) {

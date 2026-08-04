@@ -1126,3 +1126,63 @@ describe('a condition that must have held', function() {
             'twenty minutes of holding survived the restart');
     });
 });
+
+describe('comparing one source against another', function() {
+    // Both sides read in the same pass, so they cannot disagree because one was stored
+    // earlier — the staleness that a flow variable between them invites.
+    const cmpRule = (id, lr, cmp) => ({ id, lr, halfLifeMs: null, steps: [
+        step('is', { thing: 'a', operator: 'gt', valueType: 'state', value: '', cmp: cmp })
+    ]});
+    const OTHER = { src: 'thing', thing: 'b', item: 'b' };
+
+    it('compares against the other source as it reads right now', function() {
+        const b = createBayes(cfgOf({ rules: [cmpRule('r', 10, OTHER)] }));
+        const state = { a: 25, b: 20 };
+        const R = stateOf(state);
+
+        assert.strictEqual(active(b.evaluate(R, 0)).length, 1, '25 > 20');
+        state.b = 30;
+        assert.strictEqual(active(b.evaluate(R, MIN)).length, 0, 'the other side moved past it');
+        state.b = 10;
+        assert.strictEqual(active(b.evaluate(R, 2 * MIN)).length, 1, 'and back');
+    });
+
+    it('follows a change on either side within the same evaluation', function() {
+        // Nothing is stored between them, so there is no window where the two disagree.
+        const b = createBayes(cfgOf({ rules: [cmpRule('r', 10, OTHER)] }));
+        const state = { a: 25, b: 20 };
+        const R = stateOf(state);
+        assert.strictEqual(active(b.evaluate(R, 0)).length, 1);
+        state.a = 15;
+        assert.strictEqual(active(b.evaluate(R, MIN)).length, 0, 'left side moved');
+    });
+
+    it('does not match when the comparison source cannot be read', function() {
+        const b = createBayes(cfgOf({ rules: [
+            cmpRule('bad', 10, { src: 'thing', thing: 'gone', item: 'gone' }),
+            contRule('good', 10, { thing: 'c' })
+        ]}));
+        const r = b.evaluate(stateOf({ a: 25, c: true }), 0);
+        assert.strictEqual(byId(r, 'bad').status, 'condition-false', 'nothing to compare against');
+        assert.strictEqual(byId(r, 'good').status, 'contributing', 'and the neighbours still run');
+    });
+
+    it('does not match — and does not throw — with no resolver available', function() {
+        // completeStep advances a sequence on an edge alone and passes no resolver. A state
+        // comparison cannot be evaluated there, and one unevaluable step must not take the
+        // whole evaluation with it.
+        const b = createBayes(cfgOf({ rules: [cmpRule('r', 10, OTHER)] }));
+        assert.doesNotThrow(function() { b.evaluate(function() { return 25; }, 0); });
+        const missingSpec = createBayes(cfgOf({ rules: [cmpRule('r', 10, null)] }));
+        assert.strictEqual(active(missingSpec.evaluate(stateOf({ a: 25 }), 0)).length, 0);
+    });
+
+    it('leaves the ordinary value types alone', function() {
+        const b = createBayes(cfgOf({ rules: [
+            { id: 'num', lr: 10, halfLifeMs: null,
+              steps: [step('is', { thing: 'a', operator: 'gt', value: '20', valueType: 'num' })] }
+        ]}));
+        assert.strictEqual(active(b.evaluate(stateOf({ a: 25 }), 0)).length, 1);
+        assert.strictEqual(active(b.evaluate(stateOf({ a: 15 }), MIN)).length, 0);
+    });
+});

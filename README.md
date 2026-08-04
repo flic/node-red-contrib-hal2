@@ -238,6 +238,25 @@ convincing. The node is an anonymous estimator: it knows nothing about people, i
 evidence. Use one node per hypothesis (one per person) and wire its output onward like any
 other message — e.g. into a Scene-type sensor representing the person.
 
+### Comparing against another source
+
+Every comparison in hal2Gate, hal2Event and hal2Bayes normally weighs a source against a
+**constant** — a number, a string, or a variable. Pick the **state** value type instead and the
+right-hand side is another live reading: another Thing's Item, or a Group with a function of its own.
+
+This is worth more than the convenience. The alternative was storing one side in a flow variable
+and comparing against that, which samples the two sides at different moments: something changes,
+the variable has not caught up, and the comparison is silently wrong until it corrects itself. With
+`state` both sides are read in the same pass, so the window does not exist. "Is everyone who is
+home asleep?" becomes one rule — *people home* `count true` **==** *phones charging* `count true` —
+with nothing stored in between.
+
+The right-hand side is described the same way everywhere: a source, and an item or group function.
+It is offered wherever comparing two values makes sense, so not for *is true*/*is false*, *regex*,
+or the Gate's `last_*` operators, which compare against a duration. A source that cannot be read —
+a deleted Thing, a group with no live member — makes the rule not match rather than comparing
+against nothing.
+
 ### Rules
 
 Each rule collapses to a single line stating what it says and what it does about it — the same

@@ -9,52 +9,61 @@ module.exports = function(RED) {
             'flow':     function (value)    { return node.context().flow.get(value); },
             'global':   function (value)    { return node.context().global.get(value); },
             'env':      function (value)    { return process.env[value]; },
-            'msg':      function (value,msg)    { return RED.util.getMessageProperty(msg,value); }
+            'msg':      function (value,msg)    { return RED.util.getMessageProperty(msg,value); },
+            // Both sides read in the same pass, so they cannot disagree because one was stored
+            // earlier — which is the whole reason this type exists.
+            'state':    function (value,msg,rule) {
+                var read = rule && rule.cmp ? readSource(rule.cmp) : null;
+                return read ? read.state : undefined;
+            }
         }, rules.CONVERTERS);
 
         //a=state, b=comparison value
         var compare = rules.COMPARE;
 
-        // The state a rule compares against, plus the timestamps the last_* operators need.
-        // A thing keeps these per item; a group keeps one set for its whole aggregated value.
-        function sourceOf(rule) {
-            if (rule.category === 'hal2Group') {
-                if (!node.eventHandler || typeof node.eventHandler.getGroupState !== 'function') {
-                    node.warn('Rule skipped: a group rule needs an event handler on this node');
+        // One reading, from a spec that says where to look: { src, thing, item, group,
+        // groupFunction } — the shape hal2Bayes uses for its steps, so both sides of a rule and
+        // all three rule nodes describe a source the same way. Returns null when it cannot be
+        // read, which every caller treats as "no match" rather than as a value.
+        //
+        // `dynamic` is only meaningful on the left: the right-hand side of a comparison names
+        // the thing it means.
+        function readSource(spec) {
+            if (spec.src === 'group') {
+                if (!node.eventHandler || typeof node.eventHandler.readGroup !== 'function') {
+                    node.warn('Rule skipped: a group source needs an event handler on this node');
                     return null;
                 }
-                // Each rule reads the group its own way; without a function of its own it
-                // falls back to whatever the group reports by default.
-                if (rule.function) {
-                    var read = node.eventHandler.readGroup(rule.thing, rule.function);
-                    if (!read || read.value === undefined) { return null; }
-                    // The engine tracks a record per function, so these are the real
-                    // timestamps for this function rather than the default's or a derived
-                    // guess — which could not be right for min, max or anyTrue.
-                    return { state: read.value, laststate: read.laststate,
-                             last_update: read.last_update, last_change: read.last_change };
+                if (spec.groupFunction) {
+                    var gread = node.eventHandler.readGroup(spec.group, spec.groupFunction);
+                    if (!gread || gread.value === undefined) { return null; }
+                    return { state: gread.value, laststate: gread.laststate,
+                             last_update: gread.last_update, last_change: gread.last_change };
                 }
-                var rec = node.eventHandler.getGroupState(rule.thing);
-                // No record, or no live member reporting: the rule has nothing to compare
-                // and does not match, rather than matching against a stale or invented value.
-                if (!rec || rec.state === undefined) { return null; }
-                return { state: rec.state, laststate: rec.laststate,
-                         last_update: rec.last_update, last_change: rec.last_change };
+                var grec = node.eventHandler.getGroupState(spec.group);
+                if (!grec || grec.state === undefined) { return null; }
+                return { state: grec.state, laststate: grec.laststate,
+                         last_update: grec.last_update, last_change: grec.last_change };
+            }
+            var t;
+            try { t = RED.nodes.getNode(spec.thing); }
+            catch (error) { return null; }
+            if (!t || !t.state || !t.state.hasOwnProperty(spec.item)) { return null; }
+            return { state: t.state[spec.item], laststate: t.laststate[spec.item],
+                     last_update: t.heartbeat[spec.item], last_change: t.last_change[spec.item] };
+        }
+
+        // The left-hand side of a rule, expressed as a spec and read the same way. `dynamic`
+        // resolves to a thing named by the message; everything else is a plain source.
+        function sourceOf(rule) {
+            if (rule.category === 'hal2Group') {
+                return readSource({ src: 'group', group: rule.thing, groupFunction: rule.function });
             }
             var id = (rule.thing == 'dynamic')
                 ? common.thingIdFromMsg(RED,node,rule.thingtype,msg)
                 : rule.thing;
             if (typeof id == 'undefined') { return null; }
-            var thing;
-            try {
-                thing = RED.nodes.getNode(id);
-            } catch (error) {
-                console.log('Error: '+error.message);
-            }
-            if (typeof thing == 'undefined' || thing === null) { return null; }
-            if (!thing.state || !thing.state.hasOwnProperty(rule.item)) { return null; }
-            return { state: thing.state[rule.item], laststate: thing.laststate[rule.item],
-                     last_update: thing.heartbeat[rule.item], last_change: thing.last_change[rule.item] };
+            return readSource({ src: 'thing', thing: id, item: rule.item });
         }
 
         var ruleMatch = 0;
@@ -63,7 +72,10 @@ module.exports = function(RED) {
             var src = sourceOf(rule);
             if (src === null) { continue; }      // unresolvable source never matches
 
-            var cv = convertTo[rule.type](rule.value,msg);
+            var cv = convertTo[rule.type](rule.value,msg,rule);
+            // An unreadable comparison source is not a value of undefined to compare against;
+            // the rule simply has nothing to say.
+            if (rule.type === 'state' && cv === undefined) { continue; }
 
             if (rule.operator.includes('last_')) {
                 let now = Date.now();

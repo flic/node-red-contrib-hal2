@@ -31,6 +31,13 @@
             <select id="node-input-groupFunction" style="width:calc(100% - 170px)"></select>
         </div>
 
+        <div class="form-row" id="row-compare-source" hidden>
+            <label for="node-input-compareThing"><i class="fa fa-sitemap"></i> Compare</label>
+            <select id="node-input-compareThing" style="width:calc(55% - 60px)"></select>
+            <select id="node-input-compareItem" style="width:calc(45% - 60px); margin-left:4px;"></select>
+            <select id="node-input-compareFn" style="width:calc(45% - 60px); margin-left:4px;"></select>
+        </div>
+
         <div class="form-tips" id="row-group-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;">
             <small id="group-tip"></small>
         </div>
@@ -161,6 +168,7 @@
             change:         { value: "1" },
             compareValue:   { value: "" },
             compareType:    { value: "num" },
+            compareSource:  { value: null },
             outputValue:    { value: "" },
             outputType:     { required: true },
             ratelimit:      { value: false },
@@ -472,7 +480,19 @@
             $('#node-input-compareValue').typedInput({
                 default: 'num',
                 typeField: $("#node-input-compareType"),
-                types: ['str','num','json']
+                types: ['str','num','json',halTypeState()]
+            });
+
+            // Comparing against another live reading rather than a constant. Both sides are
+            // read when the event fires, so they cannot disagree because one was stored earlier.
+            var syncCompareSource = halFillSourcePicker(
+                $("#node-input-compareThing"), $("#node-input-compareItem"), $("#node-input-compareFn"),
+                thingsList, groupsList, this.compareSource);
+            $("#node-input-compareThing").change(syncCompareSource);
+            syncCompareSource();
+            $('#node-input-compareValue').on('change', function() {
+                $("#row-compare-source").toggle(
+                    $('#node-input-compareValue').typedInput('type') === 'state');
             });
             if (this.compareValue) {
                 $("#node-input-compareValue").typedInput('value',this.compareValue).typedInput('type',this.compareType);                           
@@ -545,6 +565,11 @@
             this.thing =   $("#node-input-thing").val();
             this.compareType = $('#node-input-compareValue').typedInput('type');
             this.compareValue =  $('#node-input-compareValue').typedInput('value');
+            this.compareSource = this.compareType === 'state'
+                ? halReadSourcePicker($("#node-input-compareThing"),
+                                      $("#node-input-compareItem"),
+                                      $("#node-input-compareFn"))
+                : null;
         }
     });
 </script>

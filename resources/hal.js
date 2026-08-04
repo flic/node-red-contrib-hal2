@@ -77,6 +77,71 @@ function halGroupFunctionTip(haType, chosen, stray, strayNote) {
         : 'This group has no default for its HAType — pick a function or it reads as no value.';
 }
 
+// The custom typedInput type for comparing against another live reading. The value the
+// typedInput itself holds is unused — the source is picked in its own row, because a flat list
+// of every thing item and group function runs to several hundred entries.
+function halTypeState() {
+    return { value: "state", label: "state", icon: "fa fa-sitemap", hasValue: false };
+}
+
+// Fill a source picker pair: a thing/group select and, depending on which was chosen, an item
+// select or a group function select. `spec` is { src, thing, item, group, groupFunction } — the
+// shape hal2Bayes uses for its steps, so both sides of a rule describe a source the same way.
+// Returns the element set so the caller can show and hide them together.
+function halFillSourcePicker(sel, itemSel, fnSel, things, groups, spec) {
+    spec = spec || {};
+    sel.children().remove();
+    for (var g in groups) {
+        sel.append($("<option></option>").val('g:' + groups[g].id).text('Group - ' + groups[g].name));
+    }
+    for (var t in things) {
+        sel.append($("<option></option>").val('t:' + things[t].id).text(things[t].name));
+    }
+    var want = spec.src === 'group' ? 'g:' + spec.group : 't:' + spec.thing;
+    if (sel.find('option[value="' + want + '"]').length) { sel.val(want); }
+
+    return function sync() {
+        var val = sel.val() || '';
+        var isGroup = val.indexOf('g:') === 0;
+        var id = val.slice(2);
+        itemSel.toggle(!isGroup);
+        fnSel.toggle(isGroup);
+        if (isGroup) {
+            var grp = null;
+            for (var i in groups) { if (groups[i].id === id) { grp = groups[i]; } }
+            halFillGroupFunctions(fnSel, grp && grp.haType,
+                                  fnSel.val() || (spec.src === 'group' ? spec.groupFunction : '') || '');
+        } else {
+            var keep = (spec.src !== 'group' && spec.thing === id) ? spec.item : itemSel.val();
+            halFillStatusItems(itemSel, id, keep);
+        }
+    };
+}
+
+// The status-capable items of a thing, for a source picker. Mirrors what every node's own item
+// select already does; kept here so the compare side and the rule side agree on what is readable.
+function halFillStatusItems(sel, thingId, keep) {
+    sel.children().remove();
+    var thing = thingId ? RED.nodes.node(thingId) : null;
+    var tt = null;
+    try { tt = thing ? RED.nodes.node(thing.thingType) : null; } catch (e) {}
+    if (tt && Array.isArray(tt.items)) {
+        tt.items.forEach(function (it) {
+            if (halStatusItem(it)) { sel.append($("<option></option>").val(it.id).text(it.name)); }
+        });
+    }
+    if (keep) { sel.val(keep); }
+}
+
+// Read a source picker back into the spec shape.
+function halReadSourcePicker(sel, itemSel, fnSel) {
+    var val = sel.val() || '';
+    if (val.indexOf('g:') === 0) {
+        return { src: 'group', group: val.slice(2), groupFunction: fnSel.val() || '' };
+    }
+    return { src: 'thing', thing: val.slice(2), item: itemSel.val() || '' };
+}
+
 function halTypeMQTT() {
     return {
         value: "mqtt",

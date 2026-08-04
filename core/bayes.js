@@ -71,9 +71,17 @@ module.exports = function(RED) {
                     // Waiting for the clock to cross into a window is never useful, so a time
                     // step is always a plain condition wherever it sits.
                     if (src === 'time') { pattern = 'is'; }
+                    // The comparison source is itself a step, so resolveState serves it
+                    // unchanged — a step can be compared against a thing, a group, or a
+                    // flow/global variable without the estimator learning anything new.
+                    const cmp = s.cmp && s.cmp.src ? {
+                        src: s.cmp.src, thing: s.cmp.thing, item: s.cmp.item,
+                        group: s.cmp.group, groupFunction: s.cmp.groupFunction || '',
+                        prop: s.cmp.prop
+                    } : null;
                     return {
                         src, thing: s.thing, item: s.item, group: s.group,
-                        groupFunction: s.groupFunction || '', prop: s.prop,
+                        groupFunction: s.groupFunction || '', prop: s.prop, cmp,
                         start: s.start, end: s.end,
                         days: Array.isArray(s.days) ? s.days.map(Number) : undefined,
                         operator: s.operator, value: s.value, valueType: s.valueType || 'str',
