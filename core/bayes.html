@@ -134,6 +134,11 @@
         <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
             door opening and closing. Reads <i>then&hellip;</i></li>
     </ul>
+    <p>A step's value is normally a constant. Choose the <b>state</b> type and it is another live
+    reading instead &mdash; another thing's item, or a group with a function of its own &mdash; read
+    in the same pass as the step's own source, so the two cannot disagree because one was stored
+    earlier. A comparison source that cannot be read makes the step not match rather than comparing
+    against nothing.</p>
     <p>A rule whose steps are <b>all conditions</b> is not a sequence but an <b>AND</b>: its weight
     applies while every one of them holds at the same time, and it reads <i>While A and B</i>. A rule
     that opens with a condition but waits for an event later cannot work &mdash; nothing completes
@@ -510,9 +515,46 @@
                     // that width). Otherwise it measures outerWidth() at construction — which runs
                     // while the Rules tab is still display:none, so the measurement is 0.
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
-                        .appendTo(valWrap).typedInput({ default: step.valueType || 'str', types: ['str', 'num', 'bool', 're'] });
+                        .appendTo(valWrap).typedInput({ default: step.valueType || 'str',
+                            types: ['str', 'num', 'bool', 're', halTypeState()] });
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
+
+                    // The comparison source, when the value is another live reading rather than a
+                    // constant. Its own line: line 2 already carries the operator and the value,
+                    // and this is a source picker of the same weight as the one on line 1.
+                    // One row, in line 1's own proportions: the source at flex:5 and what is read
+                    // from it at flex:3, so the compare pair sits directly under the thing and
+                    // item it is being compared against.
+                    var cmpRow = $('<div/>', { class: "bs-cmp-row",
+                        style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box; color:#888;" })
+                        .appendTo(cmpRow).text('vs');
+                    var cmpSel  = $('<select/>', { class: "bs-cmp", style: "flex:5 1 0; min-width:0;" }).appendTo(cmpRow);
+                    var cmpItem = $('<select/>', { class: "bs-cmpitem", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(cmpRow);
+                    var cmpFn   = $('<select/>', { class: "bs-cmpfn", style: "flex:3 1 0; min-width:0; margin-left:4px;" }).appendTo(cmpRow);
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(cmpRow);
+
+                    var cmpTipRow = $('<div/>', { class: "bs-cmp-tip-row",
+                        style: "display:flex; align-items:center; margin-top:6px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(cmpTipRow);
+                    var cmpTip = $('<div/>', { class: "form-tips bs-cmp-tip",
+                        style: "flex:1 1 0; min-width:0; max-width:none; box-sizing:border-box; white-space:normal;" })
+                        .appendTo(cmpTipRow);
+                    $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(cmpTipRow);
+
+                    var syncCmp = halFillSourcePicker(cmpSel, cmpItem, cmpFn, thingsList, groupsList, step.cmp,
+                        function(text) { cmpTip.text(text); cmpTipRow.toggle(!!text && cmpRow.is(':visible')); });
+                    // One place decides the whole block, so the three rows cannot drift apart.
+                    function showCmp(on) {
+                        cmpRow.toggle(on);
+                        cmpTipRow.toggle(on && !!cmpTip.text());
+                    }
+                    cmpSel.change(syncCmp);
+                    syncCmp();
+                    valField.on('change', function() {
+                        showCmp(valField.typedInput('type') === 'state');
+                    });
                     // Line 3 — when the condition has to hold, plus the numbers that bound it.
                     // Deliberately off the condition line: that one says *what*, this says
                     // *when*, and read in sequence they became "When ... when it changes".
@@ -590,13 +632,21 @@
                     var opHandler = function() {
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false');
+                        // This runs on every operator change and at construction, so it is the
+                        // last writer of the type list — anything missing here is missing, however
+                        // carefully it was offered elsewhere.
                         if (op === 'regex') {
                             valField.typedInput('types', ['re']).typedInput('type', 're');
                         } else if (halNumericOperator(op)) {
-                            valField.typedInput('types', ['num']).typedInput('type', 'num');
+                            valField.typedInput('types', ['num', halTypeState()]);
+                            if (valField.typedInput('type') !== 'state') {
+                                valField.typedInput('type', 'num');
+                            }
                         } else {
-                            valField.typedInput('types', ['str', 'num', 'bool', 're']);
+                            valField.typedInput('types', ['str', 'num', 'bool', 're', halTypeState()]);
                         }
+                        showCmp(op !== 'true' && op !== 'false' &&
+                                valField.typedInput('type') === 'state');
                     };
                     opSel.change(opHandler);
 
@@ -649,6 +699,7 @@
                             opSel.css('flex', '0 0 130px');
                             halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                             opSel.val(current);
+                            valField.typedInput('types', ['str', 'num', 'bool', 're', halTypeState()]);
                         }
                         opHandler();
                     }
@@ -698,6 +749,9 @@
                             src:      src,
                             thing:    el.find('.bs-thing option:selected').val(),
                             group:    el.find('.bs-group option:selected').val() || '',
+                            cmp:      el.find('.bs-val').typedInput('type') === 'state'
+                                        ? halReadSourcePicker(el.find('.bs-cmp'), el.find('.bs-cmpitem'), el.find('.bs-cmpfn'))
+                                        : null,
                             groupFunction: el.find('.bs-groupfn option:selected').val() || '',
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
@@ -801,7 +855,13 @@
                                        '"now or soon" has nothing to wait for and reads as "now".', 'warning');
                         }
                         patSel.toggle(allowed.length > 1);
-                        el.find('.bs-val-wrap').toggle(!isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0);
+                        var takesValue = !isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0;
+                        el.find('.bs-val-wrap').toggle(takesValue);
+                        // The tip row as well as the compare row: refreshRuleView runs on every
+                        // change and would otherwise leave the tip behind.
+                        var showsCmp = takesValue && el.find('.bs-val').typedInput('type') === 'state';
+                        el.find('.bs-cmp-row').toggle(showsCmp);
+                        el.find('.bs-cmp-tip-row').toggle(showsCmp && !!el.find('.bs-cmp-tip').text());
 
                         var pat = patSel.val();
                         // A condition reads "and …"; an event reads "then …".

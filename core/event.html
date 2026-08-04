@@ -62,6 +62,21 @@
             <input type="hidden" id="node-input-compareType">
         </div>
 
+        <div class="form-row" id="row-compare-source" hidden>
+            <label for="node-input-compareThing"><i class="fa fa-sitemap"></i> Compare</label>
+            <select id="node-input-compareThing" style="width:calc(100% - 170px)"></select>
+        </div>
+
+        <div class="form-row" id="row-compare-item" hidden>
+            <label for="node-input-compareItem" id="label-compare-item"><i class="fa fa-sitemap"></i> Item</label>
+            <select id="node-input-compareItem" style="width:calc(100% - 170px)"></select>
+            <select id="node-input-compareFn" style="width:calc(100% - 170px)"></select>
+        </div>
+
+        <div class="form-tips" id="row-compare-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;" hidden>
+            <small id="compare-tip"></small>
+        </div>
+
         <div class="form-row">
             <label></label>
             <select id="node-input-change" style="width:calc(100% - 170px)"></select>
@@ -161,6 +176,7 @@
             change:         { value: "1" },
             compareValue:   { value: "" },
             compareType:    { value: "num" },
+            compareSource:  { value: null },
             outputValue:    { value: "" },
             outputType:     { required: true },
             ratelimit:      { value: false },
@@ -180,6 +196,9 @@
         },
         paletteLabel: "event",
         oneditprepare: async function () {
+            // Assigned further down, once the compare field exists; the operator handler and the
+            // value's own change event both call it so one rule decides the row's visibility.
+            var syncCompareRow = function() {};
             var operators = halOperators([{ v: "always", t: "always"}]);
 
             var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
@@ -472,11 +491,41 @@
             $('#node-input-compareValue').typedInput({
                 default: 'num',
                 typeField: $("#node-input-compareType"),
-                types: ['str','num','json']
+                types: ['str','num','json',halTypeState()]
             });
-            if (this.compareValue) {
-                $("#node-input-compareValue").typedInput('value',this.compareValue).typedInput('type',this.compareType);                           
-            }
+
+            // Comparing against another live reading rather than a constant. Both sides are
+            // read when the event fires, so they cannot disagree because one was stored earlier.
+            var syncCompareSource = halFillSourcePicker(
+                $("#node-input-compareThing"), $("#node-input-compareItem"), $("#node-input-compareFn"),
+                thingsList, groupsList, this.compareSource,
+                function(text) {
+                    $("#compare-tip").text(text);
+                    $("#row-compare-tip").toggle(!!text && $("#row-compare-source").is(':visible'));
+                });
+            $("#node-input-compareThing").change(function() {
+                // The same word the primary picker uses for the same thing: a group is read
+                // through a Value, a thing through an Item.
+                var isGroup = ($("#node-input-compareThing").val() || '').indexOf('g:') === 0;
+                $("#label-compare-item").text(isGroup ? ' Value' : ' Item')
+                    .attr('class', isGroup ? 'fa fa-calculator' : 'fa fa-sitemap');
+                syncCompareSource();
+            });
+            $("#node-input-compareThing").trigger('change');
+            syncCompareRow = function() {
+                var op = $("#node-input-operator").val();
+                var takesValue = op !== 'always' && op !== 'true' && op !== 'false';
+                var on = takesValue && $('#node-input-compareValue').typedInput('type') === 'state';
+                $("#row-compare-source").toggle(on);
+                $("#row-compare-item").toggle(on);
+                $("#row-compare-tip").toggle(on && !!$("#compare-tip").text());
+            };
+            $('#node-input-compareValue').on('change', syncCompareRow);
+            // The type is restored even when there is no value to restore: `state` carries none
+            // (hasValue:false), so gating this on compareValue would load every saved state
+            // comparison back as whatever type the field happened to default to.
+            $("#node-input-compareValue").typedInput('value', this.compareValue || '');
+            if (this.compareType) { $("#node-input-compareValue").typedInput('type', this.compareType); }
 
             //On change, update
             $("<option value='0'>on update</option>").appendTo("#node-input-change");
@@ -532,12 +581,15 @@
                         $('#node-input-compareValue').typedInput('types',['re']);
                         $('#node-input-compareValue').typedInput('type','re');
                     } else {
-                        $('#node-input-compareValue').typedInput('types',['num']);
-                        $('#node-input-compareValue').typedInput('type','num');                        
+                        $('#node-input-compareValue').typedInput('types',['num',halTypeState()]);
+                        if ($('#node-input-compareValue').typedInput('type') !== 'state') {
+                            $('#node-input-compareValue').typedInput('type','num');
+                        }
                     }
                 } else {
-                    $('#node-input-compareValue').typedInput('types',['str','num','json']);
+                    $('#node-input-compareValue').typedInput('types',['str','num','json',halTypeState()]);
                 }
+                syncCompareRow();
             });
         },
         oneditsave: function () {
@@ -545,6 +597,11 @@
             this.thing =   $("#node-input-thing").val();
             this.compareType = $('#node-input-compareValue').typedInput('type');
             this.compareValue =  $('#node-input-compareValue').typedInput('value');
+            this.compareSource = this.compareType === 'state'
+                ? halReadSourcePicker($("#node-input-compareThing"),
+                                      $("#node-input-compareItem"),
+                                      $("#node-input-compareFn"))
+                : null;
         }
     });
 </script>
