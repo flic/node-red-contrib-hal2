@@ -140,7 +140,6 @@ module.exports = function(RED) {
             return msg;
         };
         const tickMs         = Math.max(5, num(config.tickInterval, 30)) * 1000;
-        const snapshotOnTick = config.snapshotOnTick === true;
         // 'change' (default) emits output 1 only when the binary result flips;
         // 'evaluation' re-asserts the current state on every evaluation.
         const emitOn         = config.emitOn === 'evaluation' ? 'evaluation' : 'change';
@@ -200,17 +199,34 @@ module.exports = function(RED) {
         }
 
         // Evaluate + emit + persist. `emitSnapshot` controls output 2.
-        function run(emitSnapshot) {
+        // Both outputs answer to the same setting. On 'evaluation' each one fires every time
+        // the node evaluates; on 'change' each fires only when it has something new to say —
+        // which for output 1 is the binary flipping, and for output 2 is the snapshot differing
+        // from the one last sent. A sensor re-reporting the value it already had produces an
+        // identical snapshot, and sending it again is noise rather than information.
+        //
+        // Decaying evidence does keep changing the snapshot, so it keeps emitting. That is not
+        // an exception to the rule: the estimate really is moving.
+        let lastSnapshotJson = null;
+
+        function run(force) {
             const result = est.evaluate(resolveState, Date.now());
             persist();
             showStatus(result);
-            const change = (result.changed || emitOn === 'evaluation')
+
+            const everyTime = (emitOn === 'evaluation');
+            const change = (result.changed || everyTime)
                 ? withTopic({ payload: result.binary, probability: Number(result.p.toFixed(4)),
                               changed: result.changed })
                 : null;
-            const snapshot = (emitSnapshot || result.changed)
-                ? withTopic({ payload: snapshotPayload(result) }, '/snapshot')
+
+            const payload = snapshotPayload(result);
+            const json = JSON.stringify(payload);
+            const snapshot = (everyTime || force || json !== lastSnapshotJson)
+                ? withTopic({ payload }, '/snapshot')
                 : null;
+            if (snapshot) { lastSnapshotJson = json; }
+
             if (change || snapshot) { node.send([change, snapshot]); }
             return result;
         }
@@ -237,7 +253,9 @@ module.exports = function(RED) {
                 const hits = items[itemid];
                 if (!hits) { return; }
                 est.handleEvent(hits, event.state, Date.now(), resolveState);
-                run(true);
+                // Not forced: a sensor reporting the value it already had leaves the snapshot
+                // identical, and that was the bulk of the traffic on output 2.
+                run(false);
             };
             node.eventHandler && node.eventHandler.subscribe('update', thingId, listener);
             subscriptions.push({ thingId, listener });
@@ -246,7 +264,7 @@ module.exports = function(RED) {
         // ---- decay/expiry tick ----
         node.tickId = setInterval(function() {
             est.tick(Date.now(), resolveState);
-            run(snapshotOnTick);
+            run(false);
         }, tickMs);
 
         // Initial evaluation once all nodes are registered (things resolvable) — which is also
@@ -266,11 +284,14 @@ module.exports = function(RED) {
                     return done(new Error('evidence needs payload.lr > 0 (≠ 1)'));
                 }
             } else {
-                // anything else → emit a snapshot on output 2
+                // Anything else is a request for a snapshot, so it answers whether or not
+                // anything changed — being asked is the point.
                 const result = est.evaluate(resolveState, Date.now());
                 persist();
                 showStatus(result);
-                send([null, withTopic({ payload: snapshotPayload(result) }, '/snapshot')]);
+                const payload = snapshotPayload(result);
+                lastSnapshotJson = JSON.stringify(payload);
+                send([null, withTopic({ payload }, '/snapshot')]);
                 return done();
             }
             run(true);

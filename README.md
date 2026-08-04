@@ -392,11 +392,13 @@ available as escape hatches.
 Output 2 emits a snapshot built for tuning: it says not just what the estimate is but which
 rules produced it.
 
-It fires whenever a sensor a rule watches reports, and whenever the binary result flips. It does
-**not** fire on the clock tick unless **Snapshot every tick** is enabled (Advanced) — so watching
-evidence decay between sensor reports means turning that on. The decay itself does not depend on
-it: contributions are computed from timestamps whenever the node evaluates, so the value is
-correct whenever you do look. Only the reporting is on demand.
+Both outputs answer to the same **Emit** setting. On *only on a change* — the default — each stays
+quiet until it has something new to say: output 1 when the true/false result flips, output 2 when
+the snapshot differs from the one it last sent. A sensor re-reporting the value it already had
+leaves the snapshot identical and sends nothing, which is where most of the traffic used to go.
+Evidence that is decaying does change the snapshot and does keep emitting on every tick, because
+the estimate really is moving. Sending the node any message it does not otherwise understand always
+answers with a snapshot, changed or not.
 
 ```json
 { "p": 0.86, "logOdds": 1.86, "share": 108.4, "binary": true, "held": false,

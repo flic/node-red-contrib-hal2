@@ -26,17 +26,19 @@
             </div>
 
             <div class="form-row">
-                <label for="node-input-emitOn" style="width:130px;"><i class="fa fa-share"></i> Emit output 1</label>
+                <label for="node-input-emitOn" style="width:130px;"><i class="fa fa-share"></i> Emit</label>
                 <select id="node-input-emitOn" style="width:calc(100% - 160px)">
-                    <option value="change">only when the result changes</option>
+                    <option value="change">only on a change</option>
                     <option value="evaluation">on every evaluation</option>
                 </select>
             </div>
-            <div class="form-tips">Output 1 normally stays quiet unless the true/false result actually
-            flips, so a rule firing again while the node is already on sends nothing. Switch to
-            <i>every evaluation</i> if a downstream flow wants the state re-asserted continuously;
-            <code>msg.changed</code> then tells you which messages were real transitions.
-            Output 2 (the snapshot) always follows every evaluation.</div>
+            <div class="form-tips">Both outputs answer to this. On <i>only on a change</i> each stays
+            quiet until it has something new to say: output 1 when the true/false result actually
+            flips, output 2 when the snapshot differs from the one it last sent — so a sensor
+            re-reporting the value it already had sends nothing. Decaying evidence does keep
+            changing the snapshot and keeps emitting, because the estimate really is moving.
+            Switch to <i>every evaluation</i> to have both re-asserted continuously;
+            <code>msg.changed</code> then tells you which output-1 messages were real transitions.</div>
 
             <div class="form-row" style="margin-top:14px;">
                 <label for="node-input-latch" style="width:auto"><i class="fa fa-lock"></i>
@@ -71,9 +73,7 @@
             <div class="form-row hal2bayes-adv">
                 <label for="node-input-tickInterval" style="width:130px;"><i class="fa fa-clock-o"></i> Tick (s)</label>
                 <input type="number" id="node-input-tickInterval" min="5" step="any" style="width:80px">
-                <label for="node-input-snapshotOnTick" style="width:auto; margin-left:16px;">
-                    <i class="fa fa-camera"></i> Snapshot every tick</label>
-                <input type="checkbox" id="node-input-snapshotOnTick" style="display:inline-block; width:auto; vertical-align:top;">
+
             </div>
             <div class="form-tips hal2bayes-adv">The estimate starts at <b>Prior</b> and is pushed by rules.
             The output turns on at P &ge; <b>On threshold</b> and off first at P &le; <b>Off threshold</b>.
@@ -236,15 +236,16 @@
     set at all.</p>
     <p><b>1:</b> the binary result &mdash; <code>payload</code> true/false, <code>probability</code>,
     <code>changed</code>. By default this only emits when the result actually flips, so a rule firing
-    again while the node is already on sends nothing; set <b>Emit output 1</b> to <i>every evaluation</i>
+    again while the node is already on sends nothing; set <b>Emit</b> to <i>every evaluation</i>
     to have the state re-asserted continuously instead. <b>2:</b> the snapshot,
-    <code>{ p, logOdds, share, binary, held, rules }</code>, on every sensor evaluation (and every
-    tick if enabled). Wire output 1 onward like any other message to record the result on a Thing
-    &mdash; the node has no side channel into the object model.</p>
-    <p>A snapshot follows every sensor report and every flip of the result. The clock tick does not
-    produce one unless <b>Snapshot every tick</b> is enabled &mdash; turn it on to watch evidence
-    decay between reports. Decay does not depend on it: contributions are computed from timestamps
-    at evaluation, so the value is right whenever the node does look.</p>
+    <code>{ p, logOdds, share, binary, held, rules }</code>. Wire output 1 onward like any other
+    message to record the result on a Thing &mdash; the node has no side channel into the object
+    model.</p>
+    <p>On <i>only on a change</i> the snapshot is sent when it differs from the one last sent, so a
+    sensor re-reporting the value it already had produces nothing. Evidence that is decaying does
+    change it and does keep emitting, on every tick, because the estimate really is moving. Sending
+    the node any message it does not otherwise understand always answers with a snapshot, changed
+    or not &mdash; being asked is the point.</p>
     <p><b>rules</b> lists <i>every</i> rule on every snapshot, not only the ones firing &mdash; while
     tuning, the question is usually why a rule is <em>not</em> contributing. Each entry carries a
     <code>label</code> read off its own steps, the <code>value</code> its source holds right now, its
@@ -313,8 +314,7 @@
                 rules:          { value: [] },
                 latch:          { value: false },
                 maxHold:        { value: "" },
-                emitOn:         { value: "change" },
-                snapshotOnTick: { value: false }
+                emitOn:         { value: "change" }
             },
             inputs: 1,
             outputs: 2,
