@@ -426,8 +426,9 @@ answers with a snapshot, changed or not.
       "status": "contributing", "share": 73.8, "logOdds": 2.303, "value": true },
     { "id": "r2", "label": "When Front Door · Contact is true on a full cycle and Hallway Sensor · Motion is true",
       "status": "waiting", "share": 0, "logOdds": 0, "step": 2, "steps": 2, "deadline": 47 },
-    { "id": "r3", "label": "While Office Sensor · Temperature > 25",
-      "status": "condition-false", "share": 0, "logOdds": 0, "value": 23.4 }
+    { "id": "r3", "label": "While Office Sensor · Temperature > 25 and Office Window · Contact is false",
+      "status": "condition-false", "share": 0, "logOdds": 0, "value": 26.1,
+      "failedStep": 2, "failedValue": true }
   ] }
 ```
 
@@ -441,16 +442,25 @@ is in:
 | `fading` | a rule that fired earlier — `age` and `halfLife` (seconds) say how far it has decayed |
 | `waiting` | a sequence partway through: `step` of `steps`, with `deadline` seconds left |
 | `armed` | a sequence at its first step, waiting to be triggered |
-| `condition-false` | evaluated and did not match — `value` is what it read, and `failedStep` which condition broke it |
-| `no-value` | the reading is missing, or unusable for a scaled weight |
+| `condition-false` | evaluated and did not match — `failedStep` is which condition broke it and `failedValue` what that step read |
+| `no-value` | the failing step had nothing to read, or the reading is unusable for a scaled weight |
 | `injected` | ad-hoc evidence from `msg.topic = "evidence"`, which has no rule behind it |
 | `never-fires` | the rule opens with a condition but waits for an event later, so nothing can start it |
+
+`value` is always the **first** step's reading, because that is also what a scaled weight follows.
+On a rule with several conditions the step that failed is a different one, so `failedStep` names it
+and `failedValue` carries its reading — and `no-value` rather than `condition-false` when that step
+had nothing to read at all.
 
 `share` is the contribution as a percentage of the way from the prior to the on-threshold — the
 same unit the rule bars and the summary use in the editor, so what you tuned is what you read back.
 Shares add, so the contributing ones sum to the top-level `share`, and anything at or above 100 %
 reaches the threshold on its own. `label` is derived from the rule's steps, phrased as the editor
 phrases them; `logOdds` is the same contribution in the estimator's own units.
+
+The node's status line carries the same share: `on 108% (0.86)` — the share first, the probability
+after it. Against a threshold you chose, the probability alone does not say whether a node is
+nearly there or nowhere near; the share does, in the unit the rules were tuned in.
 
 ## Other recent additions
 

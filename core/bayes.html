@@ -265,9 +265,10 @@
         <li><b>waiting</b> &mdash; a sequence partway through: <code>step</code> of <code>steps</code>,
             with <code>deadline</code> seconds left of its window</li>
         <li><b>armed</b> &mdash; a sequence at its first step, waiting to be triggered</li>
-        <li><b>condition-false</b> &mdash; evaluated and did not match; <code>value</code> shows what
-            it read and <code>failedStep</code> which condition broke it</li>
-        <li><b>no-value</b> &mdash; the reading is missing, or unusable for a scaled weight</li>
+        <li><b>condition-false</b> &mdash; evaluated and did not match; <code>failedStep</code> is
+            which condition broke it and <code>failedValue</code> what that step read</li>
+        <li><b>no-value</b> &mdash; the failing step had nothing to read, or the reading is
+            unusable for a scaled weight</li>
         <li><b>injected</b> &mdash; ad-hoc evidence from <code>msg.topic = "evidence"</code></li>
         <li><b>never-fires</b> &mdash; the rule opens with a condition but waits for an event later,
             so nothing can start it</li>

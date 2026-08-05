@@ -918,6 +918,37 @@ describe('multi-condition rules', function() {
         assert.strictEqual(byId(b.evaluate(stateOf({ a: 50, b: true }), 0), 'and').failedStep, 1);
     });
 
+    it('reports the reading of the step that failed, not of the first one', function() {
+        // The bug this replaces: `value` is always step 1's, and the status was read off it
+        // too. A rule whose second step had nothing to read was reported as condition-false
+        // with step 1's perfectly good value beside it — two fields describing two steps,
+        // with nothing saying so.
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+        const e = byId(b.evaluate(stateOf({ a: 150, b: false }), 0), 'and');
+        assert.strictEqual(e.failedStep, 2);
+        assert.strictEqual(e.failedValue, false, 'step 2 read false');
+        assert.strictEqual(e.value, 150, 'value still describes step 1');
+    });
+
+    it('separates nothing to read from read it and it was false', function() {
+        // Both land on the failing step, so a source that is not reporting says so even when
+        // it is the second condition. Reading the status off step 1 called this
+        // condition-false, which is the one thing it was not.
+        const b = createBayes(cfgOf({ rules: [twoConditions()] }));
+
+        const missing = byId(b.evaluate(stateOf({ a: 150 }), 0), 'and');
+        assert.strictEqual(missing.status, 'no-value', 'step 2 had nothing to read');
+        assert.strictEqual(missing.failedStep, 2);
+        assert.ok(!('failedValue' in missing), 'no reading to report');
+
+        const read = byId(b.evaluate(stateOf({ a: 150, b: false }), 0), 'and');
+        assert.strictEqual(read.status, 'condition-false', 'step 2 read false');
+
+        // Step 1 unreadable still reports no-value, as it always has.
+        const first = byId(b.evaluate(stateOf({ b: true }), 0), 'and');
+        assert.strictEqual(first.status, 'no-value');
+    });
+
     it('contributes nothing before it holds, and applies its full weight when it does', function() {
         const b = createBayes(cfgOf({ rules: [twoConditions()] }));
         assert.ok(Math.abs(b.evaluate(stateOf({ a: 50, b: true }), 0).p - 0.2) < 1e-12);

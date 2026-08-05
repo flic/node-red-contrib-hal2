@@ -190,11 +190,15 @@ module.exports = function(RED) {
             }
         }
 
+        // The share as well as the probability. The share is the unit the editor works in — how
+        // far the evidence has carried this node from its prior towards the on-threshold, where
+        // 100% is the threshold itself — so it says at a glance whether a node is nearly there
+        // or nowhere near, which the probability alone does not against an arbitrary threshold.
         function showStatus(result) {
             node.status({
                 fill: result.binary ? 'green' : 'grey', shape: result.held ? 'ring' : 'dot',
-                text: (result.binary ? 'on' : 'off') + ' (' + result.p.toFixed(2) + ')' +
-                      (result.held ? ' held' : '')
+                text: (result.binary ? 'on' : 'off') + ' ' + Math.round(result.share) + '%' +
+                      ' (' + result.p.toFixed(2) + ')' + (result.held ? ' held' : '')
             });
         }
 
