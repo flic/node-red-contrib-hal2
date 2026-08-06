@@ -1124,6 +1124,60 @@ describe('a condition that must have held', function() {
         assert.strictEqual(active(b.evaluate(R, 1010 * MIN)).length, 1, 'ten minutes later');
     });
 
+    it('is not satisfied by the edge when it follows an earlier step', function() {
+        // The path every hold step in a sequence actually takes: the step is armed by the one
+        // before it, and the condition turns true afterwards. driveFsm completed it on that
+        // rising edge, the way it completes a 'becomes' — so the hold duration was ignored
+        // exactly when it was the only thing being asked for, and a blip fired the rule.
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 400, halfLifeMs: null, steps: [
+            step('becomes', { thing: 'door' }),
+            step('held', { thing: 'phone', operator: 'false', holdMs: 2 * MIN, windowMs: 15 * MIN })
+        ]}]}));
+        const state = { door: false, phone: true };
+        const R = stateOf(state);
+
+        state.door = true;
+        b.handleEvent([{ ruleId: 'r', stepIndex: 0 }], true, 0, R);
+
+        state.phone = false;
+        assert.deepStrictEqual(
+            b.handleEvent([{ ruleId: 'r', stepIndex: 1 }], false, 10e3, R), [],
+            'the edge alone does not fire it');
+
+        b.tick(60e3, R);
+        assert.strictEqual(fading(b.evaluate(R, 60e3)).length, 0, 'still short of the hold');
+
+        b.tick(131e3, R);
+        assert.strictEqual(fading(b.evaluate(R, 131e3)).length, 1, 'fires once 2 min have passed');
+    });
+
+    it('restarts its clock in a sequence when the condition drops', function() {
+        // A blip is what the hold exists to reject, so a condition that goes true, falls back
+        // and returns must serve the whole duration from the second edge.
+        const b = createBayes(cfgOf({ rules: [{ id: 'r', lr: 400, halfLifeMs: null, steps: [
+            step('becomes', { thing: 'door' }),
+            step('held', { thing: 'phone', operator: 'false', holdMs: 2 * MIN, windowMs: 15 * MIN })
+        ]}]}));
+        const state = { door: false, phone: true };
+        const R = stateOf(state);
+
+        state.door = true;
+        b.handleEvent([{ ruleId: 'r', stepIndex: 0 }], true, 0, R);
+
+        state.phone = false;                                            // blip starts
+        b.handleEvent([{ ruleId: 'r', stepIndex: 1 }], false, 10e3, R);
+        state.phone = true;                                             // ... and ends
+        b.handleEvent([{ ruleId: 'r', stepIndex: 1 }], true, 16e3, R);
+        b.tick(140e3, R);
+        assert.strictEqual(fading(b.evaluate(R, 140e3)).length, 0,
+            'the blip does not count, even 2 min after it started');
+
+        state.phone = false;                                            // the real one
+        b.handleEvent([{ ruleId: 'r', stepIndex: 1 }], false, 150e3, R);
+        b.tick(271e3, R);
+        assert.strictEqual(fading(b.evaluate(R, 271e3)).length, 1, 'held from the second edge');
+    });
+
     it('makes a rule of held steps continuous, not a sequence', function() {
         // Otherwise it would go to the sequence machinery and never fire — a condition is not
         // an event, whether or not it has to last.
