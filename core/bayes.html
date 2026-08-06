@@ -128,7 +128,10 @@
             duration before it counts, set on the timing line. Separates a brief blip from a
             settled state &mdash; a trip to the bathroom from getting up for the day &mdash; where
             the reading itself is identical and only time tells them apart. The clock restarts
-            whenever the condition drops. Reads <i>and&hellip;</i></li>
+            whenever the condition drops. Like <b>now or soon</b> it also has a window, and the
+            window bounds when the hold is <i>reached</i> &mdash; so the condition has to go true
+            a whole hold-length before the window runs out. The line under the step does that
+            subtraction for you. Reads <i>and&hellip;</i></li>
         <li><b>on change</b> &mdash; an event: the condition must actually turn true, being already
             true does not count. Reads <i>then&hellip;</i></li>
         <li><b>on a full cycle</b> &mdash; a cycle: true and back to false within its limit, e.g. a
@@ -572,14 +575,16 @@
                     // refreshRuleView narrows it once the source and position are known.
                     setPatternOptions(patSel, ALL_PATTERNS, step.pattern || 'is');
                     $('<span/>', { class: "bs-pat-sep", style: "margin:0 8px;" }).appendTo(timing).text('·');
-                    // Read-back of the configured window, on its own line under the weekdays.
+                    // Read-back line under the step: the weekday/window summary for a time step,
+                    // and for a hold step when the condition actually has to go true.
                     $('<div/>', { class: "bs-days-hint",
                         style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
 
                     var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('within ');
                     $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
-                        .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window);
+                        .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window)
+                        .on('change', function() { refreshRuleView(ruleContainer); });
                     $('<span/>').appendTo(windowSpan).text(' s of the previous step');
 
                     // A time step has no seconds to configure, so the timing line carries its
@@ -612,7 +617,8 @@
                     $('<span/>', { class: "bs-hold-sep" }).appendTo(holdSpan).text(' · ');
                     $('<span/>').appendTo(holdSpan).text('has held for ');
                     $('<input/>', { class: "bs-hold", type: "number", min: "1", step: "any", style: "width:55px;" })
-                        .appendTo(holdSpan).val(step.hold === undefined ? 600 : step.hold);
+                        .appendTo(holdSpan).val(step.hold === undefined ? 600 : step.hold)
+                        .on('change', function() { refreshRuleView(ruleContainer); });
                     $('<span/>').appendTo(holdSpan).text(' s');
 
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
@@ -868,7 +874,11 @@
                         // A condition reads "and …"; an event reads "then …".
                         var isCond = (pat === 'is' || pat === 'isOrBecomes' || pat === 'held');
                         el.find('.bs-lead').text(i === 0 ? (cont ? 'While' : 'When') : (isCond ? 'and' : 'then'));
-                        var showWindow = i > 0 && pat !== 'is' && pat !== 'held';
+                        // 'is' is answered at the moment the previous step completes, so a
+                        // window means nothing to it. 'held' is not in that company: it waits,
+                        // the tick re-checks it, and it times out against the deadline this
+                        // window sets — which was being enforced with no way to set it.
+                        var showWindow = i > 0 && pat !== 'is';
                         var showCycle = (pat === 'cycle');
                         var showHold  = (pat === 'held');
                         timing.find('.bs-window-span').toggle(showWindow);
@@ -888,7 +898,20 @@
                             : 'within ');
 
                         // Live read-back so a wrong window or day selection is obvious at once.
-                        el.find('.bs-days-hint').toggle(isTime);
+                        el.find('.bs-days-hint').toggle(isTime || showHold);
+                        if (showHold && !isTime) {
+                            var winS  = Number(el.find('.bs-window').val()) || 0;
+                            var holdS = Number(el.find('.bs-hold').val()) || 0;
+                            var latest = winS - holdS;
+                            el.find('.bs-days-hint')
+                                .text(latest > 0
+                                    ? 'the condition has to go true within ' + latest +
+                                      ' s of the previous step — the ' + winS + ' s window less the ' +
+                                      holdS + ' s it must have held'
+                                    : 'never completes: the ' + holdS + ' s hold does not fit inside the ' +
+                                      winS + ' s window')
+                                .css('color', latest > 0 ? '#999' : '#c66');
+                        }
                         if (isTime) {
                             var spec = { start: el.find('.bs-start').val(), end: el.find('.bs-end').val(),
                                          days: el.find('.bs-day').filter(function() { return $(this).data('on'); })

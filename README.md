@@ -276,8 +276,10 @@ Everything is a **rule**, built from steps. Each step names a source and a condi
   before it counts. This is what separates a trip to the bathroom from getting up for the day:
   the reading is identical at the moment it happens, and only time tells them apart. The clock
   restarts whenever the condition drops, so a string of short absences never adds up to a long
-  one, and it survives a restart because the edge is persisted with the rest of the state
-  (*and…*)
+  one, and it survives a restart because the edge is persisted with the rest of the state.
+  It has a window as well, and the window bounds when the hold is *reached* — so the condition
+  has to go true a whole hold-length before the window runs out, and the step's read-back line
+  does that subtraction (*and…*)
 - **on change** — an event: the condition must actually turn true, being already true does
   not count (*then…*)
 - **on a full cycle** — a cycle: true and back to false within its limit, e.g. a door opening
