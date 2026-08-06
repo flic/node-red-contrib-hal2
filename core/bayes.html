@@ -905,10 +905,9 @@
                             var latest = winS - holdS;
                             el.find('.bs-days-hint')
                                 .text(latest > 0
-                                    ? 'the condition has to go true within ' + latest +
-                                      ' s of the previous step — the ' + winS + ' s window less the ' +
-                                      holdS + ' s it must have held'
-                                    : 'never completes: the ' + holdS + ' s hold does not fit inside the ' +
+                                    ? 'must become true within ' + latest + ' s of the previous step' +
+                                      ' — ' + winS + ' s window, ' + holdS + ' s hold'
+                                    : 'never completes — a ' + holdS + ' s hold does not fit in a ' +
                                       winS + ' s window')
                                 .css('color', latest > 0 ? '#999' : '#c66');
                         }
