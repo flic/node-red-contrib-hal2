@@ -580,7 +580,22 @@
                     $('<div/>', { class: "bs-days-hint",
                         style: "margin-left:50px; margin-top:3px; font-size:0.9em;" }).appendTo(stepDiv).hide();
 
-                    var windowSpan = $('<span/>', { class: "bs-window-span" }).appendTo(timing);
+                    // How long a "for a while" condition has to have held. Its own number
+                    // rather than the step window: the window bounds when a step may happen,
+                    // this bounds how long it must already have been happening.
+                    //
+                    // Before the window, because the two read as one phrase for a hold step —
+                    // "has held for 120 s within 900 s of the previous step". No separator
+                    // between them for the same reason; the flex row collapses whitespace, so
+                    // the join is a margin on the window rather than a space.
+                    var holdSpan = $('<span/>', { class: "bs-hold-span" }).appendTo(timing);
+                    $('<span/>').appendTo(holdSpan).text('has held for ');
+                    $('<input/>', { class: "bs-hold", type: "number", min: "1", step: "any", style: "width:55px;" })
+                        .appendTo(holdSpan).val(step.hold === undefined ? 600 : step.hold)
+                        .on('change', function() { refreshRuleView(ruleContainer); });
+                    $('<span/>').appendTo(holdSpan).text(' s');
+
+                    var windowSpan = $('<span/>', { class: "bs-window-span", style: "margin-left:4px;" }).appendTo(timing);
                     $('<span/>', { class: "bs-window-lead" }).appendTo(windowSpan).text('within ');
                     $('<input/>', { class: "bs-window", type: "number", min: "1", step: "any", style: "width:55px;" })
                         .appendTo(windowSpan).val(step.window === undefined ? 120 : step.window)
@@ -609,17 +624,6 @@
                             });
                     });
 
-
-                    // How long a "for a while" condition has to have held. Its own number
-                    // rather than the step window: the window bounds when a step may happen,
-                    // this bounds how long it must already have been happening.
-                    var holdSpan = $('<span/>', { class: "bs-hold-span" }).appendTo(timing);
-                    $('<span/>', { class: "bs-hold-sep" }).appendTo(holdSpan).text(' · ');
-                    $('<span/>').appendTo(holdSpan).text('has held for ');
-                    $('<input/>', { class: "bs-hold", type: "number", min: "1", step: "any", style: "width:55px;" })
-                        .appendTo(holdSpan).val(step.hold === undefined ? 600 : step.hold)
-                        .on('change', function() { refreshRuleView(ruleContainer); });
-                    $('<span/>').appendTo(holdSpan).text(' s');
 
                     var cycleSpan = $('<span/>', { class: "bs-cycle-span" }).appendTo(timing);
                     $('<span/>', { class: "bs-cycle-sep" }).appendTo(cycleSpan).text(' · ');
@@ -885,7 +889,6 @@
                         timing.find('.bs-cycle-span').toggle(showCycle);
                         timing.find('.bs-hold-span').toggle(showHold);
                         timing.find('.bs-cycle-sep').toggle(showWindow && showCycle);
-                        timing.find('.bs-hold-sep').toggle(showWindow && showHold);
                         timing.find('.bs-days-span').toggle(isTime);
                         timing.find('.bs-days-sep').toggle(isTime && showWindow);
                         // The dot only earns its place when something follows the qualifier.
