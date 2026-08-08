@@ -223,6 +223,14 @@
     stop when their condition does. Note that strength buys very little time: each doubling of
     <code>ln(LR)</code> only adds one half-life, so <i>certain</i> outlasts <i>decisive</i> by well
     under one &mdash; if you want a push to last, change the fade, not the strength.</p>
+    <p><b>Refiring</b> decides what a momentary rule does when it completes again while its previous
+    push is still alive. <b>refreshes</b> (the default) restates the rule &mdash; one push, its clock
+    reset. <b>stacks</b> adds a second push to the first.</p>
+    <p>Stacking is right only when the two firings are genuinely independent observations, such as two
+    separate arrivals. It is wrong when one continuing fact is reported over and over, which is what a
+    motion sensor does while somebody keeps moving: those firings describe one thing, and adding them
+    up drives the estimate to the clamp. Continuous rules have no such setting &mdash; they hold one
+    weight while their conditions hold and never accumulate.</p>
     <p>With the lock on, fading no longer makes the output fall back by itself, but it still decides
     whether a push is still strong enough to turn the output <i>on</i>, and how long a
     "makes it false" rule stays able to turn it off &mdash; a false rule that fires while the estimate
@@ -742,6 +750,7 @@
                         direction: container.find('.br-direction option:selected').val(),
                         strength: container.find('.br-strength option:selected').val(),
                         fade: container.find('.br-fade option:selected').val(),
+                        repeat: container.find('.br-repeat option:selected').val(),
                         lr: container.find('.br-lr').val(),
                         scale: {
                             fromValue: container.find('.br-fromValue').val(),
@@ -993,6 +1002,8 @@
                     container.find('.br-decay-caption').text(decay);
                     container.find('.br-fade-span').toggle(!cont);
                     container.find('.br-custom-span').toggle(rule.fade === 'custom');
+                    container.find('.br-repeat-hint').toggle(
+                        !cont && container.find('.br-repeat').val() === 'stack');
 
                     refreshSummary();
                 }
@@ -1063,7 +1074,8 @@
                         var rule = (opt && (opt.id || (opt.steps && opt.steps.length))) ? opt : {
                             steps: [{ thing: '', item: '', operator: 'true', value: '', valueType: 'str',
                                       pattern: 'is', cycleMax: 180, window: 120 }],
-                            direction: 'true', strength: 'moderate', fade: 'normal', lr: '', halfLife: ''
+                            direction: 'true', strength: 'moderate', fade: 'normal', repeat: 'refresh',
+                            lr: '', halfLife: ''
                         };
                         if (!rule.id) { rule.id = halCreateId(); }
                         // editableList hands us a <div> inside its <li>, so .data() here is
@@ -1130,6 +1142,24 @@
                             placeholder: "half-life", style: "width:80px; margin-left:6px;" })
                             .appendTo(customSpan).val(rule.halfLife);
                         $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
+
+                        // Inside the fade span deliberately: both are meaningless for a
+                        // continuous rule, and a control that appears only for momentary rules
+                        // is itself the clearest statement of which kind this rule is.
+                        var repeatSpan = $('<span/>', { class: "br-repeat-span" }).appendTo(fadeSpan);
+                        $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(repeatSpan).text('· refiring');
+                        var repeatSel = $('<select/>', { class: "br-repeat", style: "width:100px; margin-left:4px;" })
+                            .appendTo(repeatSpan);
+                        repeatSel.append($("<option></option>").val('refresh').text('refreshes'));
+                        repeatSel.append($("<option></option>").val('stack').text('stacks'));
+                        repeatSel.val(rule.repeat === 'stack' ? 'stack' : 'refresh');
+                        // Only 'stack' needs explaining: it is the claim that repeated firings are
+                        // independent observations, which is the assumption that is usually wrong.
+                        $('<div/>', { class: "br-repeat-hint",
+                            style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" })
+                            .appendTo(body)
+                            .text('Each firing adds another weight — only right when the firings are '
+                                + 'genuinely separate observations, not one fact reported repeatedly.');
 
                         var sc = rule.scale || {};
                         var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(body);

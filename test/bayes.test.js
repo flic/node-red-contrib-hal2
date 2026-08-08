@@ -249,6 +249,74 @@ describe('momentary rules decay', function() {
         assert.ok(Math.abs(f1 - f0 / 2) < 1e-9);
     });
 
+    // Firing the same rule twice used to add a second term, on the reading that two firings
+    // are two independent observations. For a sensor that re-triggers while one thing keeps
+    // happening they are not, and the sum ran to the clamp — seventeen firings in twenty-three
+    // minutes on a live node. A rule now restates itself unless it says otherwise.
+    describe('a rule that fires again', function() {
+        // Drive one full arrival sequence and return the moment it completed.
+        // The trailing false matters: 'becomes' needs a rising edge, and a condition left true
+        // from the previous arrival has no edge left to give.
+        const arrive = (b, at) => {
+            b.handleEvent(hit('a', 0), true, at);
+            b.handleEvent(hit('a', 0), false, at + 0.2 * MIN);
+            b.handleEvent(hit('a', 1), true, at + 0.4 * MIN);
+            b.handleEvent(hit('a', 1), false, at + 0.6 * MIN);
+            return at + 0.4 * MIN;
+        };
+
+        it('restates itself rather than adding to itself', function() {
+            const b = createBayes(cfgOf({ rules: [arrivalRule('a', 3)] }));
+            const first = arrive(b, 0);
+            const one = b.evaluate(noState, first).logOdds - logit(0.2);
+
+            const second = arrive(b, 10 * MIN);            // long enough to have decayed visibly
+            const after = b.evaluate(noState, second).logOdds - logit(0.2);
+
+            assert.ok(Math.abs(after - one) < 1e-9, 'one firing\'s worth, not two');
+            assert.strictEqual(fading(b.evaluate(noState, second)).length, 1, 'one term, not two');
+        });
+
+        it('restarts its clock when it restates itself', function() {
+            const b = createBayes(cfgOf({ rules: [arrivalRule('a', 3)] }));
+            const first = arrive(b, 0);
+            const full = b.evaluate(noState, first).logOdds - logit(0.2);
+            // Measured from when the term was created, not from zero.
+            const decayed = b.evaluate(noState, first + 20 * MIN).logOdds - logit(0.2);
+            assert.ok(Math.abs(decayed - full / 2) < 1e-9, 'one half-life has passed');
+
+            const second = arrive(b, first + 20 * MIN);
+            const fresh = b.evaluate(noState, second).logOdds - logit(0.2);
+            // Exactly the full weight: neither the decayed one carried forward nor the two
+            // of them added. Stacking would leave 1.5x here, which is why the number is pinned.
+            assert.ok(Math.abs(fresh - full) < 1e-9, 'the weight is full again, and only full');
+        });
+
+        it('accumulates only when the rule says its firings are independent', function() {
+            const b = createBayes(cfgOf({
+                rules: [Object.assign(arrivalRule('a', 3), { repeat: 'stack' })] }));
+            const first = arrive(b, 0);
+            const one = b.evaluate(noState, first).logOdds - logit(0.2);
+            const second = arrive(b, 10 * MIN);
+            const after = b.evaluate(noState, second).logOdds - logit(0.2);
+
+            assert.ok(after > one * 1.5, 'two terms add');
+            assert.strictEqual(fading(b.evaluate(noState, second)).length, 1,
+                'still reported as one rule, whatever it holds');
+        });
+
+        it('does not disturb another rule\'s terms', function() {
+            const b = createBayes(cfgOf({ rules: [arrivalRule('a', 3), arrivalRule('b', 3)] }));
+            b.handleEvent(hit('b', 0), true, 0);
+            b.handleEvent(hit('b', 0), false, 0.2 * MIN);
+            b.handleEvent(hit('b', 1), true, 0.4 * MIN);
+            arrive(b, MIN);
+            arrive(b, 5 * MIN);
+            assert.deepStrictEqual(
+                fading(b.evaluate(noState, 5.4 * MIN)).map(t => t.id).sort(), ['a', 'b']);
+        });
+    });
+
     it('tick prunes decayed-out terms', function() {
         const b = createBayes(cfgOf({ rules: [Object.assign(arrivalRule('a', 3), { halfLifeMs: MIN })] }));
         b.handleEvent(hit('a', 0), true, 0);

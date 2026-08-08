@@ -99,7 +99,10 @@ module.exports = function(RED) {
                 });
                 // Ids key the rule map and every step hit, so a missing one would collapse
                 // every rule onto the same entry. Fall back to the position in the list.
+                // Refresh unless the rule claims its firings are independent. A saved rule
+                // with no setting gets refresh, which is the reading that is right more often.
                 return { id: r.id || ('rule' + idx), lr, halfLifeMs, steps,
+                         repeat: r.repeat === 'stack' ? 'stack' : 'refresh',
                          scale: scaleSpec && steps.length === 1 ? scaleSpec : null };
             }).filter(r => r.steps.length > 0)
         };
