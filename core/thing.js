@@ -1,5 +1,6 @@
 module.exports = function(RED) {
     var topics = require('../lib/topics');
+    var store = require('../lib/store');
     // Topic/prefix helpers live in lib/topics (pure, unit-tested). fixTopic is used directly;
     // applyFilters is wrapped to inject Node-RED's message-property getter.
     var fixTopic = topics.fixTopic;
@@ -59,7 +60,25 @@ module.exports = function(RED) {
         // hal2 is technology-neutral here: it stores whatever keys arrive without interpreting them.
         node.metadata          = nodeContext.get("metadata",node.thingType.contextStore) || {};
         node.metadataLastChange = nodeContext.get("metadataLastChange",node.thingType.contextStore) || {};
+        // Scratch space for the ThingType's functions — the equivalent of context.get/set in a
+        // function node, scoped to this Thing. Persisted like state, so a value written by an
+        // ingress survives a restart. Values go through the context store, so they must be
+        // JSON-serialisable: no Date, no Map, no functions.
+        node.store             = nodeContext.get("store",node.thingType.contextStore) || {};
         if (typeof node.thingType.filterFunction === 'undefined') { node.thingType.filterFunction = '0'; }
+
+        // The object injected as `store` into every ThingType function. clear() swaps the backing
+        // object, so node.store is kept in step through the returned accessor rather than held.
+        var storeHandle = store.createStore(node.store, function (bag) {
+            node.store = bag;
+            nodeContext.set("store", bag, node.thingType.contextStore);
+        });
+        var storeApi = storeHandle.api;
+        node.getStore = function () { return storeHandle.value(); };
+        node.clearStore = function (key) {
+            if (typeof key === 'undefined') { storeApi.clear(); }
+            else { storeApi.set(key, null); }
+        };
 
         function checkTimestamp() {
             if (node.thingType.hbCheck == false) { return; }
@@ -122,7 +141,7 @@ module.exports = function(RED) {
             var metaMatch = String(msg.topic || '').match(/(?:^|\/)_meta(?:\/([^/]+))?$/);
             if (metaMatch) { node.updateMetadata(metaMatch[1], msg.payload); return; }
 
-            if (!node.thingType.items) {
+            if (!node.thingType.items && !node.thingType.metadata) {
                 node.debug("No items configured. Dropping message.");
                 return;
             }
@@ -132,15 +151,49 @@ module.exports = function(RED) {
                 var attribute = getAttributes();
                 var item = getItems();
                 msgClone =  RED.util.cloneMessage(msg);
-                _ingressFn = new Function('msg','attribute','item',fn);
+                _ingressFn = new Function('msg','attribute','item','store',fn);
                 try {
-                    result = _ingressFn(msgClone,attribute,item);
+                    result = _ingressFn(msgClone,attribute,item,storeApi);
                 } catch (err) {
                     node.error("Error running filter ingress: "+err);
                     return;
                 }
                 if (result != true) { return; }
             }
+
+            // Metadata mappings: the declarative counterpart to the _meta topic channel. Same
+            // filter + ingress mechanics as items, but the result goes into the metadata bag
+            // under the mapping's key instead of becoming item state. An object is flattened to
+            // dot-keys by updateMetadata, so returning {ip,ssid} under key "wifi" gives
+            // wifi.ip and wifi.ssid.
+            var metadataApplied = false;
+            for (var m in node.thingType.metadata) {
+                var mapping = node.thingType.metadata[m];
+                if (mapping.topicFilters && mapping.topicFilters.length > 0) {
+                    if (!applyFilters(msg, mapping.topicFilters, mapping.topicFilterMode || 'and', node.topicPrefix)) { continue; }
+                }
+
+                var mfn = resolveFn(node, 'ingress', mapping.ingress);
+                msgClone = RED.util.cloneMessage(msg);
+                attribute = getAttributes();
+                item = getItems();
+                _ingressFn = new Function('msg','attribute','item','store',mfn);
+                try {
+                    result = _ingressFn(msgClone,attribute,item,storeApi);
+                } catch (err) {
+                    node.error("Error running metadata ingress for "+mapping.name+": "+err);
+                    continue;
+                }
+                if (result != null) {
+                    node.debug("Metadata ingress for "+mapping.name+" returns key '"+(mapping.key || mapping.name)+"'");
+                    node.updateMetadata(mapping.key || mapping.name, result);
+                    metadataApplied = true;
+                }
+            }
+            // A message that only carries metadata updates no item, so nothing else would redraw
+            // the status — and the status function can read `store`, which the filter function
+            // may just have changed.
+            if (metadataApplied) { node.showState(); }
 
             for (var i in node.thingType.items) {
                 if ((node.thingType.items[i].id == '1') && (node.thingType.hbType == 'ttl')) { continue; }
@@ -182,9 +235,9 @@ module.exports = function(RED) {
                 msgClone = RED.util.cloneMessage(msg);
                 attribute = getAttributes();
                 item = getItems();
-                _ingressFn = new Function('msg','attribute','item',fn);
+                _ingressFn = new Function('msg','attribute','item','store',fn);
                 try {
-                    result = _ingressFn(msgClone,attribute,item);
+                    result = _ingressFn(msgClone,attribute,item,storeApi);
                 } catch (err) {
                     node.error("Error running ingress for "+node.thingType.items[i].name+": "+err);
                 }
@@ -391,9 +444,9 @@ module.exports = function(RED) {
                 } else if (node.thingType.statusFn !== '') {
                     let attribute = getAttributes();
                     let item = getItems();
-                    let _egressFn = new Function('item','attribute',node.thingType.statusFn);
+                    let _egressFn = new Function('item','attribute','store',node.thingType.statusFn);
                     try {
-                        var command = _egressFn(item,attribute);
+                        var command = _egressFn(item,attribute,storeApi);
                     } catch (err) {
                         node.error("Error running status function for "+node.name+": "+err);
                     }
@@ -448,9 +501,9 @@ module.exports = function(RED) {
                 let items = getItems();
                 var fn = resolveFn(node, 'egress', item.egress);
 
-                let _egressFn = new Function('msg','attribute','item',fn);
+                let _egressFn = new Function('msg','attribute','item','store',fn);
                 try {
-                    command = _egressFn(command,attribute,items);
+                    command = _egressFn(command,attribute,items,storeApi);
                 } catch (err) {
                     node.error("Error running egress for "+item.name+": "+err);
                 }
@@ -550,6 +603,33 @@ module.exports = function(RED) {
         if (n && typeof n.updateMetadata === 'function') {
             n.updateMetadata(undefined, null);
             res.json({ metadata: n.getMetadata() });
+        } else {
+            res.status(404).json({ error: 'thing not found' });
+        }
+    });
+
+    // Same three routes for the function store. It is written only by ThingType functions, so
+    // the editor gets a read-only view plus a way to reset a key that a function got wrong.
+    RED.httpAdmin.get('/hal2/thing/:id/store', RED.auth.needsPermission('flows.read'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        res.json({ store: (n && typeof n.getStore === 'function') ? n.getStore() : {} });
+    });
+
+    RED.httpAdmin.delete('/hal2/thing/:id/store/:key', RED.auth.needsPermission('flows.write'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.clearStore === 'function') {
+            n.clearStore(req.params.key);
+            res.json({ store: n.getStore() });
+        } else {
+            res.status(404).json({ error: 'thing not found' });
+        }
+    });
+
+    RED.httpAdmin.delete('/hal2/thing/:id/store', RED.auth.needsPermission('flows.write'), function (req, res) {
+        var n = RED.nodes.getNode(req.params.id);
+        if (n && typeof n.clearStore === 'function') {
+            n.clearStore();
+            res.json({ store: n.getStore() });
         } else {
             res.status(404).json({ error: 'thing not found' });
         }

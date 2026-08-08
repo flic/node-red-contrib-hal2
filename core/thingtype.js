@@ -8,6 +8,9 @@ module.exports = function(RED) {
         this.statusFn = config.statusFn;
         this.attributes = config.attributes;
         this.items = config.items;
+        // Topic -> metadata mappings. Shaped like items but deliberately a separate list: they
+        // carry no state, so haType, history, groups, outputs and MCP exposure never apply.
+        this.metadata = config.metadata;
         this.ingress = config.ingress;
         this.egress = config.egress;
         this.thingStatus = config.thingStatus;

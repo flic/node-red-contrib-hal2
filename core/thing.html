@@ -52,6 +52,13 @@
         </label>
         <div id="thing-metadata-table" style="width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:3px; background:#f7f7f7;"></div>
     </div>
+    <div class="form-row" id="thing-store" style="width:100%" hidden>
+        <label style="display:block; width:auto;">
+            <i class="fa fa-database"></i> Function store
+            <button type="button" id="thing-store-clear" class="red-ui-button red-ui-button-small" style="float:right;" title="Delete everything this Thing's functions have stored"><i class="fa fa-trash-o"></i> Clear all</button>
+        </label>
+        <div id="thing-store-table" style="width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:3px; background:#f7f7f7;"></div>
+    </div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Thing">
@@ -115,48 +122,60 @@
             // Show "AND" rather than a blank select when the stored value is empty.
             if (!$("#node-input-topicFilterMode").val()) { $("#node-input-topicFilterMode").val("and"); }
 
-            // Metadata panel: machine-managed facts (e.g. model, ipv6) written by an integration.
-            // Read-only values (runtime context, fetched from the admin endpoint), but the user can
-            // delete a single key or clear all. Note: an active source may re-publish deleted keys.
+            // Two read-only key/value panels over runtime context, both fetched from an admin
+            // endpoint because the edit dialog only sees config: Metadata (machine-managed facts
+            // like model or ipv6, written by an integration) and the function store (scratch state
+            // written by the ThingType's own functions). The user can delete a single key or clear
+            // all — note that an active source or function will simply write deleted keys back.
             (function () {
                 if (!node.id || (typeof node.isDirty === 'function' && node.id.indexOf('_ADD_') === 0)) { return; }
-                var base = 'hal2/thing/' + node.id + '/metadata';
 
-                function loadMetadata() {
-                    $.getJSON(base, function (res) {
-                        var meta = (res && res.metadata) || {};
-                        var keys = Object.keys(meta).sort();
-                        var $t = $('#thing-metadata-table').empty();
-                        if (!keys.length) { $('#thing-metadata').prop('hidden', true); return; }
-                        keys.forEach(function (k) {
-                            var v = meta[k];
-                            if (v && typeof v === 'object') { try { v = JSON.stringify(v); } catch (e) { v = String(v); } }
-                            var $row = $('<div/>', { style: 'display:flex; align-items:center; padding:3px 8px; border-bottom:1px solid #eee;' });
-                            $('<div/>', { text: k, style: 'flex:0 0 32%; color:#888; font-family:monospace;' }).appendTo($row);
-                            $('<div/>', { text: (v === undefined || v === null) ? '' : String(v), style: 'flex:1 1 auto; font-family:monospace; word-break:break-all;' }).appendTo($row);
-                            $('<button/>', { type: 'button', class: 'red-ui-button red-ui-button-small', title: 'Delete this key', style: 'flex:0 0 auto; margin-left:6px;' })
-                                .html('<i class="fa fa-times"></i>')
-                                .on('click', function () { delKey(k); }).appendTo($row);
-                            $row.appendTo($t);
+                function kvPanel(opts) {
+                    var base = 'hal2/thing/' + node.id + '/' + opts.route;
+
+                    function load() {
+                        $.getJSON(base, function (res) {
+                            var bag = (res && res[opts.prop]) || {};
+                            var keys = Object.keys(bag).sort();
+                            var $t = $(opts.table).empty();
+                            if (!keys.length) { $(opts.row).prop('hidden', true); return; }
+                            keys.forEach(function (k) {
+                                var v = bag[k];
+                                if (v && typeof v === 'object') { try { v = JSON.stringify(v); } catch (e) { v = String(v); } }
+                                var $row = $('<div/>', { style: 'display:flex; align-items:center; padding:3px 8px; border-bottom:1px solid #eee;' });
+                                $('<div/>', { text: k, style: 'flex:0 0 32%; color:#888; font-family:monospace;' }).appendTo($row);
+                                $('<div/>', { text: (v === undefined || v === null) ? '' : String(v), style: 'flex:1 1 auto; font-family:monospace; word-break:break-all;' }).appendTo($row);
+                                $('<button/>', { type: 'button', class: 'red-ui-button red-ui-button-small', title: 'Delete this key', style: 'flex:0 0 auto; margin-left:6px;' })
+                                    .html('<i class="fa fa-times"></i>')
+                                    .on('click', function () { delKey(k); }).appendTo($row);
+                                $row.appendTo($t);
+                            });
+                            $(opts.row).prop('hidden', false);
                         });
-                        $('#thing-metadata').prop('hidden', false);
+                    }
+
+                    function delKey(k) {
+                        $.ajax({ url: base + '/' + encodeURIComponent(k), method: 'DELETE' })
+                            .done(load)
+                            .fail(function () { RED.notify('Failed to delete ' + opts.label + ' key "' + k + '"', 'error'); });
+                    }
+
+                    $(opts.clear).on('click', function () {
+                        if (!confirm(opts.confirm)) { return; }
+                        $.ajax({ url: base, method: 'DELETE' })
+                            .done(load)
+                            .fail(function () { RED.notify('Failed to clear ' + opts.label, 'error'); });
                     });
+
+                    load();
                 }
 
-                function delKey(k) {
-                    $.ajax({ url: base + '/' + encodeURIComponent(k), method: 'DELETE' })
-                        .done(loadMetadata)
-                        .fail(function () { RED.notify('Failed to delete metadata key "' + k + '"', 'error'); });
-                }
-
-                $('#thing-metadata-clear').on('click', function () {
-                    if (!confirm('Delete all metadata for this Thing?')) { return; }
-                    $.ajax({ url: base, method: 'DELETE' })
-                        .done(loadMetadata)
-                        .fail(function () { RED.notify('Failed to clear metadata', 'error'); });
-                });
-
-                loadMetadata();
+                kvPanel({ route: 'metadata', prop: 'metadata', label: 'metadata',
+                          row: '#thing-metadata', table: '#thing-metadata-table', clear: '#thing-metadata-clear',
+                          confirm: 'Delete all metadata for this Thing?' });
+                kvPanel({ route: 'store', prop: 'store', label: 'store',
+                          row: '#thing-store', table: '#thing-store-table', clear: '#thing-store-clear',
+                          confirm: "Delete everything this Thing's functions have stored?" });
             })();
             var typeMQTT = halTypeMQTT();
             var StrStartType   = { value: "StrStart",   label: "starts with", hasValue: true };
