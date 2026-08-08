@@ -1132,8 +1132,10 @@
                         var strSel = $('<select/>', { class: "br-strength", style: "width:100px; margin-left:6px;" }).appendTo(outRow);
                         scale.STRENGTHS.forEach(function(s) { strSel.append($("<option></option>").val(s.v).text(s.v)); });
                         strSel.append($("<option></option>").val('scaled').text('scaled…'));
-                        var fadeSpan = $('<span/>', { class: "br-fade-span" }).appendTo(outRow);
-                        $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(fadeSpan).text('fades');
+                        var fadeSpan = $('<div/>', { class: "br-fade-span", style: "margin-top:4px;" })
+                            .appendTo(body);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(fadeSpan);
+                        $('<span/>', { style: "color:#888;" }).appendTo(fadeSpan).text('fades');
                         var fadeSel = $('<select/>', { class: "br-fade", style: "width:90px; margin-left:4px;" }).appendTo(fadeSpan);
                         scale.FADES.forEach(function(f) { fadeSel.append($("<option></option>").val(f.v).text(f.v)); });
                         fadeSel.append($("<option></option>").val('custom').text('custom…'));
@@ -1143,9 +1145,10 @@
                             .appendTo(customSpan).val(rule.halfLife);
                         $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
 
-                        // Inside the fade span deliberately: both are meaningless for a
-                        // continuous rule, and a control that appears only for momentary rules
-                        // is itself the clearest statement of which kind this rule is.
+                        // On the fade row deliberately: both settings are meaningless for a
+                        // continuous rule, so both vanish with it — and a row that appears only
+                        // for momentary rules is itself the clearest statement of which kind
+                        // this rule is.
                         var repeatSpan = $('<span/>', { class: "br-repeat-span" }).appendTo(fadeSpan);
                         $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(repeatSpan).text('· refiring');
                         var repeatSel = $('<select/>', { class: "br-repeat", style: "width:100px; margin-left:4px;" })
