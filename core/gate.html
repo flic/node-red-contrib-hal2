@@ -363,8 +363,12 @@
                     // has nothing to hold for a range, so the row is no longer than before.
                     // One budget for the pair, as in hal2Event. A Gate rule row's chrome is
                     // 110px, so with a 118px operator select the pair gets 100% less 228.
+                    // The gap before the icon that the other two nodes get for free — hal2Event
+                    // from the whitespace between its inline elements, hal2Bayes from its flex
+                    // margin. Built with .appendTo() there is no text node to supply one, so it
+                    // is stated, and the width budget grows by the same 4px.
                     var rangeSpan = $('<span/>',{class:"node-input-rule-range",
-                        style:"width:calc(100% - 228px); vertical-align:middle;"}).appendTo(rowRule);
+                        style:"width:calc(100% - 232px); margin-left:4px; vertical-align:middle;"}).appendTo(rowRule);
                     var rangeInner = $('<span/>',{style:"display:flex; align-items:center;"}).appendTo(rangeSpan);
                     $('<i/>',{class:"fa fa-arrows-h",style:"flex:0 0 auto; color:#888; margin:0 6px 0 0;"}).appendTo(rangeInner);
                     var lowField = $('<input/>',{class:"node-input-rule-low",type:"text",placeholder:"20",
