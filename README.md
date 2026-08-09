@@ -240,6 +240,13 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Comparing against another source
 
+**in range** (hal2Event and hal2Gate) matches while a reading sits between two bounds, inclusive at
+both ends, with the upper bound on its own row. The order is not significant — 20 to 24 and 24 to 20
+name the same band — and a bound left empty matches nothing rather than half a band. Paired with
+hal2Event's `trigger true/false` output it expresses a comfort band directly: `true` on the way in,
+`false` on the way out, whichever side you leave by. It is deliberately absent from hal2Bayes, whose
+step rows have no room for a second bound.
+
 Every comparison in hal2Gate, hal2Event and hal2Bayes normally weighs a source against a
 **constant** — a number, a string, or a variable. Pick the **state** value type instead and the
 right-hand side is another live reading: another Thing's Item, or a Group with a function of its own.

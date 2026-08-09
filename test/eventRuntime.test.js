@@ -326,6 +326,53 @@ describe('core/event.js — the change setting', function () {
     });
 });
 
+describe('core/event.js — the range trigger', function () {
+    const band = (extra) => makeEvent(Object.assign({
+        operator: 'range', compareValue: '20', compareHigh: '24', compareType: 'num'
+    }, extra));
+
+    it('is a level: in the band and out of it', function () {
+        const { update, payloads } = band({});
+        update(18, undefined);
+        update(22, 18);                 // enters the band
+        update(23, 22);                 // still inside
+        update(30, 23);                 // leaves it the other way
+        assert.deepStrictEqual(payloads(), [false, true, false]);
+    });
+
+    it('includes both ends', function () {
+        const { update, payloads } = band({});
+        update(20, undefined);
+        assert.deepStrictEqual(payloads(), [true], '20 is in 20–24');
+        update(24, 20);
+        assert.deepStrictEqual(payloads(), [true], 'and so is 24, unchanged');
+        update(24.1, 24);
+        assert.deepStrictEqual(payloads(), [true, false]);
+    });
+
+    it('does not mind which bound was typed first', function () {
+        const { update, payloads } = band({ compareValue: '24', compareHigh: '20' });
+        update(22, undefined);
+        assert.deepStrictEqual(payloads(), [true]);
+    });
+
+    it('stays quiet when the upper bound is missing', function () {
+        // A half-filled rule must not read as "everything above 20".
+        const { update, payloads } = band({ compareHigh: '' });
+        update(22, undefined);
+        update(100, 22);
+        assert.deepStrictEqual(payloads(), [false]);
+    });
+
+    it('works as an edge trigger too, for the older output types', function () {
+        const { update, payloads } = band({ outputType: 'str', outputValue: 'comfy' });
+        update(22, undefined);          // in
+        update(23, 22);                 // still in — an edge output fires on every match
+        update(30, 23);                 // out — nothing
+        assert.deepStrictEqual(payloads(), ['comfy', 'comfy']);
+    });
+});
+
 describe('core/event.js — the other output types are untouched', function () {
     it('event msg still forwards the event, on every match', function () {
         const { update, sent } = makeEvent({ outputType: 'state' });

@@ -11,6 +11,7 @@ module.exports = function(RED) {
         this.change         = config.change;
         this.compareValue   = config.compareValue;
         this.compareType    = config.compareType;
+        this.compareHigh    = config.compareHigh;
         this.compareSource  = config.compareSource || null;
         this.outputValue    = config.outputValue;
         this.outputType     = config.outputType;
@@ -300,7 +301,11 @@ module.exports = function(RED) {
                 // separates them. '2' used to skip the initial value and then fire on every
                 // update regardless, which is neither what it is called nor what it means.
                 if ((node.change == '1' || node.change == '2') && event.state === event.laststate) { return; }
-                var cv = convertTo[node.compareType](node.compareValue);
+                // A range compares against a pair. The converter table takes one value each,
+                // so the pair is assembled here rather than pretending to be a value type.
+                var cv = node.operator === 'range'
+                    ? [Number(node.compareValue), Number(node.compareHigh)]
+                    : convertTo[node.compareType](node.compareValue);
                 if (node.compareType === 'state' && cv === undefined) { showState(); return; }
                 var matched = compare[node.operator](event.state,cv,event.laststate);
 

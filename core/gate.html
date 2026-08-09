@@ -38,6 +38,7 @@
     <i>Compare</i> row. Both sides are read in the same pass, so they cannot disagree because one was
     stored in a variable earlier.</li>
     <li><strong>No value</strong>: A rule whose source cannot be read — a missing Thing, or a group where no live member is reporting — does not match, rather than comparing against a stale or invented value.</li>
+    <li><strong>in range</strong>: matches while the reading sits between the two bounds, inclusive at both ends. The second bound goes on the <i>up to</i> row that appears with the operator. The order does not matter &mdash; 20 to 24 and 24 to 20 name the same band &mdash; and a bound left empty makes the rule match nothing rather than half a band.</li>
     <li><strong>TSU</strong>: Time since last update (in seconds)</li>
     <li><strong>TSC</strong>: Time since last change (in seconds)</li>
     <li><strong>Set <code>msg.payload</code> to result</strong>: Sends true or false.</li>
@@ -79,7 +80,8 @@
                 { v: "last_update_gte", t: "TSU >=" },
                 { v: "last_update_lte", t: "TSU <=" },
                 { v: "last_change_gte", t: "TSC >=" },
-                { v: "last_change_lte", t: "TSC <=" }
+                { v: "last_change_lte", t: "TSC <=" },
+                halRangeOperator()
             ]);
 
             var thingsList = halGetThings(RED,'status');
@@ -137,6 +139,7 @@
                         .hide()
                     var rowRule = $('<div/>',{style:"margin-top:8px;"}).appendTo(container);
                     // Thing and item on separate rows, as everything above them in this rule.
+                    var rowRuleHigh = $('<div/>',{style:"margin-top:8px;"}).appendTo(container).hide();
                     var rowCmp  = $('<div/>',{style:"margin-top:8px;"}).appendTo(container).hide();
                     var rowCmpItem = $('<div/>',{style:"margin-top:8px;"}).appendTo(container).hide();
                     var rowCmpTip = $('<div/>', { class: "form-tips",
@@ -165,6 +168,11 @@
                     var labelRule = $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;"})
                         .appendTo(rowRule)
                         .append(' Rule')   
+                    $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
+                        .appendTo(rowRuleHigh).append(' up to')
+                    var highField = $('<input/>',{class:"node-input-rule-high",type:"text",placeholder:"24",
+                        style:"width:calc(100% - 110px)"}).appendTo(rowRuleHigh);
+
                     $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowCmp).append(' Compare')
                     var cmpSel  = $('<select/>',{class:"node-input-rule-cmp",style:"width:calc(100% - 110px)"}).appendTo(rowCmp);
@@ -381,12 +389,18 @@
                             valueField.typedInput('show');
                         }
                         // The compare row belongs to the value, so it follows the value's type.
+                        rowRuleHigh.toggle(type === 'range');
                         setTimeout(function() {
                             showCmp(type !== 'true' && type !== 'false' &&
                                     valueField.typedInput('type') === 'state');
                         }, 0);
                         if (type == "regex" || type == "lt" || type == "lte" || type == "gt" || type == "gte") {
-                            if (type == "regex") {
+                            if (type == "range") {
+                                // Two literals; a band of two other live readings is a
+                                // different feature with its own questions.
+                                valueField.typedInput('types',['num']);
+                                valueField.typedInput('type','num');
+                            } else if (type == "regex") {
                                 valueField.typedInput('types',['re']);
                                 valueField.typedInput('type','re');
                             } else {
@@ -413,6 +427,7 @@
                     if (Object.keys(rule).length !== 0) {
                         valueField.typedInput('value', rule.value === undefined ? '' : rule.value);
                         if (rule.type) { valueField.typedInput('type', rule.type); }
+                        highField.val(rule.valueHigh === undefined ? '' : rule.valueHigh);
                     }
                     showCmp(valueField.typedInput('type') === 'state');
                     thingsField.trigger('change');
@@ -476,6 +491,7 @@
                 var type  = rule.find(".node-input-rule-value").typedInput('type');
 
                 var r = {thing:thing, thingtype:thingtype, item:item, operator:operator, value:value, type:type};
+                if (operator === 'range') { r.valueHigh = rule.find(".node-input-rule-high").val(); }
                 if (type === 'state') {
                     r.cmp = halReadSourcePicker(rule.find(".node-input-rule-cmp"),
                                                 rule.find(".node-input-rule-cmpitem"),

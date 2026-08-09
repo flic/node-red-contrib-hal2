@@ -18,6 +18,29 @@ describe('lib/rules CONVERTERS', function () {
     });
 });
 
+describe('lib/rules COMPARE range', function () {
+    it('is inclusive at both ends', function () {
+        assert.strictEqual(COMPARE.range(20, [20, 24]), true);
+        assert.strictEqual(COMPARE.range(24, [20, 24]), true);
+        assert.strictEqual(COMPARE.range(22, [20, 24]), true);
+        assert.strictEqual(COMPARE.range(19.9, [20, 24]), false);
+        assert.strictEqual(COMPARE.range(24.1, [20, 24]), false);
+    });
+
+    it('does not care which bound was typed first', function () {
+        assert.strictEqual(COMPARE.range(22, [24, 20]), true);
+        assert.strictEqual(COMPARE.range(19, [24, 20]), false);
+    });
+
+    it('stays quiet on a half-filled or non-numeric rule', function () {
+        assert.strictEqual(COMPARE.range(22, [20, NaN]), false);
+        assert.strictEqual(COMPARE.range(22, [NaN, NaN]), false);
+        assert.strictEqual(COMPARE.range('22', [20, 24]), false, 'a string reading is not a number');
+        assert.strictEqual(COMPARE.range(22, 20), false, 'a single bound is not a range');
+        assert.strictEqual(COMPARE.range(22, undefined), false);
+    });
+});
+
 describe('lib/rules COMPARE', function () {
     it('equality operators', function () {
         assert.strictEqual(COMPARE.eq(3, 3), true);

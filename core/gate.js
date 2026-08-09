@@ -72,7 +72,11 @@ module.exports = function(RED) {
             var src = sourceOf(rule);
             if (src === null) { continue; }      // unresolvable source never matches
 
-            var cv = convertTo[rule.type](rule.value,msg,rule);
+            // A range compares against a pair. The converters take one value each, so the pair
+            // is assembled here rather than pretending to be a value type.
+            var cv = rule.operator === 'range'
+                ? [Number(rule.value), Number(rule.valueHigh)]
+                : convertTo[rule.type](rule.value,msg,rule);
             // An unreadable comparison source is not a value of undefined to compare against;
             // the rule simply has nothing to say.
             if (rule.type === 'state' && cv === undefined) { continue; }
