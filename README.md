@@ -243,9 +243,9 @@ other message — e.g. into a Scene-type sensor representing the person.
 **in range / outside range** match while a reading sits between two bounds, or while it does not.
 Available in hal2Event, hal2Gate and hal2Bayes. Inclusive at both ends, so a reading exactly on a
 bound is *in* the range, and the order is not significant — 20 to 24 and 24 to 20 name the same
-band. Both bounds are typed on their own row, which is also why they are two operators rather than
-one with an inside/outside switch: the row below carries the pair, and the operator line says what
-is being asked of it.
+band. Both bounds are typed beside the operator, which is also why they are two operators rather
+than one with an inside/outside switch: the pair already occupies the space a switch would have
+wanted, and the operator itself says what is being asked of it.
 
 A bound left empty makes **both** operators match nothing. That takes a little care, because
 `Number('')` is `0` rather than `NaN` — read naively, an empty upper bound would turn "in range 20

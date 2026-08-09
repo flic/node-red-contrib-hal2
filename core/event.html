@@ -55,18 +55,25 @@
             <textarea id="item-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
         </div>
 
-        <div class="form-row">
-            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
-            <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
-            <input type="text" id="node-input-compareValue" style="width:calc(100% - 219px)>
+        <!-- A flex row rather than width arithmetic. The select is left at its natural width,
+             which for a <select> is its longest option — so "outside range" sizes the control
+             itself and no number here has to predict it. flex-wrap is the safety net: if the
+             dialog is ever too narrow the row breaks between whole fields instead of
+             overflowing, which is what the old calc() budgets did.
+             The style attribute on the value field used to be unterminated, which swallowed
+             the hidden type field after it. -->
+        <div class="form-row" style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 0;">
+            <label for="node-input-operator" style="flex:0 0 auto;"><i class="fa fa-play-circle"></i> Trigger</label>
+            <select id="node-input-operator" style="flex:0 0 auto; min-width:0;"></select>
+            <span id="wrap-compare-value" style="flex:1 1 120px; min-width:0; margin-left:6px;">
+                <input type="text" id="node-input-compareValue" style="width:100%">
+            </span>
+            <span id="span-range" style="flex:0 0 auto; margin-left:6px;" hidden>
+                <input type="text" id="node-input-rangeLow" placeholder="20" style="width:80px">
+                <span style="margin:0 6px; color:#888;">to</span>
+                <input type="text" id="node-input-compareHigh" placeholder="24" style="width:80px">
+            </span>
             <input type="hidden" id="node-input-compareType">
-        </div>
-
-        <div class="form-row" id="row-range" hidden>
-            <label for="node-input-rangeLow"><i class="fa fa-arrows-h"></i> Range</label>
-            <input type="text" id="node-input-rangeLow" placeholder="20" style="width:80px">
-            <span style="margin:0 6px; color:#888;">to</span>
-            <input type="text" id="node-input-compareHigh" placeholder="24" style="width:80px">
         </div>
 
         <div class="form-row" id="row-compare-source" hidden>
@@ -175,7 +182,7 @@
     <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
     <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
     <li><strong>Category</strong>: A <i>Thing</i> watches one Item, a <i>Type</i> watches the same Item across every Thing of that type, and a <i>Group</i> watches the group's own value. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be watched — a command-only group has nothing to observe.</li>
-    <li><strong>in range / outside range</strong>: match while the reading sits between the two bounds, or while it does not. Inclusive at both ends, so a reading exactly on a bound is <i>in</i> the range. Both bounds are typed on the <b>Range</b> row that appears with the operator, and their order does not matter &mdash; 20 to 24 and 24 to 20 name the same band. A bound left empty makes <b>both</b> operators match nothing, so a half-filled rule stays quiet rather than guessing at a band. Paired with <b>trigger true/false</b>, <i>in range</i> gives a comfort band directly: <code>true</code> on the way in, <code>false</code> on the way out, whichever side you leave by.</li>
+    <li><strong>in range / outside range</strong>: match while the reading sits between the two bounds, or while it does not. Inclusive at both ends, so a reading exactly on a bound is <i>in</i> the range. Both bounds are typed beside the operator, and their order does not matter &mdash; 20 to 24 and 24 to 20 name the same band. A bound left empty makes <b>both</b> operators match nothing, so a half-filled rule stays quiet rather than guessing at a band. Paired with <b>trigger true/false</b>, <i>in range</i> gives a comfort band directly: <code>true</code> on the way in, <code>false</code> on the way out, whichever side you leave by.</li>
     <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger. For a group the group <em>is</em> the item: it carries one aggregated value, and the trigger compares that. <code>msg.member</code> tells you which member moved it.</li>
     <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same. <em>on change (ignore initial value)</em> is <em>on change</em> that additionally stays quiet for an item's very first value.</li>
     <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
@@ -643,20 +650,12 @@
             //Show/Hide value field
             $("#node-input-operator").change( function() {
                 var type = $("#node-input-operator").children("option:selected").val();
-                if (type.length < 4) {
-                    $("#node-input-operator").css({ "width": "50px" });
-                    $("#node-input-compareValue").typedInput('width','calc(100% - 225px)')
-                } else {
-                    $("#node-input-operator").css({ "width": "90px" });
-                    $("#node-input-compareValue").typedInput('width','calc(100% - 265px)')
-
-                }
-                if (halRangeOperator(type) || type == "always" || type === "true" || type === "false") {
-                    $("#node-input-compareValue").typedInput('hide');
-                    $("#node-input-operator").css({ "width":"calc(100% - 170px)" });
-                } else {
-                    $("#node-input-compareValue").typedInput('show');
-                }
+                // The wrapper, not the widget: hiding the typedInput alone would leave its flex
+                // space behind and the row would look like it had lost something.
+                var takesValue = !halRangeOperator(type) &&
+                                 type !== "always" && type !== "true" && type !== "false";
+                $("#wrap-compare-value").toggle(takesValue);
+                $("#span-range").toggle(halRangeOperator(type));
                 if (halRangeOperator(type)) {
                     // Both bounds live on their own row, so the typedInput holds nothing here.
                     // Its type is still pinned to num so a saved 'state' cannot linger and
@@ -676,7 +675,6 @@
                 } else {
                     $('#node-input-compareValue').typedInput('types',['str','num','json',halTypeState()]);
                 }
-                $("#row-range").toggle(halRangeOperator(type));
                 syncCompareRow();
             });
         },
