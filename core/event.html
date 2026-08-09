@@ -62,9 +62,11 @@
             <input type="hidden" id="node-input-compareType">
         </div>
 
-        <div class="form-row" id="row-compare-high" hidden>
-            <label for="node-input-compareHigh"><i class="fa fa-arrows-h"></i> up to</label>
-            <input type="text" id="node-input-compareHigh" placeholder="24" style="width:calc(100% - 170px)">
+        <div class="form-row" id="row-range" hidden>
+            <label for="node-input-rangeLow"><i class="fa fa-arrows-h"></i> Range</label>
+            <input type="text" id="node-input-rangeLow" placeholder="20" style="width:80px">
+            <span style="margin:0 6px; color:#888;">to</span>
+            <input type="text" id="node-input-compareHigh" placeholder="24" style="width:80px">
         </div>
 
         <div class="form-row" id="row-compare-source" hidden>
@@ -173,7 +175,7 @@
     <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
     <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
     <li><strong>Category</strong>: A <i>Thing</i> watches one Item, a <i>Type</i> watches the same Item across every Thing of that type, and a <i>Group</i> watches the group's own value. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be watched — a command-only group has nothing to observe.</li>
-    <li><strong>in range</strong>: true while the reading sits between the two bounds, inclusive at both ends. Enter the second bound on the <i>up to</i> row that appears. The order does not matter &mdash; 20 to 24 and 24 to 20 name the same band &mdash; and a bound left empty makes the rule match nothing rather than half a band. Paired with <b>trigger true/false</b> it gives a comfort band directly: <code>true</code> on the way in, <code>false</code> on the way out, whichever side you leave by.</li>
+    <li><strong>in range / outside range</strong>: match while the reading sits between the two bounds, or while it does not. Inclusive at both ends, so a reading exactly on a bound is <i>in</i> the range. Both bounds are typed on the <b>Range</b> row that appears with the operator, and their order does not matter &mdash; 20 to 24 and 24 to 20 name the same band. A bound left empty makes <b>both</b> operators match nothing, so a half-filled rule stays quiet rather than guessing at a band. Paired with <b>trigger true/false</b>, <i>in range</i> gives a comfort band directly: <code>true</code> on the way in, <code>false</code> on the way out, whichever side you leave by.</li>
     <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger. For a group the group <em>is</em> the item: it carries one aggregated value, and the trigger compares that. <code>msg.member</code> tells you which member moved it.</li>
     <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same. <em>on change (ignore initial value)</em> is <em>on change</em> that additionally stays quiet for an item's very first value.</li>
     <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
@@ -250,7 +252,7 @@
                 $("#row-delay-on-false").toggle(levelMode);
                 $("#row-always-tip").toggle(isTrigger && always);
             }
-            var operators = halOperators([{ v: "always", t: "always"}, halRangeOperator()]);
+            var operators = halOperators([{ v: "always", t: "always"}].concat(halRangeOperators()));
 
             var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
 
@@ -584,6 +586,10 @@
             $("<option value='2'>on change (ignore initial value)</option>").appendTo("#node-input-change");
 
 
+            // compareValue carries the low bound for a range; the row it is typed on is not a
+            // node property, so it has to be seeded by hand.
+            $("#node-input-rangeLow").val(this.compareValue);
+
             $("#node-input-change").val(this.change);
             $('#node-input-change').trigger('change');  
 
@@ -645,16 +651,16 @@
                     $("#node-input-compareValue").typedInput('width','calc(100% - 265px)')
 
                 }
-                if (type == "always" || type === "true" || type === "false") {
+                if (halRangeOperator(type) || type == "always" || type === "true" || type === "false") {
                     $("#node-input-compareValue").typedInput('hide');
                     $("#node-input-operator").css({ "width":"calc(100% - 170px)" });
                 } else {
                     $("#node-input-compareValue").typedInput('show');
                 }
-                // A range needs two literals, so it is the one numeric operator that does not
-                // also offer `state` — comparing a reading against a band of two other live
-                // readings is a different feature with its own questions.
-                if (type == "range") {
+                if (halRangeOperator(type)) {
+                    // Both bounds live on their own row, so the typedInput holds nothing here.
+                    // Its type is still pinned to num so a saved 'state' cannot linger and
+                    // reappear when the operator changes back.
                     $('#node-input-compareValue').typedInput('types',['num']);
                     $('#node-input-compareValue').typedInput('type','num');
                 } else if (type == "regex" || type == "lt" || type == "lte" || type == "gt" || type == "gte") {
@@ -670,7 +676,7 @@
                 } else {
                     $('#node-input-compareValue').typedInput('types',['str','num','json',halTypeState()]);
                 }
-                $("#row-compare-high").toggle(type === 'range');
+                $("#row-range").toggle(halRangeOperator(type));
                 syncCompareRow();
             });
         },
@@ -678,7 +684,11 @@
             this.typeSel = $("#node-input-typeSel").val();
             this.thing =   $("#node-input-thing").val();
             this.compareType = $('#node-input-compareValue').typedInput('type');
-            this.compareValue =  $('#node-input-compareValue').typedInput('value');
+            // For a range the low bound is what compareValue means, and it is typed on the
+            // range row rather than into the typedInput, which is hidden there.
+            this.compareValue = halRangeOperator($("#node-input-operator").val())
+                ? $("#node-input-rangeLow").val()
+                : $('#node-input-compareValue').typedInput('value');
             this.compareSource = this.compareType === 'state'
                 ? halReadSourcePicker($("#node-input-compareThing"),
                                       $("#node-input-compareItem"),

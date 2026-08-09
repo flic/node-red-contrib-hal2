@@ -357,11 +357,26 @@ describe('core/event.js — the range trigger', function () {
     });
 
     it('stays quiet when the upper bound is missing', function () {
-        // A half-filled rule must not read as "everything above 20".
+        // A reading below the low bound is the case that discriminates: with the bounds read
+        // through Number() alone the blank became 0, the band became 0–20, and 10 matched.
         const { update, payloads } = band({ compareHigh: '' });
-        update(22, undefined);
+        update(10, undefined);
+        update(22, 10);
         update(100, 22);
-        assert.deepStrictEqual(payloads(), [false]);
+        assert.deepStrictEqual(payloads(), [false], 'no band at all, so nothing matches');
+    });
+
+    it('outside range is the complement, and fails closed the same way', function () {
+        const { update, payloads } = band({ operator: 'outrange' });
+        update(22, undefined);          // inside the band
+        update(30, 22);                 // out the top
+        update(18, 30);                 // still out, other side — no new answer
+        update(21, 18);                 // back in
+        assert.deepStrictEqual(payloads(), [false, true, false]);
+
+        const half = band({ operator: 'outrange', compareHigh: '' });
+        half.update(100, undefined);
+        assert.deepStrictEqual(half.payloads(), [false], 'a half-filled rule is not "outside everything"');
     });
 
     it('works as an edge trigger too, for the older output types', function () {

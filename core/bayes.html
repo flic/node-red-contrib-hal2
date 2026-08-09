@@ -520,7 +520,7 @@
                     var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
                     indent(line2);
                     var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 130px; min-width:0;" }).appendTo(line2);
-                    halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                    halOperators().concat(halRangeOperators()).forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                     var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
                     // The width must be on the element's inline style: typedInput looks for one
                     // there and, finding it, sizes both parts declaratively (input 100%, container
@@ -538,6 +538,19 @@
                     // One row, in line 1's own proportions: the source at flex:5 and what is read
                     // from it at flex:3, so the compare pair sits directly under the thing and
                     // item it is being compared against.
+                    // A range's two bounds, on their own line for the same reason the compare
+                    // pair is: line 2 already carries the operator and the value, and two number
+                    // fields with a word between them do not fit beside them.
+                    var rangeRow = $('<div/>', { class: "bs-range-row",
+                        style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
+                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(rangeRow);
+                    $('<input/>', { class: "bs-low", type: "number", step: "any", placeholder: "20",
+                        style: "flex:0 0 80px; min-width:0;" }).appendTo(rangeRow).val(step.value);
+                    $('<span/>', { style: "flex:0 0 auto; margin:0 6px; color:#888;" }).appendTo(rangeRow).text('to');
+                    $('<input/>', { class: "bs-high", type: "number", step: "any", placeholder: "24",
+                        style: "flex:0 0 80px; min-width:0;" }).appendTo(rangeRow).val(step.valueHigh);
+                    $('<span/>', { class: "bs-endpad", style: "flex:1 1 0;" }).appendTo(rangeRow);
+
                     var cmpRow = $('<div/>', { class: "bs-cmp-row",
                         style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
                     $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box; color:#888;" })
@@ -650,11 +663,16 @@
                     // needs a real RegExp and a string would throw at evaluation.
                     var opHandler = function() {
                         var op = opSel.val();
-                        valWrap.toggle(op !== 'true' && op !== 'false');
+                        valWrap.toggle(op !== 'true' && op !== 'false' && !halRangeOperator(op));
+                        rangeRow.toggle(halRangeOperator(op));
                         // This runs on every operator change and at construction, so it is the
                         // last writer of the type list — anything missing here is missing, however
                         // carefully it was offered elsewhere.
-                        if (op === 'regex') {
+                        if (halRangeOperator(op)) {
+                            // Both bounds are on the row below; the type is pinned so a saved
+                            // 'state' cannot linger behind the hidden field.
+                            valField.typedInput('types', ['num']).typedInput('type', 'num');
+                        } else if (op === 'regex') {
                             valField.typedInput('types', ['re']).typedInput('type', 're');
                         } else if (halNumericOperator(op)) {
                             valField.typedInput('types', ['num', halTypeState()]);
@@ -716,7 +734,7 @@
                             opSel.css('flex', '1 1 0');          // value and qualifier are hidden here
                         } else {
                             opSel.css('flex', '0 0 130px');
-                            halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                            halOperators().concat(halRangeOperators()).forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                             opSel.val(current);
                             valField.typedInput('types', ['str', 'num', 'bool', 're', halTypeState()]);
                         }
@@ -776,7 +794,10 @@
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
                             operator: el.find('.bs-op option:selected').val(),
-                            value:    el.find('.bs-val').typedInput('value'),
+                            value:    halRangeOperator(el.find('.bs-op').val())
+                                          ? el.find('.bs-low').val()
+                                          : el.find('.bs-val').typedInput('value'),
+                            valueHigh: el.find('.bs-high').val(),
                             valueType: el.find('.bs-val').typedInput('type'),
                             pattern:  el.find('.bs-pattern option:selected').val(),
                             cycleMax: el.find('.bs-cyclemax').val(),
@@ -875,8 +896,11 @@
                                        '"now or soon" has nothing to wait for and reads as "now".', 'warning');
                         }
                         patSel.toggle(allowed.length > 1);
-                        var takesValue = !isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0;
+                        var stepOp = el.find('.bs-op').val();
+                        var isRange = !isTime && halRangeOperator(stepOp);
+                        var takesValue = !isTime && ['true', 'false'].indexOf(stepOp) < 0 && !isRange;
                         el.find('.bs-val-wrap').toggle(takesValue);
+                        el.find('.bs-range-row').toggle(isRange);
                         // The tip row as well as the compare row: refreshRuleView runs on every
                         // change and would otherwise leave the tip behind.
                         var showsCmp = takesValue && el.find('.bs-val').typedInput('type') === 'state';

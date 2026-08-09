@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { COMPARE, CONVERTERS } = require('../lib/rules');
+const { COMPARE, CONVERTERS, rangeBounds } = require('../lib/rules');
 
 describe('lib/rules CONVERTERS', function () {
     it('num / str / bool coerce as expected', function () {
@@ -38,6 +38,50 @@ describe('lib/rules COMPARE range', function () {
         assert.strictEqual(COMPARE.range('22', [20, 24]), false, 'a string reading is not a number');
         assert.strictEqual(COMPARE.range(22, 20), false, 'a single bound is not a range');
         assert.strictEqual(COMPARE.range(22, undefined), false);
+    });
+});
+
+describe('lib/rules rangeBounds', function () {
+    it('turns a blank bound into NaN rather than zero', function () {
+        // Number('') is 0, so reading the fields with Number() alone gave an empty box a real
+        // value: "in range 20 to <blank>" quietly became the band 0–20, which matches things
+        // and matches them wrongly.
+        assert.ok(Number.isNaN(rangeBounds('20', '')[1]));
+        assert.ok(Number.isNaN(rangeBounds('20', '   ')[1]));
+        assert.ok(Number.isNaN(rangeBounds('20', null)[1]));
+        assert.ok(Number.isNaN(rangeBounds('20', undefined)[1]));
+        assert.deepStrictEqual(rangeBounds('20', '24'), [20, 24]);
+        assert.deepStrictEqual(rangeBounds(20, 24), [20, 24]);
+    });
+
+    it('leaves a real zero alone', function () {
+        assert.deepStrictEqual(rangeBounds('0', '10'), [0, 10]);
+    });
+
+    it('makes both range operators false, which is the point', function () {
+        const half = rangeBounds('20', '');
+        assert.strictEqual(COMPARE.range(10, half), false);
+        assert.strictEqual(COMPARE.outrange(10, half), false);
+        assert.strictEqual(COMPARE.range(100, half), false);
+        assert.strictEqual(COMPARE.outrange(100, half), false);
+    });
+});
+
+describe('lib/rules COMPARE outrange', function () {
+    it('is the outside of the same band, exclusive of the ends', function () {
+        assert.strictEqual(COMPARE.outrange(19.9, [20, 24]), true);
+        assert.strictEqual(COMPARE.outrange(24.1, [20, 24]), true);
+        assert.strictEqual(COMPARE.outrange(20, [20, 24]), false, 'the end belongs to the band');
+        assert.strictEqual(COMPARE.outrange(24, [20, 24]), false);
+        assert.strictEqual(COMPARE.outrange(22, [20, 24]), false);
+    });
+
+    it('fails closed like its opposite, rather than open', function () {
+        // The reason it is written out instead of as !range: a non-numeric reading is outside
+        // nothing, and a half-filled rule must not start matching everything.
+        assert.strictEqual(COMPARE.outrange('22', [20, 24]), false);
+        assert.strictEqual(COMPARE.outrange(22, [20, NaN]), false);
+        assert.strictEqual(COMPARE.outrange(22, undefined), false);
     });
 });
 

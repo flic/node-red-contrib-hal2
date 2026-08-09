@@ -38,7 +38,7 @@
     <i>Compare</i> row. Both sides are read in the same pass, so they cannot disagree because one was
     stored in a variable earlier.</li>
     <li><strong>No value</strong>: A rule whose source cannot be read — a missing Thing, or a group where no live member is reporting — does not match, rather than comparing against a stale or invented value.</li>
-    <li><strong>in range</strong>: matches while the reading sits between the two bounds, inclusive at both ends. The second bound goes on the <i>up to</i> row that appears with the operator. The order does not matter &mdash; 20 to 24 and 24 to 20 name the same band &mdash; and a bound left empty makes the rule match nothing rather than half a band.</li>
+    <li><strong>in range / outside range</strong>: match while the reading sits between the two bounds, or while it does not. Inclusive at both ends. Both bounds are typed on the <b>Range</b> row that appears with the operator, and their order does not matter &mdash; 20 to 24 and 24 to 20 name the same band. A bound left empty makes both operators match nothing, so a half-filled rule stays quiet rather than guessing at a band.</li>
     <li><strong>TSU</strong>: Time since last update (in seconds)</li>
     <li><strong>TSC</strong>: Time since last change (in seconds)</li>
     <li><strong>Set <code>msg.payload</code> to result</strong>: Sends true or false.</li>
@@ -80,9 +80,8 @@
                 { v: "last_update_gte", t: "TSU >=" },
                 { v: "last_update_lte", t: "TSU <=" },
                 { v: "last_change_gte", t: "TSC >=" },
-                { v: "last_change_lte", t: "TSC <=" },
-                halRangeOperator()
-            ]);
+                { v: "last_change_lte", t: "TSC <=" }
+            ].concat(halRangeOperators()));
 
             var thingsList = halGetThings(RED,'status');
             var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
@@ -169,9 +168,12 @@
                         .appendTo(rowRule)
                         .append(' Rule')   
                     $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-arrows-h"})
-                        .appendTo(rowRuleHigh).append(' up to')
+                        .appendTo(rowRuleHigh).append(' Range')
+                    var lowField = $('<input/>',{class:"node-input-rule-low",type:"text",placeholder:"20",
+                        style:"width:80px"}).appendTo(rowRuleHigh);
+                    $('<span/>',{style:"margin:0 6px; color:#888;"}).appendTo(rowRuleHigh).text('to');
                     var highField = $('<input/>',{class:"node-input-rule-high",type:"text",placeholder:"24",
-                        style:"width:calc(100% - 110px)"}).appendTo(rowRuleHigh);
+                        style:"width:80px"}).appendTo(rowRuleHigh);
 
                     $('<div/>',{style:"display:inline-block;text-align:left; width:80px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sitemap"})
                         .appendTo(rowCmp).append(' Compare')
@@ -389,15 +391,18 @@
                             valueField.typedInput('show');
                         }
                         // The compare row belongs to the value, so it follows the value's type.
-                        rowRuleHigh.toggle(type === 'range');
+                        rowRuleHigh.toggle(halRangeOperator(type));
+                        // Both bounds are on the row below, so the value field holds nothing.
+                        if (halRangeOperator(type)) { valueField.typedInput('hide'); }
+                        else if (type !== 'true' && type !== 'false') { valueField.typedInput('show'); }
                         setTimeout(function() {
                             showCmp(type !== 'true' && type !== 'false' &&
                                     valueField.typedInput('type') === 'state');
                         }, 0);
                         if (type == "regex" || type == "lt" || type == "lte" || type == "gt" || type == "gte") {
-                            if (type == "range") {
-                                // Two literals; a band of two other live readings is a
-                                // different feature with its own questions.
+                            if (halRangeOperator(type)) {
+                                // Pinned to num so a saved 'state' cannot linger unseen behind
+                                // the hidden field and reappear when the operator changes back.
                                 valueField.typedInput('types',['num']);
                                 valueField.typedInput('type','num');
                             } else if (type == "regex") {
@@ -427,6 +432,7 @@
                     if (Object.keys(rule).length !== 0) {
                         valueField.typedInput('value', rule.value === undefined ? '' : rule.value);
                         if (rule.type) { valueField.typedInput('type', rule.type); }
+                        lowField.val(rule.value === undefined ? '' : rule.value);
                         highField.val(rule.valueHigh === undefined ? '' : rule.valueHigh);
                     }
                     showCmp(valueField.typedInput('type') === 'state');
@@ -491,7 +497,11 @@
                 var type  = rule.find(".node-input-rule-value").typedInput('type');
 
                 var r = {thing:thing, thingtype:thingtype, item:item, operator:operator, value:value, type:type};
-                if (operator === 'range') { r.valueHigh = rule.find(".node-input-rule-high").val(); }
+                if (halRangeOperator(operator)) {
+                    // The low bound is what `value` means for a range, typed on the range row.
+                    r.value = rule.find(".node-input-rule-low").val();
+                    r.valueHigh = rule.find(".node-input-rule-high").val();
+                }
                 if (type === 'state') {
                     r.cmp = halReadSourcePicker(rule.find(".node-input-rule-cmp"),
                                                 rule.find(".node-input-rule-cmpitem"),

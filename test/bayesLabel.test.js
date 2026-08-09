@@ -14,6 +14,17 @@ describe('bayes-label describeStep', function () {
             'While Kontor Sensor · Temperature > 25');
     });
 
+    it('reads a range as one value, not as its lower bound', function () {
+        assert.strictEqual(
+            bl.describeStep(step({ operator: 'range', value: '20', valueHigh: '24' }),
+                            named('Kontor Sensor · Temperature'), 0, true),
+            'While Kontor Sensor · Temperature in 20\u201324');
+        assert.strictEqual(
+            bl.describeStep(step({ operator: 'outrange', value: '20', valueHigh: '24' }),
+                            named('Kontor Sensor · Temperature'), 0, true),
+            'While Kontor Sensor · Temperature outside 20\u201324');
+    });
+
     it('drops the comparison value for the unary operators', function () {
         // "is true 25" would be nonsense; the operator has already said everything.
         assert.strictEqual(

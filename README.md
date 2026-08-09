@@ -240,12 +240,21 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Comparing against another source
 
-**in range** (hal2Event and hal2Gate) matches while a reading sits between two bounds, inclusive at
-both ends, with the upper bound on its own row. The order is not significant — 20 to 24 and 24 to 20
-name the same band — and a bound left empty matches nothing rather than half a band. Paired with
-hal2Event's `trigger true/false` output it expresses a comfort band directly: `true` on the way in,
-`false` on the way out, whichever side you leave by. It is deliberately absent from hal2Bayes, whose
-step rows have no room for a second bound.
+**in range / outside range** match while a reading sits between two bounds, or while it does not.
+Available in hal2Event, hal2Gate and hal2Bayes. Inclusive at both ends, so a reading exactly on a
+bound is *in* the range, and the order is not significant — 20 to 24 and 24 to 20 name the same
+band. Both bounds are typed on their own row, which is also why they are two operators rather than
+one with an inside/outside switch: the row below carries the pair, and the operator line says what
+is being asked of it.
+
+A bound left empty makes **both** operators match nothing. That takes a little care, because
+`Number('')` is `0` rather than `NaN` — read naively, an empty upper bound would turn "in range 20
+to \_\_" into the band 0–20 and match things nobody asked for. `rangeBounds()` in `lib/rules.js` is
+the one place that reads a pair of bounds, and it treats blank as NaN so a half-filled rule stays
+quiet.
+
+Paired with hal2Event's `trigger true/false` output, *in range* expresses a comfort band directly:
+`true` on the way in, `false` on the way out, whichever side you leave by.
 
 Every comparison in hal2Gate, hal2Event and hal2Bayes normally weighs a source against a
 **constant** — a number, a string, or a variable. Pick the **state** value type instead and the

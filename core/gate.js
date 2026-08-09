@@ -74,8 +74,8 @@ module.exports = function(RED) {
 
             // A range compares against a pair. The converters take one value each, so the pair
             // is assembled here rather than pretending to be a value type.
-            var cv = rule.operator === 'range'
-                ? [Number(rule.value), Number(rule.valueHigh)]
+            var cv = (rule.operator === 'range' || rule.operator === 'outrange')
+                ? rules.rangeBounds(rule.value, rule.valueHigh)
                 : convertTo[rule.type](rule.value,msg,rule);
             // An unreadable comparison source is not a value of undefined to compare against;
             // the rule simply has nothing to say.

@@ -39,15 +39,23 @@ function halOperators(ops) {
 // The range operator, offered by hal2Event and hal2Gate. Deliberately not part of
 // halOperators(): hal2Bayes takes that list wholesale, and a second bound has nowhere to go on
 // a step row that already carries a source, an operator, a value and a type picker.
-function halRangeOperator() {
-    return { v: "range", t: "in range" };
+function halRangeOperators() {
+    return [
+        { v: "range",    t: "in range" },
+        { v: "outrange", t: "outside range" }
+    ];
+}
+
+// True for the operators whose comparison value is a pair of bounds rather than one value.
+function halRangeOperator(op) {
+    return op === 'range' || op === 'outrange';
 }
 
 // Comparisons that can only mean a number. The editors narrow the value field's type list to
 // num when one of these is chosen, the way hal2Event and hal2Gate have always done — offering
 // a string for "greater than" only invites a comparison that works by coercion or not at all.
 function halNumericOperator(op) {
-    return ['lt', 'lte', 'gt', 'gte', 'range'].indexOf(op) >= 0;
+    return ['lt', 'lte', 'gt', 'gte', 'range', 'outrange'].indexOf(op) >= 0;
 }
 
 // Fill a <select> with the value functions a group can serve, given its HAType. The saved
