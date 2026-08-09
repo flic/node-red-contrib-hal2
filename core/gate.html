@@ -362,11 +362,12 @@
                     // range is one value and reads as one. They replace the value field, which
                     // has nothing to hold for a range, so the row is no longer than before.
                     var rangeSpan = $('<span/>',{class:"node-input-rule-range"}).appendTo(rowRule).hide();
+                    $('<i/>',{class:"fa fa-arrows-h",style:"color:#888; margin:0 6px 0 4px;"}).appendTo(rangeSpan);
                     var lowField = $('<input/>',{class:"node-input-rule-low",type:"text",placeholder:"20",
-                        style:"width:60px"}).appendTo(rangeSpan);
+                        style:"width:calc(50% - 106px)"}).appendTo(rangeSpan);
                     $('<span/>',{style:"margin:0 4px; color:#888;"}).appendTo(rangeSpan).html('&ndash;');
                     var highField = $('<input/>',{class:"node-input-rule-high",type:"text",placeholder:"24",
-                        style:"width:60px"}).appendTo(rangeSpan);
+                        style:"width:calc(50% - 106px)"}).appendTo(rangeSpan);
 
                     // typedInput fires a change on its element when the *type* is switched, which
                     // is how choosing 'state' reveals the row without touching the operator.

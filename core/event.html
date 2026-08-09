@@ -55,23 +55,15 @@
             <textarea id="item-notes" style="width:calc(100% - 170px);background-color:#ffe;"></textarea>
         </div>
 
-        <!-- A flex row rather than width arithmetic. The select is left at its natural width,
-             which for a <select> is its longest option — so "outside range" sizes the control
-             itself and no number here has to predict it. flex-wrap is the safety net: if the
-             dialog is ever too narrow the row breaks between whole fields instead of
-             overflowing, which is what the old calc() budgets did.
-             The style attribute on the value field used to be unterminated, which swallowed
-             the hidden type field after it. -->
-        <div class="form-row" style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 0;">
-            <label for="node-input-operator" style="flex:0 0 auto;"><i class="fa fa-play-circle"></i> Trigger</label>
-            <select id="node-input-operator" style="flex:0 0 auto; min-width:0; width:90px;"></select>
-            <span id="wrap-compare-value" style="flex:1 1 120px; min-width:0; margin-left:6px;">
-                <input type="text" id="node-input-compareValue" style="width:100%">
-            </span>
-            <span id="span-range" style="flex:0 0 auto; margin-left:6px;" hidden>
-                <input type="text" id="node-input-rangeLow" placeholder="20" style="width:60px">
+        <div class="form-row">
+            <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
+            <select id="node-input-operator" style="width:90px"></select>
+            <input type="text" id="node-input-compareValue">
+            <span id="span-range" hidden>
+                <i class="fa fa-arrows-h" style="color:#888; margin:0 6px 0 4px;"></i>
+                <input type="text" id="node-input-rangeLow" placeholder="20" style="width:calc(50% - 166px)">
                 <span style="margin:0 4px; color:#888;">&ndash;</span>
-                <input type="text" id="node-input-compareHigh" placeholder="24" style="width:60px">
+                <input type="text" id="node-input-compareHigh" placeholder="24" style="width:calc(50% - 166px)">
             </span>
             <input type="hidden" id="node-input-compareType">
         </div>
@@ -652,14 +644,25 @@
                 var type = $("#node-input-operator").children("option:selected").val();
                 // The wrapper, not the widget: hiding the typedInput alone would leave its flex
                 // space behind and the row would look like it had lost something.
-                // A <select> left to itself is as wide as its longest option, so adding
-                // "outside range" widened the box for every operator including "==". Sized to
-                // what is actually selected instead; the dropdown list is unaffected.
-                $("#node-input-operator").css('width',
-                    halRangeOperator(type) ? '118px' : (type.length < 4 ? '55px' : '90px'));
-                var takesValue = !halRangeOperator(type) &&
-                                 type !== "always" && type !== "true" && type !== "false";
-                $("#wrap-compare-value").toggle(takesValue);
+                // Every branch spans the row: the widths are budgeted against 100% so the
+                // controls always reach the right margin, whichever operator is chosen. A
+                // <select> left to size itself would instead be as wide as its longest option
+                // for every operator, putting "==" in a box built for "outside range".
+                if (halRangeOperator(type)) {
+                    $("#node-input-operator").css({ "width": "118px" });
+                    $("#node-input-compareValue").typedInput('hide');
+                } else if (type == "always" || type === "true" || type === "false") {
+                    $("#node-input-operator").css({ "width": "calc(100% - 170px)" });
+                    $("#node-input-compareValue").typedInput('hide');
+                } else if (type.length < 4) {
+                    $("#node-input-operator").css({ "width": "50px" });
+                    $("#node-input-compareValue").typedInput('show');
+                    $("#node-input-compareValue").typedInput('width','calc(100% - 225px)');
+                } else {
+                    $("#node-input-operator").css({ "width": "90px" });
+                    $("#node-input-compareValue").typedInput('show');
+                    $("#node-input-compareValue").typedInput('width','calc(100% - 265px)');
+                }
                 $("#span-range").toggle(halRangeOperator(type));
                 if (halRangeOperator(type)) {
                     // Both bounds live on their own row, so the typedInput holds nothing here.

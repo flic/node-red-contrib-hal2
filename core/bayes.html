@@ -534,11 +534,13 @@
                     var rangeSpan = $('<span/>', { class: "bs-range-span",
                         style: "flex:1 1 0; min-width:0; margin-left:4px; display:flex; align-items:center;" })
                         .appendTo(line2).hide();
+                    $('<i/>', { class: "fa fa-arrows-h",
+                        style: "flex:0 0 auto; color:#888; margin:0 6px 0 2px;" }).appendTo(rangeSpan);
                     $('<input/>', { class: "bs-low", type: "number", step: "any", placeholder: "20",
-                        style: "flex:0 0 60px; min-width:0;" }).appendTo(rangeSpan).val(step.value);
+                        style: "flex:1 1 0; min-width:0;" }).appendTo(rangeSpan).val(step.value);
                     $('<span/>', { style: "flex:0 0 auto; margin:0 4px; color:#888;" }).appendTo(rangeSpan).html('&ndash;');
                     $('<input/>', { class: "bs-high", type: "number", step: "any", placeholder: "24",
-                        style: "flex:0 0 60px; min-width:0;" }).appendTo(rangeSpan).val(step.valueHigh);
+                        style: "flex:1 1 0; min-width:0;" }).appendTo(rangeSpan).val(step.valueHigh);
 
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
