@@ -85,6 +85,9 @@
             <div class="form-row">
                 <button type="button" id="thingtype-copy-item-btn" class="red-ui-button" style="padding:4px 12px;"><i class="fa fa-clone"></i> Copy item from...</button>
             </div>
+            <div class="form-row">
+                <ol id="node-config-thingtype-list-metadata"></ol>
+            </div>
         </div>
         <!-- Ingress tab -->
         <div id="tab-ingress" style="display:none">
@@ -142,10 +145,25 @@
     <li><strong>Check alive</strong>: Check if device is alive, either by checking for heartbeats or by using MQTT Last Will and Testament information. If checked a specific <i>Alive</i> Item is automatically created. Possible values: true/false.</li>    
     <li><strong>Attributes</strong>: Thing specific attributes. Define the attribute name and if it's mandatory or not, and define attribute values in the Thing configuration. Attributes can be used in ingress or egress functions as <code>attribute.name</code> or <code>attribute["name"]</code>.</li>
     <li><strong>Items</strong>: Define items. See example code on <a href="https://github.com/flic/node-red-contrib-hal2/tree/main/examples" target="_blank">GitHub</a>.</li>
+    <li><strong>Metadata</strong>: Map a topic into the Thing's metadata bag instead of into item state. Use it for facts about the device rather than measurements from it — firmware version, IP address, serial number. Filters and ingress work exactly as they do for items, but the ingress return value is written under the mapping's <i>Key</i> (the name is used if no key is given) and never becomes an item. Returning an object stores one metadata key per leaf: <code>{ip:'10.0.0.5', ssid:'iot'}</code> under key <code>wifi</code> becomes <code>wifi.ip</code> and <code>wifi.ssid</code>. Returning an empty string deletes the key and everything below it. Metadata is read-only in the Thing GUI and is exposed to MCP clients; it carries no history and takes no part in groups. The reserved <code>&lt;topic&gt;/_meta</code> and <code>&lt;topic&gt;/_meta/&lt;key&gt;</code> topics do the same thing without a mapping, for integrations that can publish there.</li>
     <li><strong>Items <i>Loopback Command</i></strong>: If the <i>item type</i> is set to Loopback Command no output msg will be sent. The command will instead be routed to the node input, basically a virtual wire between output and input. Standard ingress and egress rules apply, including topic filters and the filter function.</li>
     <li><strong>Item <i>Topic filter</i></strong>: <i>Topic filter</i> is used to filter incoming messages. If <i>Topic filter</i> is of type string and starts with '.' the dot is replaced by the topic value configured for the <i>Thing</i>. If it starts with '/' the topic value is prepended.</li>
     <li><strong>Item <i>Topic</i></strong>: <i>Topic</i> is added to outgoing messages as <code>msg.topic</code>. It's possible to modify the value of <code>msg.topic</code> in the egress function. Topics starting with '.' and '/' works just the same as it does in <i>Topic filter</i>. If <i>Topic</i> is left empty the topic configured for the <i>Thing</i> is used unmodified.</li>
     <li><strong>Output</strong>: It's possible to select which output to use for a specific command. Select which output to use.</li>
+    <p><b>Writing functions</b></p>
+    <p>Every function you write here — ingress, egress, filter, metadata and <i>Show state</i> — is called with a fixed set of arguments. Nothing else is injected: <code>context</code>, <code>flow</code>, <code>global</code>, <code>RED</code> and <code>util</code> are <b>not</b> available, and referencing them throws. Use <code>store</code> for anything you need to remember between messages.</p>
+    <table style="width:100%; border-collapse:collapse;">
+        <tr><th style="text-align:left;">Function</th><th style="text-align:left;">Arguments</th><th style="text-align:left;">Return value</th></tr>
+        <tr><td>Item ingress</td><td><code>(msg, attribute, item, store)</code></td><td>The item's new value. <code>null</code> or <code>undefined</code> means "not for me" and leaves the item unchanged.</td></tr>
+        <tr><td>Filter function</td><td><code>(msg, attribute, item, store)</code></td><td><code>true</code> lets the message through to the items. Anything else drops it.</td></tr>
+        <tr><td>Metadata ingress</td><td><code>(msg, attribute, item, store)</code></td><td>A value, or an object that is stored one key per leaf. <code>null</code> leaves the metadata unchanged; an empty string deletes the key.</td></tr>
+        <tr><td>Item egress</td><td><code>(msg, attribute, item, store)</code></td><td>The message to send. <code>null</code> sends nothing.</td></tr>
+        <tr><td>Show state</td><td><code>(item, attribute, store)</code></td><td>The status text under the node. Note the argument order differs.</td></tr>
+    </table>
+    <li><strong><code>msg</code></strong>: A clone of the incoming message, so changes stay local to the function. For egress it is the outgoing message, prefilled with <code>topic</code> and <code>payload</code>.</li>
+    <li><strong><code>attribute</code></strong>: The Thing's attribute values, keyed by attribute name — <code>attribute['Room']</code>. Configuration, always a string, never changes at runtime.</li>
+    <li><strong><code>item</code></strong>: A snapshot of every item's current value, keyed by item name — <code>item['Temperature']</code>. Items that have never been set read <code>'no value'</code>. It is a snapshot: writing to it does nothing.</li>
+    <li><strong><code>store</code></strong>: Scratch space that persists between messages, private to this Thing — the equivalent of <code>context.get</code>/<code>set</code> in a function node. Use <code>store.get(key)</code>, <code>store.set(key, value)</code>, <code>store.keys()</code> and <code>store.clear()</code>. Setting a key to <code>null</code> deletes it. Values go through the context store configured above, so they must be JSON-serialisable — no <code>Date</code>, no <code>Map</code>, no functions. Store timestamps as numbers. The contents are visible, and clearable, in the Thing's edit dialog.</li>
 </script>
 
 <script type="text/javascript">
@@ -206,6 +224,35 @@
                 items.push(r);
             })
         return items;
+    }
+
+    // Metadata mappings route a topic into the Thing's metadata bag instead of into item state.
+    // Same filter + ingress mechanics as an item, minus everything state-related.
+    function localGetMetadata() {
+        let mappings = [];
+        $("#node-config-thingtype-list-metadata")
+            .editableList('items')
+            .each(function() {
+                let m = $(this);
+                var filters = [];
+                m.find(".node-config-thingtype-meta-filter-list").editableList('items').each(function() {
+                    var row = $(this);
+                    filters.push({
+                        field:     row.find('.tt-meta-filter-field').typedInput('value'),
+                        matchType: row.find('.tt-meta-filter-match').typedInput('type'),
+                        value:     row.find('.tt-meta-filter-match').typedInput('value')
+                    });
+                });
+                mappings.push({
+                    name:            m.find(".node-config-thingtype-meta-name-property").val(),
+                    key:             m.find(".node-config-thingtype-meta-key-property").val(),
+                    topicFilters:    filters,
+                    topicFilterMode: m.find(".node-config-thingtype-meta-filtermode-property").val() || 'and',
+                    ingress:         m.find(".node-config-thingtype-meta-ingress-property").val(),
+                    notes:           m.find(".node-config-thingtype-meta-notes-property").val()
+                });
+            })
+        return mappings;
     }
 
     function getFunctions(fn_type) {
@@ -283,6 +330,15 @@
                 populateFnSelect(egressSel, 'egress');
                 egressSel.val(prev).trigger('change');
             }
+        });
+        // Metadata mappings draw from the same ingress library and must not go stale either.
+        $('#node-config-thingtype-list-metadata > li').each(function() {
+            const sel = $(this).find('.node-config-thingtype-meta-ingress-property');
+            if (!sel.length) { return; }
+            ingressDropdowns++;
+            const prev = sel.val();
+            populateFnSelect(sel, 'ingress');
+            sel.val(prev).trigger('change');
         });
         return { itemCount: itemCount, ingressDropdowns: ingressDropdowns, egressDropdowns: egressDropdowns, centralIngressCount: centralIngressCount, centralEgressCount: centralEgressCount };
     }
@@ -431,6 +487,15 @@
         }
     }
 
+    function addMetadata(mappings) {
+        $("#node-config-thingtype-list-metadata").editableList().children().remove();
+        if (mappings) {
+            for (let d in mappings) {
+                $("#node-config-thingtype-list-metadata").editableList('addItem',mappings[d]);
+            }
+        }
+    }
+
     function addFunctions(fn_type,fn) {
         $("#node-config-"+fn_type+"-list-items").editableList().children().remove();
         for (let d in fn) {
@@ -489,6 +554,7 @@
             statusFn:        {},
             items:          { value: [], required: true },
             attributes:     { value: [], required: false },
+            metadata:       { value: [], required: false },
             ingress:        {},
             egress:         {},
             thingStatus:    {},
@@ -555,24 +621,24 @@
                 0 : {
                     name: "Pass-through",
                     id: halCreateId(),
-                    fn: "// msg & attribute objects are\n// passed to function\n\nreturn msg.payload;"
+                    fn: "// (msg, attribute, item, store)\n// Return the item value, or null for no update.\n\nreturn msg.payload;"
                 },
                 1 : {
                     name: "Convert to Number",
                     id: halCreateId(),
-                    fn: "// msg & attribute objects are\n// passed to function\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
+                    fn: "// (msg, attribute, item, store)\n// Return the item value, or null for no update.\n\nmsg.payload = Number(msg.payload);\nreturn msg.payload;"
                 },                
                 2 : {
                     name: "Convert to Boolean",
                     id: halCreateId(),
-                    fn: "// msg & attribute objects are\n// passed to function\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
+                    fn: "// (msg, attribute, item, store)\n// Return the item value, or null for no update.\n\nmsg.payload = (msg.payload === 'true');\nreturn msg.payload;"
                 }, 
             }
             var defaultEgressFunctions = {
                 0 : {
                     name: "Pass-through",
                     id: halCreateId(),
-                    fn: "// msg & attribute objects are\n// passed to function\n\nreturn msg;"
+                    fn: "// (msg, attribute, item, store)\n// Return the message to send, or null to send nothing.\n\nreturn msg;"
                 }
             }
         var lastTab = "";
@@ -637,15 +703,15 @@
             editors['statusFn'] = RED.editor.createEditor({
                 id: 'statusFn-editor',
                 mode: "ace/mode/nrjavascript",
-                value: "// item & attribute objects are\n// passed to function as objects\n\nreturn '';",
+                value: "// (item, attribute, store)\n// Return the status text.\n\nreturn '';",
                 renderValidationDecorations: "on",
+                // Only what the runtime actually injects. context/flow/RED/util are not in scope —
+                // these functions are built with new Function(), not run as Node-RED functions.
                 globals: {
                         msg:false,
-                        context:true,
-                        RED: true,
-                        util: true,
-                        flow: true,
-                        global: true,
+                        item: true,
+                        attribute: true,
+                        store: true,
                         console: true,
                         Buffer: true,
                         setTimeout: true,
@@ -1137,6 +1203,110 @@
                 addButton: "Attribute"
             });
 
+            $("#node-config-thingtype-list-metadata").editableList({
+                addItem: function(container,i,opt) {
+                    var mapping = opt || {};
+                    container.css({ overflow:'hidden', whiteSpace:'nowrap' });
+
+                    var rowName    = $('<div/>').appendTo(container);
+                    var rowDetails = $('<div/>',{style:"margin-top:8px;"}).appendTo(container).hide();
+                    var rowKey         = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowTopicFilter = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowFilterList  = $('<div/>',{style:"margin-top:4px; margin-left:115px;"}).appendTo(rowDetails);
+                    var rowIngress     = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+                    var rowNotes       = $('<div/>',{style:"margin-top:8px;"}).appendTo(rowDetails);
+
+                    var expandButton = $('<span/>', {style: "margin-left:5px; margin-right:10px"})
+                        .html('<i class="fa fa-angle-right"></i>')
+                        .appendTo(rowName);
+                    expandButton.click(function(e) {
+                        e.preventDefault();
+                        if (this.firstElementChild.className === "fa fa-angle-right") {
+                            this.firstElementChild.className = "fa fa-angle-down";
+                        } else {
+                            this.firstElementChild.className = "fa fa-angle-right";
+                        }
+                        rowDetails.change();
+                    });
+                    rowDetails.change(function () {
+                        if (expandButton.children()[0].className === "fa fa-angle-down") { rowDetails.show(); }
+                        else { rowDetails.hide(); }
+                    });
+
+                    $('<div/>',{style:"display:inline-block;text-align:left; width: 90px; padding-right:10px; box-sizing:border-box;",class:"fa fa-info-circle"})
+                        .appendTo(rowName).append(' Metadata');
+                    $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-key"})
+                        .appendTo(rowKey).append(' Key');
+                    $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-filter"})
+                        .appendTo(rowTopicFilter).append(' Filter');
+                    $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-sign-in"})
+                        .appendTo(rowIngress).append(' Ingress');
+                    $('<div/>',{style:"display:inline-block;text-align:left; width: 115px; padding-left: 25px; padding-right:10px; box-sizing:border-box;",class:"fa fa-file"})
+                        .appendTo(rowNotes).append(' Notes');
+
+                    var nameProperty = $('<input/>',{style:"padding-right:10px; width: calc(100% - 125px)",class:"node-config-thingtype-meta-name-property",type:"text"})
+                        .appendTo(rowName)
+                        .prop('required',true);
+                    var keyProperty = $('<input/>',{style:"width: calc(100% - 125px)",class:"node-config-thingtype-meta-key-property",type:"text",placeholder:"defaults to the name"})
+                        .appendTo(rowKey);
+
+                    var filterModeProperty = $('<select/>',{class:"node-config-thingtype-meta-filtermode-property",style:"width:70px;"})
+                        .appendTo(rowTopicFilter)
+                        .append($('<option/>').val('and').text('AND'))
+                        .append($('<option/>').val('or').text('OR'));
+
+                    var filterListEl = $('<ol/>',{class:"node-config-thingtype-meta-filter-list"}).appendTo(rowFilterList);
+                    filterListEl.editableList({
+                        addItem: function(c, idx, filter) {
+                            var row = $('<div/>').appendTo(c);
+                            var fieldInput = $('<input/>',{type:'text',class:'tt-meta-filter-field',style:'width:130px; margin-right:5px;'}).appendTo(row);
+                            fieldInput.typedInput({ types: ['msg'] });
+                            fieldInput.typedInput('value', filter.field || 'topic');
+
+                            var matchInput = $('<input/>',{type:'text',class:'tt-meta-filter-match',style:'width:calc(100% - 145px)'}).appendTo(row);
+                            matchInput.typedInput({ default:MQTTType, types:['str',StrStartType,StrEndType,StrContainsType,'re',MQTTType] });
+                            if (filter.matchType) {
+                                matchInput.typedInput('type', filter.matchType);
+                                matchInput.typedInput('value', filter.value || '');
+                            }
+                        },
+                        removable: true,
+                        sortable: false,
+                        addButton: 'Add filter'
+                    });
+
+                    var ingressProperty = $('<select/>',{class:"node-config-thingtype-meta-ingress-property",style:"width:calc(100% - 225px)"})
+                        .appendTo(rowIngress);
+                    populateFnSelect(ingressProperty, 'ingress');
+                    var ingressOverrideBtn = $('<button/>',{type:'button',style:'margin-left:5px;padding:2px 8px;font-size:0.8em;',title:'Copy this shared function to local (override locally for this ThingType)'})
+                        .html('<i class="fa fa-code-fork"></i> Override')
+                        .appendTo(rowIngress);
+                    ingressOverrideBtn.click(function(e) {
+                        e.preventDefault();
+                        overrideCentralFunctionLocally('ingress', ingressProperty.val(), ingressProperty);
+                    });
+                    ingressProperty.on('change', function() { updateOverrideBtnState(ingressProperty, ingressOverrideBtn); });
+                    updateOverrideBtnState(ingressProperty, ingressOverrideBtn);
+
+                    var notesProperty = $('<textarea/>',{class:"node-config-thingtype-meta-notes-property",style:"width:calc(100% - 125px)"})
+                        .appendTo(rowNotes);
+
+                    //Add values
+                    if (Object.keys(mapping).length != 0) {
+                        nameProperty.val(mapping.name);
+                        keyProperty.val(mapping.key);
+                        filterModeProperty.val(mapping.topicFilterMode || 'and');
+                        (mapping.topicFilters || []).forEach(function(f) { filterListEl.editableList('addItem', f); });
+                        if (mapping.ingress) { ingressProperty.val(mapping.ingress); }
+                        notesProperty.val(mapping.notes);
+                        updateOverrideBtnState(ingressProperty, ingressOverrideBtn);
+                    }
+                },
+                removable: true,
+                sortable: true,
+                addButton: "Metadata mapping"
+            });
+
             // Ingress & Egress
             function createFunctionTab(fn_type,fn_default) {
                 $('#node-config-'+fn_type+'-list-items').editableList({
@@ -1261,6 +1431,15 @@
                         }                        
                         var editorId = fn_type+"-"+idProperty.val();
                         editorId = editorId.split('.').join("");
+                        // The help panel is not visible while a function is open, so the calling
+                        // convention is repeated where it is actually needed. white-space is reset
+                        // because the row itself is nowrap, which would clip this instead of
+                        // wrapping it on a narrow dialog.
+                        $('<div/>',{style:"width: calc(100% - 115px); float:right; font-size:0.85em; color:#888; font-family:monospace; margin-bottom:3px; white-space:normal; line-height:1.4;"})
+                            .text(fn_type === 'egress'
+                                ? '(msg, attribute, item, store) → message to send, or null'
+                                : '(msg, attribute, item, store) → item value, or null for no update')
+                            .appendTo(rowEditor);
                         var editorProperty = $('<div/>',{id:editorId,style:"height: 250px; min-height:150px;width: calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
                             .appendTo(rowEditor)
 
@@ -1269,13 +1448,12 @@
                             mode: "ace/mode/nrjavascript",
                             value: "",
                             renderValidationDecorations: "on",
+                            // See the statusFn editor above: only these four are injected.
                             globals: {
                                     msg:true,
-                                    context:true,
-                                    RED: true,
-                                    util: true,
-                                    flow: true,
-                                    global: true,
+                                    attribute: true,
+                                    item: true,
+                                    store: true,
                                     console: true,
                                     Buffer: true,
                                     setTimeout: true,
@@ -1353,6 +1531,7 @@
             }
             addAttributes(this.attributes);
             addItems(this.items);
+            addMetadata(this.metadata);
 
             // ── Copy item from another ThingType ──────────────────────────────
             $('#thingtype-copy-item-btn').click(function(e) {
@@ -1447,7 +1626,12 @@
                         name: 'items',
                         get: function() { return JSON.stringify(localGetItems()); },
                         set: function(v) { addItems(JSON.parse(v)); }
-                    },                    
+                    },
+                    {
+                        name: 'metadata',
+                        get: function() { return JSON.stringify(localGetMetadata()); },
+                        set: function(v) { addMetadata(JSON.parse(v)); }
+                    },
                     {
                         name: 'check_alive',
                         get: function() { return $("#node-config-input-hbCheck").is(":checked") ? 'true' : 'false'; },
@@ -1514,6 +1698,7 @@
             var node = this;
             node.attributes = [];
             node.items = [];
+            node.metadata = [];
             node.ingress = [];
             node.egress = [];
             node.thingStatus = false;
@@ -1525,6 +1710,7 @@
 
             node.attributes = localGetAttributes();
             node.items = localGetItems();
+            node.metadata = localGetMetadata();
 
             for (let d in node.items) {
                 const t = node.items[d].type;

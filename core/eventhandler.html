@@ -742,6 +742,13 @@
 
                         var editorId = "eh-"+fn_type+"-"+idProperty.val();
                         editorId = editorId.split('.').join("");
+                        // These run in the ThingType sandbox, so state the calling convention here
+                        // too. white-space is reset against the row's nowrap, which would clip it.
+                        $('<div/>',{style:"width:calc(100% - 115px); float:right; font-size:0.85em; color:#888; font-family:monospace; margin-bottom:3px; white-space:normal; line-height:1.4;"})
+                            .text(fn_type === 'egress'
+                                ? '(msg, attribute, item, store) → message to send, or null'
+                                : '(msg, attribute, item, store) → item value, or null for no update')
+                            .appendTo(rowEditor);
                         $('<div/>',{id:editorId,style:"height:250px;min-height:150px;width:calc(100% - 115px);float:right;",class:"red-ui-editor-text-container"})
                             .appendTo(rowEditor);
 
@@ -749,7 +756,8 @@
                             id: editorId,
                             mode: "ace/mode/nrjavascript",
                             value: opt.fn || defaultBody,
-                            globals: { msg:true, context:true, RED:true, util:true, flow:true, global:true, console:true, Buffer:true, setTimeout:true, clearTimeout:true, setInterval:true, clearInterval:true }
+                            // Matches what hal2Thing injects — context/flow/RED/util are not in scope.
+                            globals: { msg:true, attribute:true, item:true, store:true, console:true, Buffer:true, setTimeout:true, clearTimeout:true, setInterval:true, clearInterval:true }
                         });
                     },
                     removable: true,
@@ -757,8 +765,10 @@
                     addButton: "Add "+fn_type+" function"
                 });
             }
-            createLibraryList('ingress', '// return value from msg\nreturn msg.payload;');
-            createLibraryList('egress',  '// return msg to send\nmsg.payload = item;\nreturn msg;');
+            createLibraryList('ingress', '// return the item value from msg\nreturn msg.payload;');
+            // msg.payload already holds the command value — the stub used to overwrite it with the
+            // whole item snapshot, which is never what you want.
+            createLibraryList('egress',  '// return the msg to send\nreturn msg;');
 
             (node.ingressLibrary || []).forEach(function(f) {
                 $("#node-config-eh-ingress-list-items").editableList('addItem', f);

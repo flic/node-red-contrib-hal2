@@ -20,6 +20,7 @@
     var OPERATORS = {
         eq: '==', neq: '!=', lt: '<', lte: '<=', gt: '>', gte: '>=',
         cont: 'contains', regex: 'matches',
+        range: 'in', outrange: 'outside',
         'true': 'is true', 'false': 'is false'
     };
 
@@ -69,9 +70,12 @@
 
         var op = OPERATORS[step.operator] || step.operator || '';
         if (op) { parts.push(op); }
-        // A unary operator has already said everything; a comparison needs its value.
-        if (step.operator !== 'true' && step.operator !== 'false' &&
+        // A range's value is a pair, and reads as one: "in 20–24" rather than "in 20".
+        if (step.operator === 'range' || step.operator === 'outrange') {
+            parts.push(String(step.value) + '\u2013' + String(step.valueHigh));
+        } else if (step.operator !== 'true' && step.operator !== 'false' &&
             step.value !== undefined && step.value !== '') {
+            // A unary operator has already said everything; a comparison needs its value.
             parts.push(String(step.value));
         }
         if (PATTERNS[step.pattern]) { parts.push(PATTERNS[step.pattern]); }

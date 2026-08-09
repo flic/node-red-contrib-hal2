@@ -84,7 +84,8 @@ module.exports = function(RED) {
                         groupFunction: s.groupFunction || '', prop: s.prop, cmp,
                         start: s.start, end: s.end,
                         days: Array.isArray(s.days) ? s.days.map(Number) : undefined,
-                        operator: s.operator, value: s.value, valueType: s.valueType || 'str',
+                        operator: s.operator, value: s.value, valueHigh: s.valueHigh,
+                        valueType: s.valueType || 'str',
                         pattern,
                         cycleMaxMs: sec(s.cycleMax, 180),
                         windowMs: sec(s.window, 120),
@@ -99,7 +100,10 @@ module.exports = function(RED) {
                 });
                 // Ids key the rule map and every step hit, so a missing one would collapse
                 // every rule onto the same entry. Fall back to the position in the list.
+                // Refresh unless the rule claims its firings are independent. A saved rule
+                // with no setting gets refresh, which is the reading that is right more often.
                 return { id: r.id || ('rule' + idx), lr, halfLifeMs, steps,
+                         repeat: r.repeat === 'stack' ? 'stack' : 'refresh',
                          scale: scaleSpec && steps.length === 1 ? scaleSpec : null };
             }).filter(r => r.steps.length > 0)
         };

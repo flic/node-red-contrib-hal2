@@ -223,6 +223,14 @@
     stop when their condition does. Note that strength buys very little time: each doubling of
     <code>ln(LR)</code> only adds one half-life, so <i>certain</i> outlasts <i>decisive</i> by well
     under one &mdash; if you want a push to last, change the fade, not the strength.</p>
+    <p><b>Refiring</b> decides what a momentary rule does when it completes again while its previous
+    push is still alive. <b>refreshes</b> (the default) restates the rule &mdash; one push, its clock
+    reset. <b>stacks</b> adds a second push to the first.</p>
+    <p>Stacking is right only when the two firings are genuinely independent observations, such as two
+    separate arrivals. It is wrong when one continuing fact is reported over and over, which is what a
+    motion sensor does while somebody keeps moving: those firings describe one thing, and adding them
+    up drives the estimate to the clamp. Continuous rules have no such setting &mdash; they hold one
+    weight while their conditions hold and never accumulate.</p>
     <p>With the lock on, fading no longer makes the output fall back by itself, but it still decides
     whether a push is still strong enough to turn the output <i>on</i>, and how long a
     "makes it false" rule stays able to turn it off &mdash; a false rule that fires while the estimate
@@ -512,7 +520,7 @@
                     var line2 = $('<div/>', { style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv);
                     indent(line2);
                     var opSel = $('<select/>', { class: "bs-op", style: "flex:0 0 130px; min-width:0;" }).appendTo(line2);
-                    halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                    halOperators().concat(halRangeOperators()).forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                     var valWrap = $('<span/>', { class: "bs-val-wrap", style: "flex:1 1 0; min-width:0; margin-left:4px;" }).appendTo(line2);
                     // The width must be on the element's inline style: typedInput looks for one
                     // there and, finding it, sizes both parts declaratively (input 100%, container
@@ -521,6 +529,19 @@
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
                         .appendTo(valWrap).typedInput({ default: step.valueType || 'str',
                             types: ['str', 'num', 'bool', 're', halTypeState()] });
+                    // The two bounds stand where the value field would. A range is one value and
+                    // reads as one, and it replaces what it sits beside rather than adding a row.
+                    var rangeSpan = $('<span/>', { class: "bs-range-span",
+                        style: "flex:1 1 0; min-width:0; margin-left:4px; display:flex; align-items:center;" })
+                        .appendTo(line2).hide();
+                    $('<i/>', { class: "fa fa-arrows-h",
+                        style: "flex:0 0 auto; color:#888; margin:0 6px 0 2px;" }).appendTo(rangeSpan);
+                    $('<input/>', { class: "bs-low", type: "number", step: "any", placeholder: "20",
+                        style: "flex:1 1 0; min-width:0;" }).appendTo(rangeSpan).val(step.value);
+                    $('<span/>', { style: "flex:0 0 auto; margin:0 4px; color:#888;" }).appendTo(rangeSpan).html('&ndash;');
+                    $('<input/>', { class: "bs-high", type: "number", step: "any", placeholder: "24",
+                        style: "flex:1 1 0; min-width:0;" }).appendTo(rangeSpan).val(step.valueHigh);
+
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
 
@@ -642,11 +663,19 @@
                     // needs a real RegExp and a string would throw at evaluation.
                     var opHandler = function() {
                         var op = opSel.val();
-                        valWrap.toggle(op !== 'true' && op !== 'false');
+                        valWrap.toggle(op !== 'true' && op !== 'false' && !halRangeOperator(op));
+                        rangeSpan.toggle(halRangeOperator(op));
+                        // The operator select keeps its 130px whatever is chosen — "outside
+                        // range" fits inside it — so the bounds begin exactly where the value
+                        // field does, and line up with the item select on the line above.
                         // This runs on every operator change and at construction, so it is the
                         // last writer of the type list — anything missing here is missing, however
                         // carefully it was offered elsewhere.
-                        if (op === 'regex') {
+                        if (halRangeOperator(op)) {
+                            // Both bounds are on the row below; the type is pinned so a saved
+                            // 'state' cannot linger behind the hidden field.
+                            valField.typedInput('types', ['num']).typedInput('type', 'num');
+                        } else if (op === 'regex') {
                             valField.typedInput('types', ['re']).typedInput('type', 're');
                         } else if (halNumericOperator(op)) {
                             valField.typedInput('types', ['num', halTypeState()]);
@@ -708,7 +737,7 @@
                             opSel.css('flex', '1 1 0');          // value and qualifier are hidden here
                         } else {
                             opSel.css('flex', '0 0 130px');
-                            halOperators().forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
+                            halOperators().concat(halRangeOperators()).forEach(function(o) { opSel.append($("<option></option>").val(o.v).text(o.t)); });
                             opSel.val(current);
                             valField.typedInput('types', ['str', 'num', 'bool', 're', halTypeState()]);
                         }
@@ -742,6 +771,7 @@
                         direction: container.find('.br-direction option:selected').val(),
                         strength: container.find('.br-strength option:selected').val(),
                         fade: container.find('.br-fade option:selected').val(),
+                        repeat: container.find('.br-repeat option:selected').val(),
                         lr: container.find('.br-lr').val(),
                         scale: {
                             fromValue: container.find('.br-fromValue').val(),
@@ -767,7 +797,10 @@
                             item:     el.find('.bs-item option:selected').val(),
                             prop:     el.find('.bs-prop').val(),
                             operator: el.find('.bs-op option:selected').val(),
-                            value:    el.find('.bs-val').typedInput('value'),
+                            value:    halRangeOperator(el.find('.bs-op').val())
+                                          ? el.find('.bs-low').val()
+                                          : el.find('.bs-val').typedInput('value'),
+                            valueHigh: el.find('.bs-high').val(),
                             valueType: el.find('.bs-val').typedInput('type'),
                             pattern:  el.find('.bs-pattern option:selected').val(),
                             cycleMax: el.find('.bs-cyclemax').val(),
@@ -866,8 +899,11 @@
                                        '"now or soon" has nothing to wait for and reads as "now".', 'warning');
                         }
                         patSel.toggle(allowed.length > 1);
-                        var takesValue = !isTime && ['true', 'false'].indexOf(el.find('.bs-op').val()) < 0;
+                        var stepOp = el.find('.bs-op').val();
+                        var isRange = !isTime && halRangeOperator(stepOp);
+                        var takesValue = !isTime && ['true', 'false'].indexOf(stepOp) < 0 && !isRange;
                         el.find('.bs-val-wrap').toggle(takesValue);
+                        el.find('.bs-range-span').toggle(isRange);
                         // The tip row as well as the compare row: refreshRuleView runs on every
                         // change and would otherwise leave the tip behind.
                         var showsCmp = takesValue && el.find('.bs-val').typedInput('type') === 'state';
@@ -993,6 +1029,8 @@
                     container.find('.br-decay-caption').text(decay);
                     container.find('.br-fade-span').toggle(!cont);
                     container.find('.br-custom-span').toggle(rule.fade === 'custom');
+                    container.find('.br-repeat-hint').toggle(
+                        !cont && container.find('.br-repeat').val() === 'stack');
 
                     refreshSummary();
                 }
@@ -1063,7 +1101,8 @@
                         var rule = (opt && (opt.id || (opt.steps && opt.steps.length))) ? opt : {
                             steps: [{ thing: '', item: '', operator: 'true', value: '', valueType: 'str',
                                       pattern: 'is', cycleMax: 180, window: 120 }],
-                            direction: 'true', strength: 'moderate', fade: 'normal', lr: '', halfLife: ''
+                            direction: 'true', strength: 'moderate', fade: 'normal', repeat: 'refresh',
+                            lr: '', halfLife: ''
                         };
                         if (!rule.id) { rule.id = halCreateId(); }
                         // editableList hands us a <div> inside its <li>, so .data() here is
@@ -1120,8 +1159,10 @@
                         var strSel = $('<select/>', { class: "br-strength", style: "width:100px; margin-left:6px;" }).appendTo(outRow);
                         scale.STRENGTHS.forEach(function(s) { strSel.append($("<option></option>").val(s.v).text(s.v)); });
                         strSel.append($("<option></option>").val('scaled').text('scaled…'));
-                        var fadeSpan = $('<span/>', { class: "br-fade-span" }).appendTo(outRow);
-                        $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(fadeSpan).text('fades');
+                        var fadeSpan = $('<div/>', { class: "br-fade-span", style: "margin-top:4px;" })
+                            .appendTo(body);
+                        $('<span/>', { style: "display:inline-block; width:50px;" }).appendTo(fadeSpan);
+                        $('<span/>', { style: "color:#888;" }).appendTo(fadeSpan).text('fades');
                         var fadeSel = $('<select/>', { class: "br-fade", style: "width:90px; margin-left:4px;" }).appendTo(fadeSpan);
                         scale.FADES.forEach(function(f) { fadeSel.append($("<option></option>").val(f.v).text(f.v)); });
                         fadeSel.append($("<option></option>").val('custom').text('custom…'));
@@ -1130,6 +1171,25 @@
                             placeholder: "half-life", style: "width:80px; margin-left:6px;" })
                             .appendTo(customSpan).val(rule.halfLife);
                         $('<span/>', { style: "margin-left:2px; color:#888;" }).appendTo(customSpan).text('s');
+
+                        // On the fade row deliberately: both settings are meaningless for a
+                        // continuous rule, so both vanish with it — and a row that appears only
+                        // for momentary rules is itself the clearest statement of which kind
+                        // this rule is.
+                        var repeatSpan = $('<span/>', { class: "br-repeat-span" }).appendTo(fadeSpan);
+                        $('<span/>', { style: "margin-left:10px; color:#888;" }).appendTo(repeatSpan).text('· refiring');
+                        var repeatSel = $('<select/>', { class: "br-repeat", style: "width:100px; margin-left:4px;" })
+                            .appendTo(repeatSpan);
+                        repeatSel.append($("<option></option>").val('refresh').text('refreshes'));
+                        repeatSel.append($("<option></option>").val('stack').text('stacks'));
+                        repeatSel.val(rule.repeat === 'stack' ? 'stack' : 'refresh');
+                        // Only 'stack' needs explaining: it is the claim that repeated firings are
+                        // independent observations, which is the assumption that is usually wrong.
+                        $('<div/>', { class: "br-repeat-hint",
+                            style: "margin-left:50px; margin-top:3px; color:#999; font-size:0.9em;" })
+                            .appendTo(body)
+                            .text('Each firing adds another weight — only right when the firings are '
+                                + 'genuinely separate observations, not one fact reported repeatedly.');
 
                         var sc = rule.scale || {};
                         var scaleRow = $('<div/>', { class: "br-scale-span", style: "margin-top:6px;" }).appendTo(body);

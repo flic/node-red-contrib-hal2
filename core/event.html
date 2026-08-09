@@ -57,8 +57,20 @@
 
         <div class="form-row">
             <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
-            <select id="node-input-operator" style="width:calc(100% - 170px)"></select>
-            <input type="text" id="node-input-compareValue" style="width:calc(100% - 219px)>
+            <select id="node-input-operator" style="width:90px"></select>
+            <input type="text" id="node-input-compareValue">
+            <!-- One budget, not three: the span is sized against the row the way every other
+                 control here is (100% less the chrome and the select), and the two fields divide
+                 whatever it turns out to be. Budgeting each field separately meant the icon, the
+                 dash and the whitespace between inline elements all had to be guessed at. -->
+            <span id="span-range" style="display:none; width:calc(100% - 293px); vertical-align:middle;">
+                <span style="display:flex; align-items:center;">
+                    <i class="fa fa-arrows-h" style="flex:0 0 auto; color:#888; margin:0 6px 0 0;"></i>
+                    <input type="text" id="node-input-rangeLow" placeholder="20" style="flex:1 1 0; min-width:0;">
+                    <span style="flex:0 0 auto; margin:0 4px; color:#888;">&ndash;</span>
+                    <input type="text" id="node-input-compareHigh" placeholder="24" style="flex:1 1 0; min-width:0;">
+                </span>
+            </span>
             <input type="hidden" id="node-input-compareType">
         </div>
 
@@ -83,6 +95,18 @@
         </div>
 
         <div class="form-row">
+            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
+            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
+            <input type="hidden" id="node-input-outputType">
+        </div>
+
+        <div class="form-tips" id="row-always-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;" hidden>
+            <small>With <b>always</b> the rule never stops holding, so this node will only ever send
+            <code>true</code> &mdash; one per event the change setting lets through, never a
+            <code>false</code>.</small>
+        </div>
+
+        <div class="form-row" id="row-ratelimit">
             <label></label>
             <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"> Rate limit
         </div>
@@ -92,10 +116,15 @@
         </div>
 
         <div id="ratelimit-details" hidden>
-            <div class="form-row">
-                <label for="node-input-rateUnits"><i class="fa fa-clock-o"></i> Rate limit</label>
-                1 event per <input type="text" id="node-input-rate" placeholder="1" style="width:53px" value=1>
-                <select id="node-input-rateUnits" style="width:calc(100% - 320px)">
+            <!-- A flex row rather than a width budget: jQuery's .spinner() wraps the number
+                 field in its own container and adds arrow buttons, so the field is wider than
+                 the 53px the select's calc() used to subtract for, and the row wrapped. Here
+                 nothing has to predict the spinner's width. -->
+            <div class="form-row" style="display:flex; align-items:center;">
+                <label for="node-input-rateUnits" style="flex:0 0 auto;"><i class="fa fa-clock-o"></i> Rate limit</label>
+                <span style="flex:0 0 auto; margin-right:6px;">1 event per</span>
+                <span style="flex:0 0 auto;"><input type="text" id="node-input-rate" placeholder="1" style="width:53px" value=1></span>
+                <select id="node-input-rateUnits" style="flex:1 1 0; min-width:0; margin-left:6px;">
                   <option value="second">Second(s)</option>
                   <option value="minute">Minute(s)</option>
                   <option value="hour" selected>Hour(s)</option>
@@ -120,18 +149,20 @@
                 <label></label>
                 <input type="checkbox" id="node-input-delayExtend" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Extend delay if new event arrives</label>
             </div>
-            <div class="form-row">
+            <div class="form-row" id="row-delay-on-true">
+                <label></label>
+                <input type="checkbox" id="node-input-delayOnTrue" style="width: 23px; margin:0"><label for="node-input-delayOnTrue" style="margin:0;width: auto;"> Delay on true</label>
+            </div>
+            <div class="form-row" id="row-delay-on-false">
+                <label></label>
+                <input type="checkbox" id="node-input-delayOnFalse" style="width: 23px; margin:0"><label for="node-input-delayOnFalse" style="margin:0;width: auto;"> Delay on false</label>
+            </div>
+            <div class="form-row" id="row-delay-reset">
                 <label></label>
                 <input type="checkbox" id="node-input-delayReset" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Reset delay if trigger no longer true</label>
             </div>
         </div>
 
-
-        <div class="form-row">
-            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
-            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
-            <input type="hidden" id="node-input-outputType">
-        </div>
 
         <div class="form-row">
             <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
@@ -149,9 +180,17 @@
     <p>The Event node is used to initiate a flow when certain <i>Item</i> conditions are met.</p>
     <li><strong>Event handler</strong>: Used for firing events between nodes. Use the same config for all nodes that should be able to communicate.</li>
     <li><strong>Category</strong>: A <i>Thing</i> watches one Item, a <i>Type</i> watches the same Item across every Thing of that type, and a <i>Group</i> watches the group's own value. Only groups that have been given a <b>Value</b> on the Event handler's Groups tab can be watched — a command-only group has nothing to observe.</li>
+    <li><strong>in range / outside range</strong>: match while the reading sits between the two bounds, or while it does not. Inclusive at both ends, so a reading exactly on a bound is <i>in</i> the range. Both bounds are typed beside the operator, and their order does not matter &mdash; 20 to 24 and 24 to 20 name the same band. A bound left empty makes <b>both</b> operators match nothing, so a half-filled rule stays quiet rather than guessing at a band. Paired with <b>trigger true/false</b>, <i>in range</i> gives a comfort band directly: <code>true</code> on the way in, <code>false</code> on the way out, whichever side you leave by.</li>
     <li><strong>Item/Trigger</strong>: Select which <i>Item</i> and what conditions are to be met for the event to trigger. For a group the group <em>is</em> the item: it carries one aggregated value, and the trigger compares that. <code>msg.member</code> tells you which member moved it.</li>
-    <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same.</li>
+    <li><strong>on change/on update</strong>: If <em>on change</em> is selected the event only triggers if the value really changed, <em>on update</em> triggers every time the value is updated even if the value itself stays the same. <em>on change (ignore initial value)</em> is <em>on change</em> that additionally stays quiet for an item's very first value.</li>
     <li><strong>Output</strong>: Select what value the node should be sending on to the next node when triggered. If <i>event msg</i> is selected, the <i>Item state</i> value is sent. The <code>msg.thing</code>, <code>msg.item</code> and <code>msg.topic</code> from the <i>Thing</i> node is always added to the outgoing <code>msg</code>.</li>
+    <li><strong>trigger true/false</strong>: reports the trigger as a <em>level</em> rather than an event &mdash; <code>true</code> when the rule starts holding, <code>false</code> when it stops, and nothing in between however many updates arrive. A threshold whose reading wanders without crossing it stays silent.
+        <ul>
+            <li><b>Rate limit does not apply</b> and is hidden. It drops messages inside its window, and a dropped <code>false</code> would leave the receiver believing <code>true</code> indefinitely &mdash; not a degraded signal but a wrong one.</li>
+            <li><b>Delay applies per edge</b>: <i>Delay on true</i> and <i>Delay on false</i> decide which one waits, and both are on by default. Turn off the second and the rule must hold for the delay before <code>true</code> is sent while <code>false</code> goes out at once; turn off the first instead and the node reacts immediately but is slow to let go &mdash; useful for a signal that flickers off. A queued edge is dropped whenever the answer moves away from it again, so the node never announces a state that has already stopped being true. <i>Reset delay</i> is therefore implied, and hidden.</li>
+            <li><b>With <i>always</i></b> the rule never stops holding, so there is no level. The node then behaves as it always has and simply carries <code>true</code>: one per event the change setting lets through, never a <code>false</code>.</li>
+        </ul>
+    </li>
     <li><strong>Topic</strong>: <code>msg.topic</code>, leave blank to get topic from <i>Item</i>.</li>
     <li><strong>Name</strong>: Node name.</li>    
 </script>
@@ -176,6 +215,7 @@
             change:         { value: "1" },
             compareValue:   { value: "" },
             compareType:    { value: "num" },
+            compareHigh:    { value: "" },
             compareSource:  { value: null },
             outputValue:    { value: "" },
             outputType:     { required: true },
@@ -185,6 +225,8 @@
             rateUnits:      { value:"hour" },
             delay:          { value: false },
             delayExtend:    { value: false },
+            delayOnTrue:    { value: true },
+            delayOnFalse:   { value: true },
             delayReset:     { value: false },
             delayValue:     { value: 5 }
         },
@@ -199,7 +241,23 @@
             // Assigned further down, once the compare field exists; the operator handler and the
             // value's own change event both call it so one rule decides the row's visibility.
             var syncCompareRow = function() {};
-            var operators = halOperators([{ v: "always", t: "always"}]);
+            // The editor's copy of core/event.js's levelMode. A level exists only when the rule
+            // can stop holding, so 'always' is not one: it keeps its rate limit and its delay
+            // reset, and gets a note instead. Either field can flip this, so both call it.
+            function syncOutputMode() {
+                var isTrigger = $('#node-input-outputValue').typedInput('type') === 'trigger';
+                var always    = $("#node-input-operator").val() === 'always';
+                var levelMode = isTrigger && !always;
+                $("#row-ratelimit").toggle(!levelMode);
+                $("#ratelimit-details").toggle(!levelMode && $("#node-input-ratelimit").is(':checked'));
+                $("#row-delay-reset").toggle(!levelMode);
+                // Which edge the delay applies to is a question only a level can be asked.
+                // Everywhere else there is one edge, and delayReset covers it.
+                $("#row-delay-on-true").toggle(levelMode);
+                $("#row-delay-on-false").toggle(levelMode);
+                $("#row-always-tip").toggle(isTrigger && always);
+            }
+            var operators = halOperators([{ v: "always", t: "always"}].concat(halRangeOperators()));
 
             var groupsList = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
 
@@ -446,7 +504,7 @@
 
             $("#node-input-ratelimit").change( function () {
                 if ($("#node-input-ratelimit").is(":checked")) {
-                    $("#ratelimit-details").show();
+                    syncOutputMode();
                 } else {
                     $("#ratelimit-details").hide();
                 }
@@ -533,6 +591,10 @@
             $("<option value='2'>on change (ignore initial value)</option>").appendTo("#node-input-change");
 
 
+            // compareValue carries the low bound for a range; the row it is typed on is not a
+            // node property, so it has to be seeded by hand.
+            $("#node-input-rangeLow").val(this.compareValue);
+
             $("#node-input-change").val(this.change);
             $('#node-input-change').trigger('change');  
 
@@ -542,10 +604,16 @@
                 label: "event msg",
                 hasValue: false
             };
+            // The level output: true while the trigger holds, false when it stops.
+            var triggerType = {
+                value: "trigger",
+                label: "trigger true/false",
+                hasValue: false
+            };
             $('#node-input-outputValue').typedInput({
                 default: 'state',
                 typeField: $("#node-input-outputType"),
-                types: [stateType,'flow','global','env','str','num','bool','json']
+                types: [stateType,triggerType,'flow','global','env','str','num','bool','json']
             });
             if (this.outputType) {
                 $("#node-input-outputValue").typedInput('type',this.outputType);
@@ -559,24 +627,58 @@
                 $("#node-input-outputValue").typedInput('value','payload');
  
             }
+            // A node saved before these two existed carries no value for them, and Node-RED
+            // leaves a missing property undefined rather than filling in the declared default.
+            // The checkbox would render unchecked, and the next save would write that back as a
+            // deliberate false — so merely opening the dialog would change what the node does.
+            // The runtime reads absent as on; this makes the editor agree.
+            ['delayOnTrue','delayOnFalse'].forEach(function(k) {
+                if (typeof this[k] === 'undefined') { $("#node-input-"+k).prop('checked', true); }
+            }, this);
+
+            $('#node-input-outputValue').on('change', syncOutputMode);
+            $("#node-input-operator").change(syncOutputMode);
+            // Both details blocks are `hidden` in the markup and were only ever revealed by the
+            // user ticking the box, so reopening a node that already had them on showed a ticked
+            // box above a collapsed section. syncOutputMode settles the rate limit one; the delay
+            // one needs its own nudge.
+            syncOutputMode();
+            $("#node-input-delay").trigger('change');
+
             //Show/Hide value field
             $("#node-input-operator").change( function() {
                 var type = $("#node-input-operator").children("option:selected").val();
-                if (type.length < 4) {
+                // The wrapper, not the widget: hiding the typedInput alone would leave its flex
+                // space behind and the row would look like it had lost something.
+                // Every branch spans the row: the widths are budgeted against 100% so the
+                // controls always reach the right margin, whichever operator is chosen. A
+                // <select> left to size itself would instead be as wide as its longest option
+                // for every operator, putting "==" in a box built for "outside range".
+                if (halRangeOperator(type)) {
+                    $("#node-input-operator").css({ "width": "118px" });
+                    $("#node-input-compareValue").typedInput('hide');
+                } else if (type == "always" || type === "true" || type === "false") {
+                    $("#node-input-operator").css({ "width": "calc(100% - 170px)" });
+                    $("#node-input-compareValue").typedInput('hide');
+                } else if (type.length < 4) {
                     $("#node-input-operator").css({ "width": "50px" });
-                    $("#node-input-compareValue").typedInput('width','calc(100% - 225px)')
+                    $("#node-input-compareValue").typedInput('show');
+                    $("#node-input-compareValue").typedInput('width','calc(100% - 225px)');
                 } else {
                     $("#node-input-operator").css({ "width": "90px" });
-                    $("#node-input-compareValue").typedInput('width','calc(100% - 265px)')
-
-                }
-                if (type == "always" || type === "true" || type === "false") {
-                    $("#node-input-compareValue").typedInput('hide');
-                    $("#node-input-operator").css({ "width":"calc(100% - 170px)" });
-                } else {
                     $("#node-input-compareValue").typedInput('show');
+                    $("#node-input-compareValue").typedInput('width','calc(100% - 265px)');
                 }
-                if (type == "regex" || type == "lt" || type == "lte" || type == "gt" || type == "gte") {
+                // Explicitly, not toggle(): jQuery would restore a <span> to inline, and this
+                // one has to be inline-block for its width to mean anything.
+                $("#span-range").css('display', halRangeOperator(type) ? 'inline-block' : 'none');
+                if (halRangeOperator(type)) {
+                    // Both bounds live on their own row, so the typedInput holds nothing here.
+                    // Its type is still pinned to num so a saved 'state' cannot linger and
+                    // reappear when the operator changes back.
+                    $('#node-input-compareValue').typedInput('types',['num']);
+                    $('#node-input-compareValue').typedInput('type','num');
+                } else if (type == "regex" || type == "lt" || type == "lte" || type == "gt" || type == "gte") {
                     if (type == "regex") {
                         $('#node-input-compareValue').typedInput('types',['re']);
                         $('#node-input-compareValue').typedInput('type','re');
@@ -595,8 +697,17 @@
         oneditsave: function () {
             this.typeSel = $("#node-input-typeSel").val();
             this.thing =   $("#node-input-thing").val();
+            // For a range the low bound is what compareValue means, and it is typed on the range
+            // row rather than into the typedInput, which is hidden there. It has to be written
+            // back through the widget rather than assigned to the node: Node-RED runs the edit
+            // panes' apply() *after* oneditsave, and that re-reads #node-input-<key> for every
+            // declared default — so anything assigned here that also has a field is overwritten
+            // by whatever the field holds. compareSource survives only because it has no field.
+            if (halRangeOperator($("#node-input-operator").val())) {
+                $('#node-input-compareValue').typedInput('value', $("#node-input-rangeLow").val());
+            }
             this.compareType = $('#node-input-compareValue').typedInput('type');
-            this.compareValue =  $('#node-input-compareValue').typedInput('value');
+            this.compareValue = $('#node-input-compareValue').typedInput('value');
             this.compareSource = this.compareType === 'state'
                 ? halReadSourcePicker($("#node-input-compareThing"),
                                       $("#node-input-compareItem"),

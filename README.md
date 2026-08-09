@@ -240,6 +240,22 @@ other message — e.g. into a Scene-type sensor representing the person.
 
 ### Comparing against another source
 
+**in range / outside range** match while a reading sits between two bounds, or while it does not.
+Available in hal2Event, hal2Gate and hal2Bayes. Inclusive at both ends, so a reading exactly on a
+bound is *in* the range, and the order is not significant — 20 to 24 and 24 to 20 name the same
+band. Both bounds are typed beside the operator, which is also why they are two operators rather
+than one with an inside/outside switch: the pair already occupies the space a switch would have
+wanted, and the operator itself says what is being asked of it.
+
+A bound left empty makes **both** operators match nothing. That takes a little care, because
+`Number('')` is `0` rather than `NaN` — read naively, an empty upper bound would turn "in range 20
+to \_\_" into the band 0–20 and match things nobody asked for. `rangeBounds()` in `lib/rules.js` is
+the one place that reads a pair of bounds, and it treats blank as NaN so a half-filled rule stays
+quiet.
+
+Paired with hal2Event's `trigger true/false` output, *in range* expresses a comfort band directly:
+`true` on the way in, `false` on the way out, whichever side you leave by.
+
 Every comparison in hal2Gate, hal2Event and hal2Bayes normally weighs a source against a
 **constant** — a number, a string, or a variable. Pick the **state** value type instead and the
 right-hand side is another live reading: another Thing's Item, or a Group with a function of its own.
@@ -385,7 +401,21 @@ Momentary pushes fade — **quick** (5 min half-life), **normal** (20 min), **sl
 **never** (the push stands until something contradicts it) or **custom…** for an explicit
 half-life; continuous rules simply stop when their condition does. Strength buys very little
 time here: each doubling of `ln(LR)` adds only one half-life, so if you want a push to last,
-change the fade rather than the strength. By default the output falls back to
+change the fade rather than the strength.
+
+**Refiring** decides what happens when the same momentary rule completes again while its
+previous push is still alive. **refreshes** (the default) restates the rule: one push, its clock
+reset, at whatever weight the rule is worth now. **stacks** adds a second push to the first.
+
+Stacking is the correct Bayesian reading only when the two firings are genuinely independent
+observations — two separate arrivals, say. It is the wrong reading when one continuing fact is
+simply being reported repeatedly, which is the usual case for a sensor that re-triggers while
+something keeps happening. A motion rule left to stack ran a live node to the clamp on seventeen
+firings in twenty-three minutes, each one describing the same person still moving about. Claim
+independence deliberately; do not let it be the default. Continuous rules have no setting here —
+they hold one weight for as long as their conditions hold and never accumulate.
+
+By default the output falls back to
 off as evidence disappears. The **lock** changes that: *only rules that make it false can turn
 it off* — silence, decay or a sensor dropping out will not (status shows `held`). Use it when
 the state cannot end unnoticed: nobody leaves the house without the door opening, so a phone
@@ -468,11 +498,40 @@ nearly there or nowhere near; the share does, in the unit the rules were tuned i
 
 - **hal2Bayes — probabilistic binary-state estimation** (see [Bayes node](#bayes-node)).
 
+- **hal2Event — a level output** (`trigger true/false`). The Event node has always reported the
+  *rising* edge: it fires when the trigger rule starts holding and says nothing when it stops, so a
+  flow that wanted to know whether a condition currently holds needed a second node with the rule
+  inverted — a second place to keep in agreement with the first.
+
+  The new output type reports the rule as a level instead: `true` when it starts holding, `false`
+  when it stops, and nothing in between however many updates arrive. A threshold whose reading
+  wanders without crossing it stays silent, where an every-evaluation output would narrate each
+  reading.
+
+  Two settings behave differently in this mode, and the editor hides or replaces them rather than
+  leaving them to surprise you. **Rate limit does not apply**: it drops messages inside its window,
+  and a dropped `false` leaves the receiver believing `true` for as long as nothing else moves — not
+  a degraded signal but a wrong one.
+
+  **Delay applies per edge**, with *Delay on true* and *Delay on false*, both on by default so that
+  a ticked *Delay event* always does something. Turn off the second for an on-delay: the rule must
+  hold before `true` is sent, while `false` goes out at once. Turn off the first instead for the
+  opposite — quick to react, slow to let go, which is what a signal that flickers off usually
+  wants. A queued edge is dropped whenever the answer moves away from it
+  again, so the node never announces a state that has already stopped being true; *Reset delay* is
+  implied and hidden.
+
+  With the **always** operator there is no level — the rule cannot stop holding — so the node keeps
+  its ordinary firing discipline and simply carries `true`, exactly as the boolean output type does.
+  It never sends `false`, and the editor says so where you choose it.
+
 - **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, with automatic migration.
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.
 - **Centralised ingress/egress functions** — define message-transform functions once on the Event handler and reuse them across thing types instead of copying them per type.
 - **Notes & tags** on Things and Items, plus automatically derived device **categories** — handy for organising devices and for disambiguation by the MCP and JSON API tools.
 - **Metadata** — a per-Thing, machine-managed key/value bag for facts an integration discovers about a device (see below).
+- **Metadata mappings** — declare on the Thing type which topics carry device facts, for sources that can't publish to `_meta` themselves (see [Metadata mappings](#metadata-mappings)).
+- **Function store** — persistent scratch space for a Thing's ingress/egress functions, so logic that needed a function node and `context.get`/`set` can live in the Thing type (see [The function store](#the-function-store)).
 
 ## Metadata
 
@@ -490,4 +549,49 @@ Metadata is updated over a reserved topic on the Thing's own prefix, so any upst
 Values are persisted in the Thing's context exactly like state, so they survive a restart. The current metadata is shown in the Thing's edit dialog (values are read-only, but you can delete a single key or **Clear all** — note an active source may re-publish a deleted key), and is exposed to the MCP / JSON API as a `metadata` field in the detailed views — `get_all_states` **full** mode and `get_state` (device) — always present there, as an empty object `{}` when the device has none. It's omitted from the lean `get_all_states` summary and from item-level `get_state`.
 
 For example, the companion [`node-red-contrib-matterjs-bridge`](https://www.npmjs.com/package/node-red-contrib-matterjs-bridge) publishes each Matter device's model and IPv6 address to `matter/‹id›/_meta` — and they appear automatically as Thing metadata, with no hal2-side configuration.
+
+### Metadata mappings
+
+`_meta` requires a source that can publish where hal2 wants it. When it can't — a device whose topics are fixed by its firmware — declare a **metadata mapping** on the Thing type instead. A mapping looks like an item: topic filters plus an ingress function. The difference is where the result goes: under the mapping's **key** in the metadata bag, never into item state.
+
+An ESPHome node publishing `esphome/‹room›/device/wifi` as `{"ip":"…","ssid":"…","bssid":"…","rssi":-46}` needs one mapping — filter *ends with* `/device/wifi`, key `wifi`, ingress returning the three stable fields:
+
+```js
+if (!msg.payload || typeof msg.payload !== 'object') { return null; }
+return { ip: msg.payload.ip, ssid: msg.payload.ssid, bssid: msg.payload.bssid };
+```
+
+That stores `wifi.ip`, `wifi.ssid` and `wifi.bssid`. `rssi` is deliberately left out — it changes constantly and belongs in an item, where it gets history. The rule of thumb: **what the device *is* goes in metadata, what the device *measures* goes in items.**
+
+Returning `null` from a mapping leaves the metadata untouched; returning an empty string deletes the key and its branch, exactly as an empty `_meta` payload does.
+
+## Writing functions in a Thing type
+
+Ingress, egress, filter, metadata and *Show state* functions are built with `new Function()`, not run as Node-RED function nodes. Only these arguments exist — `context`, `flow`, `global`, `RED` and `util` are **not** in scope and referencing them throws:
+
+| Function | Arguments | Return value |
+|---|---|---|
+| Item ingress | `(msg, attribute, item, store)` | The item's new value; `null`/`undefined` leaves it unchanged |
+| Filter function | `(msg, attribute, item, store)` | `true` passes the message on; anything else drops it |
+| Metadata ingress | `(msg, attribute, item, store)` | Value or object to store; `null` changes nothing |
+| Item egress | `(msg, attribute, item, store)` | The message to send; `null` sends nothing |
+| Show state | `(item, attribute, store)` | Status text — note the different argument order |
+
+- **`attribute`** — the Thing's attribute values by name, `attribute['Room']`. Configuration, always strings.
+- **`item`** — a snapshot of every item's current value by name, `item['Temperature']`; unset items read `'no value'`. Writing to it does nothing.
+- **`store`** — scratch space that persists between messages, private to the Thing: the equivalent of `context.get`/`set` in a function node.
+
+### The function store
+
+`store.get(key)`, `store.set(key, value)`, `store.keys()`, `store.clear()`. Setting a key to `null` deletes it. Values are persisted through the Thing type's context store, so they must be JSON-serialisable — no `Date`, no `Map`, no functions; keep timestamps as numbers. The contents are visible, per key, in the Thing's edit dialog, and clearable from there when a function has stored something wrong.
+
+The store is what lets logic that would otherwise need a function node live inside the Thing type. A presence Thing that has to pick which room a phone is in receives one message per room and must remember the others:
+
+```js
+var rooms = store.get('rooms') || {};
+rooms[room] = { rssi: rssi, ts: Date.now() };
+store.set('rooms', rooms);
+```
+
+When several items need the same derived value, compute it once in the **filter function** — it runs before the items, on every message that reaches the Thing — and let each ingress read the result back out of the store. Otherwise every item repeats the same work.
 
