@@ -683,12 +683,17 @@
         oneditsave: function () {
             this.typeSel = $("#node-input-typeSel").val();
             this.thing =   $("#node-input-thing").val();
+            // For a range the low bound is what compareValue means, and it is typed on the range
+            // row rather than into the typedInput, which is hidden there. It has to be written
+            // back through the widget rather than assigned to the node: Node-RED runs the edit
+            // panes' apply() *after* oneditsave, and that re-reads #node-input-<key> for every
+            // declared default — so anything assigned here that also has a field is overwritten
+            // by whatever the field holds. compareSource survives only because it has no field.
+            if (halRangeOperator($("#node-input-operator").val())) {
+                $('#node-input-compareValue').typedInput('value', $("#node-input-rangeLow").val());
+            }
             this.compareType = $('#node-input-compareValue').typedInput('type');
-            // For a range the low bound is what compareValue means, and it is typed on the
-            // range row rather than into the typedInput, which is hidden there.
-            this.compareValue = halRangeOperator($("#node-input-operator").val())
-                ? $("#node-input-rangeLow").val()
-                : $('#node-input-compareValue').typedInput('value');
+            this.compareValue = $('#node-input-compareValue').typedInput('value');
             this.compareSource = this.compareType === 'state'
                 ? halReadSourcePicker($("#node-input-compareThing"),
                                       $("#node-input-compareItem"),
