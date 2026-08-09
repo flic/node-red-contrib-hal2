@@ -609,6 +609,15 @@
                 $("#node-input-outputValue").typedInput('value','payload');
  
             }
+            // A node saved before these two existed carries no value for them, and Node-RED
+            // leaves a missing property undefined rather than filling in the declared default.
+            // The checkbox would render unchecked, and the next save would write that back as a
+            // deliberate false — so merely opening the dialog would change what the node does.
+            // The runtime reads absent as on; this makes the editor agree.
+            ['delayOnTrue','delayOnFalse'].forEach(function(k) {
+                if (typeof this[k] === 'undefined') { $("#node-input-"+k).prop('checked', true); }
+            }, this);
+
             $('#node-input-outputValue').on('change', syncOutputMode);
             $("#node-input-operator").change(syncOutputMode);
             // Both details blocks are `hidden` in the markup and were only ever revealed by the
