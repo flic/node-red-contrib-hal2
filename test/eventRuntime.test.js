@@ -160,6 +160,27 @@ describe('core/event.js — trigger true/false with a delay', function () {
         });
     });
 
+    it('drops a pending true when the answer falls back to what was already said', function () {
+        // The case the first version of this got wrong. With lastResult already false, a rule
+        // that goes true, starts its delay and then falls back looked like "nothing changed" and
+        // returned early — leaving the queued true to land as a statement about a condition that
+        // had stopped holding. It only escaped notice because lastResult starts undefined.
+        withFakeTimers((fire, pending) => {
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK });
+
+            update(10, undefined);              // establishes false
+            assert.deepStrictEqual(payloads(), [false]);
+
+            update(30, 10);                     // goes true — queued behind the delay
+            assert.strictEqual(pending(), 1);
+            update(20, 30);                     // and falls back before the timer runs
+            assert.strictEqual(pending(), 0, 'the queued true was dropped');
+
+            fire();
+            assert.deepStrictEqual(payloads(), [false], 'and nothing else was ever said');
+        });
+    });
+
     it('drops a pending true when the rule stops holding first', function () {
         // delayReset is deliberately off: in level mode it is implied, because announcing a
         // condition that has already stopped holding is not a late report but a false one.
@@ -172,6 +193,70 @@ describe('core/event.js — trigger true/false with a delay', function () {
             assert.strictEqual(pending(), 0, 'the pending true was cancelled');
             fire();
             assert.deepStrictEqual(payloads(), [false], 'only the falling edge was ever sent');
+        });
+    });
+});
+
+describe('core/event.js — which edge the delay applies to', function () {
+    const CLOCK = 20;
+
+    it('delays only false when asked to', function () {
+        withFakeTimers((fire) => {
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK,
+                                                     delayOnTrue: false, delayOnFalse: true });
+            update(30, undefined);
+            assert.deepStrictEqual(payloads(), [true], 'true is not delayed');
+
+            update(10, 30);
+            assert.deepStrictEqual(payloads(), [true], 'false is waiting');
+            fire();
+            assert.deepStrictEqual(payloads(), [true, false]);
+        });
+    });
+
+    it('delays both edges when asked to', function () {
+        withFakeTimers((fire) => {
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK,
+                                                     delayOnTrue: true, delayOnFalse: true });
+            update(30, undefined);
+            assert.deepStrictEqual(payloads(), []);
+            fire();
+            assert.deepStrictEqual(payloads(), [true]);
+
+            update(10, 30);
+            assert.deepStrictEqual(payloads(), [true]);
+            fire();
+            assert.deepStrictEqual(payloads(), [true, false]);
+        });
+    });
+
+    it('drops a queued false when the rule comes back before it lands', function () {
+        // The mirror of the true case, and the reason a pending edge has to remember its
+        // direction rather than merely existing.
+        withFakeTimers((fire, pending) => {
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK,
+                                                     delayOnTrue: false, delayOnFalse: true });
+            update(30, undefined);
+            assert.deepStrictEqual(payloads(), [true]);
+
+            update(10, 30);                     // queued false
+            assert.strictEqual(pending(), 1);
+            update(31, 10);                     // back above before it lands
+            assert.strictEqual(pending(), 0);
+
+            fire();
+            assert.deepStrictEqual(payloads(), [true], 'still true, and it never said otherwise');
+        });
+    });
+
+    it('defaults to an on-delay when a saved node predates the setting', function () {
+        withFakeTimers((fire) => {
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK });
+            update(30, undefined);
+            assert.deepStrictEqual(payloads(), [], 'true waits');
+            fire();
+            update(10, 30);
+            assert.deepStrictEqual(payloads(), [true, false], 'false does not');
         });
     });
 });

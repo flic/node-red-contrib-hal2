@@ -82,6 +82,18 @@
             <select id="node-input-change" style="width:calc(100% - 170px)"></select>
         </div>
 
+        <div class="form-row">
+            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
+            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
+            <input type="hidden" id="node-input-outputType">
+        </div>
+
+        <div class="form-tips" id="row-always-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;" hidden>
+            <small>With <b>always</b> the rule never stops holding, so this node will only ever send
+            <code>true</code> &mdash; one per event the change setting lets through, never a
+            <code>false</code>.</small>
+        </div>
+
         <div class="form-row" id="row-ratelimit">
             <label></label>
             <input type="checkbox" id="node-input-ratelimit" style="width: 23px; margin:0"> Rate limit
@@ -125,24 +137,20 @@
                 <label></label>
                 <input type="checkbox" id="node-input-delayExtend" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Extend delay if new event arrives</label>
             </div>
+            <div class="form-row" id="row-delay-on-true">
+                <label></label>
+                <input type="checkbox" id="node-input-delayOnTrue" style="width: 23px; margin:0"><label for="node-input-delayOnTrue" style="margin:0;width: auto;"> Delay on true</label>
+            </div>
+            <div class="form-row" id="row-delay-on-false">
+                <label></label>
+                <input type="checkbox" id="node-input-delayOnFalse" style="width: 23px; margin:0"><label for="node-input-delayOnFalse" style="margin:0;width: auto;"> Delay on false</label>
+            </div>
             <div class="form-row" id="row-delay-reset">
                 <label></label>
                 <input type="checkbox" id="node-input-delayReset" style="width: 23px; margin:0"><label for="node-input-ratelimit" style="margin:0;width: auto;"> Reset delay if trigger no longer true</label>
             </div>
         </div>
 
-
-        <div class="form-row">
-            <label for="node-input-outputValue"><i class="fa fa-sign-out"></i> Output</label>
-            <input type="text" id="node-input-outputValue" style="width:calc(100% - 170px)">
-            <input type="hidden" id="node-input-outputType">
-        </div>
-
-        <div class="form-tips" id="row-always-tip" style="margin-left:105px; width:calc(100% - 170px); max-width:none; box-sizing:border-box; margin-bottom:8px;" hidden>
-            <small>With <b>always</b> the rule never stops holding, so this node will only ever send
-            <code>true</code> &mdash; one per event the change setting lets through, never a
-            <code>false</code>.</small>
-        </div>
 
         <div class="form-row">
             <label for="node-input-topic"><i class="fa fa-tasks"></i> Topic</label>
@@ -166,7 +174,7 @@
     <li><strong>trigger true/false</strong>: reports the trigger as a <em>level</em> rather than an event &mdash; <code>true</code> when the rule starts holding, <code>false</code> when it stops, and nothing in between however many updates arrive. A threshold whose reading wanders without crossing it stays silent.
         <ul>
             <li><b>Rate limit does not apply</b> and is hidden. It drops messages inside its window, and a dropped <code>false</code> would leave the receiver believing <code>true</code> indefinitely &mdash; not a degraded signal but a wrong one.</li>
-            <li><b>Delay is an on-delay</b>: the rule must hold for the delay before <code>true</code> is sent, while <code>false</code> goes out at once. A pending <code>true</code> is always dropped if the rule stops holding first, so <i>Reset delay</i> is implied and hidden.</li>
+            <li><b>Delay applies per edge</b>: <i>Delay on true</i> and <i>Delay on false</i> decide which one waits. With only the first (the default) the rule must hold for the delay before <code>true</code> is sent while <code>false</code> goes out at once; with only the second the node reacts immediately but is slow to let go &mdash; useful for a signal that flickers off. A queued edge is dropped whenever the answer moves away from it again, so the node never announces a state that has already stopped being true. <i>Reset delay</i> is therefore implied, and hidden.</li>
             <li><b>With <i>always</i></b> the rule never stops holding, so there is no level. The node then behaves as it always has and simply carries <code>true</code>: one per event the change setting lets through, never a <code>false</code>.</li>
         </ul>
     </li>
@@ -203,6 +211,8 @@
             rateUnits:      { value:"hour" },
             delay:          { value: false },
             delayExtend:    { value: false },
+            delayOnTrue:    { value: true },
+            delayOnFalse:   { value: false },
             delayReset:     { value: false },
             delayValue:     { value: 5 }
         },
@@ -227,6 +237,10 @@
                 $("#row-ratelimit").toggle(!levelMode);
                 $("#ratelimit-details").toggle(!levelMode && $("#node-input-ratelimit").is(':checked'));
                 $("#row-delay-reset").toggle(!levelMode);
+                // Which edge the delay applies to is a question only a level can be asked.
+                // Everywhere else there is one edge, and delayReset covers it.
+                $("#row-delay-on-true").toggle(levelMode);
+                $("#row-delay-on-false").toggle(levelMode);
                 $("#row-always-tip").toggle(isTrigger && always);
             }
             var operators = halOperators([{ v: "always", t: "always"}]);

@@ -23,6 +23,10 @@ module.exports = function(RED) {
         this.delay          = config.delay;
         this.delayExtend    = config.delayExtend;
         this.delayReset     = config.delayReset;
+        // Which edge the delay applies to, for a level output. Absent on a node saved before
+        // these existed, and the old behaviour was an on-delay: true waits, false does not.
+        this.delayOnTrue    = config.delayOnTrue  !== false;
+        this.delayOnFalse   = config.delayOnFalse === true;
         this.delayValue     = config.delayValue;
 
         var node = this;
@@ -46,6 +50,11 @@ module.exports = function(RED) {
         var lastResult = nodeContext.get('lastResult',contextStore);
 
         var eventDelay = {};
+        // What a pending timer will announce, per thing. Without it a queued edge cannot be
+        // recognised as stale: the level machine has to know not just that something is waiting
+        // but which way it points, or a true left over from a condition that has since stopped
+        // holding lands anyway.
+        var delayPending = {};
         var rateLimited = 0;
 
         var convertRate = {
@@ -114,9 +123,46 @@ module.exports = function(RED) {
             node.status(s);
         }
 
+        // Settle a level against what the node last said. Kept apart from the listener because
+        // there are four questions here — is there anything to say, is something already queued
+        // to say it, does a queued announcement still hold, and does this edge wait — and reading
+        // them inside the event filtering is what let a stale `true` slip through before.
+        function settleLevel(thingtypeid, thingid, itemid, event, matched) {
+            var waiting = delayPending[thingid];
+
+            // A queued announcement is worth keeping only while the answer still agrees with it.
+            if (waiting !== undefined && waiting !== matched) {
+                clearTimeout(eventDelay[thingid]);
+                delete eventDelay[thingid];
+                delete delayPending[thingid];
+                waiting = undefined;
+            }
+
+            if (matched === lastResult) { return; }      // nothing to say, or cancelled back
+            if (waiting === matched) {                   // already queued; only extend it
+                if (node.delayExtend) {
+                    clearTimeout(eventDelay[thingid]);
+                    eventDelay[thingid] = setTimeout(triggerEvent, node.delayValue*1000,
+                        thingtypeid, thingid, itemid, event, matched);
+                    node.debug('Event delay extended, Id '+thingid+' Time '+node.delayValue+'s');
+                }
+                return;
+            }
+
+            if (node.delay && (matched ? node.delayOnTrue : node.delayOnFalse)) {
+                delayPending[thingid] = matched;
+                eventDelay[thingid] = setTimeout(triggerEvent, node.delayValue*1000,
+                    thingtypeid, thingid, itemid, event, matched);
+                node.debug('Event delay ('+matched+'), Id '+thingid+' Time '+node.delayValue+'s');
+            } else {
+                triggerEvent(thingtypeid, thingid, itemid, event, matched);
+            }
+        }
+
         function triggerEvent(thingtypeid, thingid, itemid, event, result) {
             if (node.delay) {
                 delete eventDelay[thingid];
+                delete delayPending[thingid];
             }
 
             var now = Date.now();
@@ -260,7 +306,11 @@ module.exports = function(RED) {
                 // A level speaks only when its answer moves. A threshold that stays unmet while
                 // its reading wanders must not narrate every reading — that is the difference
                 // between reporting a level and reporting an evaluation.
-                if (levelMode && matched === lastResult) { showState(); return; }
+                if (levelMode) {
+                    settleLevel(thingtypeid, thingid, itemid, event, matched);
+                    showState();
+                    return;
+                }
 
                 if (matched) {
                     if (node.delay) {
@@ -278,15 +328,11 @@ module.exports = function(RED) {
                         triggerEvent(thingtypeid, thingid, itemid, event, true);
                     }
                 } else {
-                    // A pending true is dropped whatever delayReset says: announcing a condition
-                    // that has already stopped holding is not a delayed report, it is a false one.
-                    if ((node.delay) && (node.delayReset || levelMode) && (typeof eventDelay[thingid] != 'undefined')) {
+                    if ((node.delay) && (node.delayReset) && (typeof eventDelay[thingid] != 'undefined')) {
                         clearTimeout(eventDelay[thingid]);
                         delete eventDelay[thingid];
                         node.debug('Event delay reset, Id '+thingid);
                     }
-                    // Delay is an on-delay: the falling edge is reported at once.
-                    if (levelMode) { triggerEvent(thingtypeid, thingid, itemid, event, false); }
                 }
                 showState();
             }
