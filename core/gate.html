@@ -361,13 +361,18 @@
                     // The two bounds, beside the operator rather than on a row of their own: a
                     // range is one value and reads as one. They replace the value field, which
                     // has nothing to hold for a range, so the row is no longer than before.
-                    var rangeSpan = $('<span/>',{class:"node-input-rule-range"}).appendTo(rowRule).hide();
-                    $('<i/>',{class:"fa fa-arrows-h",style:"color:#888; margin:0 6px 0 4px;"}).appendTo(rangeSpan);
+                    // One budget for the pair, as in hal2Event. A Gate rule row's chrome is
+                    // 110px, so with a 118px operator select the pair gets 100% less 228.
+                    var rangeSpan = $('<span/>',{class:"node-input-rule-range",
+                        style:"width:calc(100% - 228px); vertical-align:middle;"}).appendTo(rowRule);
+                    var rangeInner = $('<span/>',{style:"display:flex; align-items:center;"}).appendTo(rangeSpan);
+                    $('<i/>',{class:"fa fa-arrows-h",style:"flex:0 0 auto; color:#888; margin:0 6px 0 0;"}).appendTo(rangeInner);
                     var lowField = $('<input/>',{class:"node-input-rule-low",type:"text",placeholder:"20",
-                        style:"width:calc(50% - 106px)"}).appendTo(rangeSpan);
-                    $('<span/>',{style:"margin:0 4px; color:#888;"}).appendTo(rangeSpan).html('&ndash;');
+                        style:"flex:1 1 0; min-width:0;"}).appendTo(rangeInner);
+                    $('<span/>',{style:"flex:0 0 auto; margin:0 4px; color:#888;"}).appendTo(rangeInner).html('&ndash;');
                     var highField = $('<input/>',{class:"node-input-rule-high",type:"text",placeholder:"24",
-                        style:"width:calc(50% - 106px)"}).appendTo(rangeSpan);
+                        style:"flex:1 1 0; min-width:0;"}).appendTo(rangeInner);
+                    rangeSpan.css('display','none');
 
                     // typedInput fires a change on its element when the *type* is switched, which
                     // is how choosing 'state' reveals the row without touching the operator.
@@ -397,7 +402,7 @@
                             valueField.typedInput('show');
                         }
                         // The compare row belongs to the value, so it follows the value's type.
-                        rangeSpan.toggle(halRangeOperator(type));
+                        rangeSpan.css('display', halRangeOperator(type) ? 'inline-block' : 'none');
                         // The bounds stand where the value field would; it holds nothing here.
                         if (halRangeOperator(type)) { valueField.typedInput('hide'); }
                         else if (type !== 'true' && type !== 'false') { valueField.typedInput('show'); }

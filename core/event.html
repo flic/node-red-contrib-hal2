@@ -59,11 +59,17 @@
             <label for="node-input-operator"><i class="fa fa-play-circle"></i> Trigger</label>
             <select id="node-input-operator" style="width:90px"></select>
             <input type="text" id="node-input-compareValue">
-            <span id="span-range" hidden>
-                <i class="fa fa-arrows-h" style="color:#888; margin:0 6px 0 4px;"></i>
-                <input type="text" id="node-input-rangeLow" placeholder="20" style="width:calc(50% - 166px)">
-                <span style="margin:0 4px; color:#888;">&ndash;</span>
-                <input type="text" id="node-input-compareHigh" placeholder="24" style="width:calc(50% - 166px)">
+            <!-- One budget, not three: the span is sized against the row the way every other
+                 control here is (100% less the chrome and the select), and the two fields divide
+                 whatever it turns out to be. Budgeting each field separately meant the icon, the
+                 dash and the whitespace between inline elements all had to be guessed at. -->
+            <span id="span-range" style="display:none; width:calc(100% - 293px); vertical-align:middle;">
+                <span style="display:flex; align-items:center;">
+                    <i class="fa fa-arrows-h" style="flex:0 0 auto; color:#888; margin:0 6px 0 0;"></i>
+                    <input type="text" id="node-input-rangeLow" placeholder="20" style="flex:1 1 0; min-width:0;">
+                    <span style="flex:0 0 auto; margin:0 4px; color:#888;">&ndash;</span>
+                    <input type="text" id="node-input-compareHigh" placeholder="24" style="flex:1 1 0; min-width:0;">
+                </span>
             </span>
             <input type="hidden" id="node-input-compareType">
         </div>
@@ -663,7 +669,9 @@
                     $("#node-input-compareValue").typedInput('show');
                     $("#node-input-compareValue").typedInput('width','calc(100% - 265px)');
                 }
-                $("#span-range").toggle(halRangeOperator(type));
+                // Explicitly, not toggle(): jQuery would restore a <span> to inline, and this
+                // one has to be inline-block for its width to mean anything.
+                $("#span-range").css('display', halRangeOperator(type) ? 'inline-block' : 'none');
                 if (halRangeOperator(type)) {
                     // Both bounds live on their own row, so the typedInput holds nothing here.
                     // Its type is still pinned to num so a saved 'state' cannot linger and

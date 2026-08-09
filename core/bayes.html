@@ -665,9 +665,9 @@
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false' && !halRangeOperator(op));
                         rangeSpan.toggle(halRangeOperator(op));
-                        // Sized to the selection: "outside range" would otherwise set the width
-                        // of the box for every operator, including the two-character ones.
-                        opSel.css('flex', halRangeOperator(op) ? '0 0 118px' : '0 0 130px');
+                        // The operator select keeps its 130px whatever is chosen — "outside
+                        // range" fits inside it — so the bounds begin exactly where the value
+                        // field does, and line up with the item select on the line above.
                         // This runs on every operator change and at construction, so it is the
                         // last writer of the type list — anything missing here is missing, however
                         // carefully it was offered elsewhere.
