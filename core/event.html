@@ -174,7 +174,7 @@
     <li><strong>trigger true/false</strong>: reports the trigger as a <em>level</em> rather than an event &mdash; <code>true</code> when the rule starts holding, <code>false</code> when it stops, and nothing in between however many updates arrive. A threshold whose reading wanders without crossing it stays silent.
         <ul>
             <li><b>Rate limit does not apply</b> and is hidden. It drops messages inside its window, and a dropped <code>false</code> would leave the receiver believing <code>true</code> indefinitely &mdash; not a degraded signal but a wrong one.</li>
-            <li><b>Delay applies per edge</b>: <i>Delay on true</i> and <i>Delay on false</i> decide which one waits. With only the first (the default) the rule must hold for the delay before <code>true</code> is sent while <code>false</code> goes out at once; with only the second the node reacts immediately but is slow to let go &mdash; useful for a signal that flickers off. A queued edge is dropped whenever the answer moves away from it again, so the node never announces a state that has already stopped being true. <i>Reset delay</i> is therefore implied, and hidden.</li>
+            <li><b>Delay applies per edge</b>: <i>Delay on true</i> and <i>Delay on false</i> decide which one waits, and both are on by default. Turn off the second and the rule must hold for the delay before <code>true</code> is sent while <code>false</code> goes out at once; turn off the first instead and the node reacts immediately but is slow to let go &mdash; useful for a signal that flickers off. A queued edge is dropped whenever the answer moves away from it again, so the node never announces a state that has already stopped being true. <i>Reset delay</i> is therefore implied, and hidden.</li>
             <li><b>With <i>always</i></b> the rule never stops holding, so there is no level. The node then behaves as it always has and simply carries <code>true</code>: one per event the change setting lets through, never a <code>false</code>.</li>
         </ul>
     </li>
@@ -212,7 +212,7 @@
             delay:          { value: false },
             delayExtend:    { value: false },
             delayOnTrue:    { value: true },
-            delayOnFalse:   { value: false },
+            delayOnFalse:   { value: true },
             delayReset:     { value: false },
             delayValue:     { value: 5 }
         },

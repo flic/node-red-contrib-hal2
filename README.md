@@ -497,10 +497,11 @@ nearly there or nowhere near; the share does, in the unit the rules were tuned i
   and a dropped `false` leaves the receiver believing `true` for as long as nothing else moves — not
   a degraded signal but a wrong one.
 
-  **Delay applies per edge**, with *Delay on true* and *Delay on false*. Only the first (the
-  default) gives an on-delay: the rule must hold before `true` is sent, while `false` goes out at
-  once. Only the second gives the opposite — quick to react, slow to let go, which is what a signal
-  that flickers off usually wants. A queued edge is dropped whenever the answer moves away from it
+  **Delay applies per edge**, with *Delay on true* and *Delay on false*, both on by default so that
+  a ticked *Delay event* always does something. Turn off the second for an on-delay: the rule must
+  hold before `true` is sent, while `false` goes out at once. Turn off the first instead for the
+  opposite — quick to react, slow to let go, which is what a signal that flickers off usually
+  wants. A queued edge is dropped whenever the answer moves away from it
   again, so the node never announces a state that has already stopped being true; *Reset delay* is
   implied and hidden.
 

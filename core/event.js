@@ -23,10 +23,11 @@ module.exports = function(RED) {
         this.delay          = config.delay;
         this.delayExtend    = config.delayExtend;
         this.delayReset     = config.delayReset;
-        // Which edge the delay applies to, for a level output. Absent on a node saved before
-        // these existed, and the old behaviour was an on-delay: true waits, false does not.
+        // Which edge the delay applies to, for a level output. Both by default, so a ticked
+        // "Delay event" always does something: leaving one edge undelayed is a choice you make,
+        // not a state you can land in by not noticing a second checkbox.
         this.delayOnTrue    = config.delayOnTrue  !== false;
-        this.delayOnFalse   = config.delayOnFalse === true;
+        this.delayOnFalse   = config.delayOnFalse !== false;
         this.delayValue     = config.delayValue;
 
         var node = this;

@@ -148,7 +148,8 @@ describe('core/event.js — trigger true/false with a delay', function () {
 
     it('delays the rising edge and reports the falling one at once', function () {
         withFakeTimers((fire) => {
-            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK });
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK,
+                                                     delayOnFalse: false });
 
             update(30, undefined);
             assert.deepStrictEqual(payloads(), [], 'true is waiting out the delay');
@@ -166,7 +167,8 @@ describe('core/event.js — trigger true/false with a delay', function () {
         // returned early — leaving the queued true to land as a statement about a condition that
         // had stopped holding. It only escaped notice because lastResult starts undefined.
         withFakeTimers((fire, pending) => {
-            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK });
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK,
+                                                     delayOnFalse: false });
 
             update(10, undefined);              // establishes false
             assert.deepStrictEqual(payloads(), [false]);
@@ -185,7 +187,8 @@ describe('core/event.js — trigger true/false with a delay', function () {
         // delayReset is deliberately off: in level mode it is implied, because announcing a
         // condition that has already stopped holding is not a late report but a false one.
         withFakeTimers((fire, pending) => {
-            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK, delayReset: false });
+            const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK,
+                                                     delayOnFalse: false, delayReset: false });
 
             update(30, undefined);
             assert.strictEqual(pending(), 1);
@@ -249,14 +252,18 @@ describe('core/event.js — which edge the delay applies to', function () {
         });
     });
 
-    it('defaults to an on-delay when a saved node predates the setting', function () {
+    it('delays both edges when neither box says otherwise', function () {
+        // The default, so a ticked "Delay event" always does something. Reaching the do-nothing
+        // configuration takes two deliberate clicks rather than one oversight.
         withFakeTimers((fire) => {
             const { update, payloads } = makeEvent({ delay: true, delayValue: CLOCK });
             update(30, undefined);
             assert.deepStrictEqual(payloads(), [], 'true waits');
             fire();
             update(10, 30);
-            assert.deepStrictEqual(payloads(), [true, false], 'false does not');
+            assert.deepStrictEqual(payloads(), [true], 'and so does false');
+            fire();
+            assert.deepStrictEqual(payloads(), [true, false]);
         });
     });
 });
