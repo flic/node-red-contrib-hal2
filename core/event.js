@@ -35,6 +35,15 @@ module.exports = function(RED) {
         // remember its own previous value to know whether anything changed — and to persist it,
         // or a restart would read as a change.
         var groupLast = nodeContext.get('groupLast',contextStore);
+        // A level exists only when the rule can stop holding. 'always' cannot, so it is not a
+        // level: it keeps the node's ordinary firing discipline and simply carries true as its
+        // payload, exactly as the boolean output type does. Everything that separates the two
+        // modes — the change gating, the rate limit, the forced delay reset — reads this one
+        // predicate rather than each deciding for itself what "the new mode" means.
+        var levelMode = node.outputType === 'trigger' && node.operator !== 'always';
+        // What the level last said. Persisted for the same reason groupLast is: a restart must
+        // not manufacture an edge out of a level that never moved.
+        var lastResult = nodeContext.get('lastResult',contextStore);
 
         var eventDelay = {};
         var rateLimited = 0;
@@ -83,7 +92,11 @@ module.exports = function(RED) {
                 fill: 'gray'
             };
 
-            if (eventTimestamp[node.id]) {
+            // A level's interesting fact is what it currently says, not when it last spoke.
+            if (levelMode && typeof lastResult !== 'undefined') {
+                s.fill = lastResult ? 'green' : 'gray';
+                s.text = String(lastResult);
+            } else if (eventTimestamp[node.id]) {
                 let td = new Date(eventTimestamp[node.id]);
                 s.fill = 'green';
                 s.text = td.toLocaleString();
@@ -101,14 +114,18 @@ module.exports = function(RED) {
             node.status(s);
         }
 
-        function triggerEvent(thingtypeid, thingid, itemid, event) {
+        function triggerEvent(thingtypeid, thingid, itemid, event, result) {
             if (node.delay) {
                 delete eventDelay[thingid];
             }
 
             var now = Date.now();
 
-            if (node.ratelimit) {
+            // Rate limit drops messages inside its window. On a level that is not a degraded
+            // signal but a wrong one: a dropped false leaves the receiver believing true for as
+            // long as nothing else happens to move. It is hidden in the editor for the same
+            // reason, so this guard is only what protects an already-saved configuration.
+            if (node.ratelimit && !levelMode) {
                 var rateid;
 
                 if (node.ratetype == 'all') {
@@ -126,6 +143,12 @@ module.exports = function(RED) {
                 rateLimited = now+convertRate[node.rateUnits](node.rate);
                 showState();
                 setTimeout(showState,convertRate[node.rateUnits](node.rate));
+            }
+
+            // Before the group branch below returns early, so both output paths record it.
+            if (levelMode) {
+                lastResult = result;
+                nodeContext.set('lastResult',lastResult,contextStore);
             }
 
             eventTimestamp[thingid] = now;
@@ -147,6 +170,9 @@ module.exports = function(RED) {
                     break;
                 case 'env':
                     msg.payload = process.env[node.outputValue];
+                    break;
+                case 'trigger':
+                    msg.payload = result;
                     break;
                 default:
                     msg.payload = RED.util.evaluateNodeProperty(node.outputValue,node.outputType);
@@ -223,30 +249,44 @@ module.exports = function(RED) {
                     }
                 }
                 if (node.change == '2' && typeof event.laststate == 'undefined') { return; }
-                if (node.change == '1' && event.state === event.laststate) { return; }
+                // Both '1' and '2' mean on change; the clause above is the only thing that
+                // separates them. '2' used to skip the initial value and then fire on every
+                // update regardless, which is neither what it is called nor what it means.
+                if ((node.change == '1' || node.change == '2') && event.state === event.laststate) { return; }
                 var cv = convertTo[node.compareType](node.compareValue);
                 if (node.compareType === 'state' && cv === undefined) { showState(); return; }
-                if (compare[node.operator](event.state,cv,event.laststate)){
+                var matched = compare[node.operator](event.state,cv,event.laststate);
+
+                // A level speaks only when its answer moves. A threshold that stays unmet while
+                // its reading wanders must not narrate every reading — that is the difference
+                // between reporting a level and reporting an evaluation.
+                if (levelMode && matched === lastResult) { showState(); return; }
+
+                if (matched) {
                     if (node.delay) {
                         if (typeof eventDelay[thingid] != 'undefined') {
                             if (node.delayExtend) {
                                 clearTimeout(eventDelay[thingid]);
-                                eventDelay[thingid] = setTimeout(triggerEvent,node.delayValue*1000,thingtypeid, thingid, itemid, event);
+                                eventDelay[thingid] = setTimeout(triggerEvent,node.delayValue*1000,thingtypeid, thingid, itemid, event, true);
                                 node.debug('Event delay extended, Id '+thingid+' Time '+node.delayValue+'s');
                             }
                         } else {
-                            eventDelay[thingid] = setTimeout(triggerEvent,node.delayValue*1000,thingtypeid, thingid, itemid, event);
+                            eventDelay[thingid] = setTimeout(triggerEvent,node.delayValue*1000,thingtypeid, thingid, itemid, event, true);
                             node.debug('Event delay, Id '+thingid+' Time '+node.delayValue+'s');
                         }
                     } else {
-                        triggerEvent(thingtypeid, thingid, itemid, event);
+                        triggerEvent(thingtypeid, thingid, itemid, event, true);
                     }
                 } else {
-                    if ((node.delay) && (node.delayReset) && (typeof eventDelay[thingid] != 'undefined')) {
+                    // A pending true is dropped whatever delayReset says: announcing a condition
+                    // that has already stopped holding is not a delayed report, it is a false one.
+                    if ((node.delay) && (node.delayReset || levelMode) && (typeof eventDelay[thingid] != 'undefined')) {
                         clearTimeout(eventDelay[thingid]);
                         delete eventDelay[thingid];
                         node.debug('Event delay reset, Id '+thingid);
-                    }    
+                    }
+                    // Delay is an on-delay: the falling edge is reported at once.
+                    if (levelMode) { triggerEvent(thingtypeid, thingid, itemid, event, false); }
                 }
                 showState();
             }

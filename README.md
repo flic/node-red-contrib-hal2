@@ -482,6 +482,27 @@ nearly there or nowhere near; the share does, in the unit the rules were tuned i
 
 - **hal2Bayes — probabilistic binary-state estimation** (see [Bayes node](#bayes-node)).
 
+- **hal2Event — a level output** (`trigger true/false`). The Event node has always reported the
+  *rising* edge: it fires when the trigger rule starts holding and says nothing when it stops, so a
+  flow that wanted to know whether a condition currently holds needed a second node with the rule
+  inverted — a second place to keep in agreement with the first.
+
+  The new output type reports the rule as a level instead: `true` when it starts holding, `false`
+  when it stops, and nothing in between however many updates arrive. A threshold whose reading
+  wanders without crossing it stays silent, where an every-evaluation output would narrate each
+  reading.
+
+  Two settings behave differently in this mode, and the editor hides them rather than leaving them
+  to surprise you. **Rate limit does not apply**: it drops messages inside its window, and a dropped
+  `false` leaves the receiver believing `true` for as long as nothing else moves — not a degraded
+  signal but a wrong one. **Delay becomes an on-delay**: the rule must hold for the delay before
+  `true` is sent, `false` goes out at once, and a pending `true` is always dropped if the rule stops
+  holding first, so *Reset delay* is implied.
+
+  With the **always** operator there is no level — the rule cannot stop holding — so the node keeps
+  its ordinary firing discipline and simply carries `true`, exactly as the boolean output type does.
+  It never sends `false`, and the editor says so where you choose it.
+
 - **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, with automatic migration.
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.
 - **Centralised ingress/egress functions** — define message-transform functions once on the Event handler and reuse them across thing types instead of copying them per type.
