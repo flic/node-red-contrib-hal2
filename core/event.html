@@ -64,14 +64,14 @@
              the hidden type field after it. -->
         <div class="form-row" style="display:flex; align-items:center; flex-wrap:wrap; gap:6px 0;">
             <label for="node-input-operator" style="flex:0 0 auto;"><i class="fa fa-play-circle"></i> Trigger</label>
-            <select id="node-input-operator" style="flex:0 0 auto; min-width:0;"></select>
+            <select id="node-input-operator" style="flex:0 0 auto; min-width:0; width:90px;"></select>
             <span id="wrap-compare-value" style="flex:1 1 120px; min-width:0; margin-left:6px;">
                 <input type="text" id="node-input-compareValue" style="width:100%">
             </span>
             <span id="span-range" style="flex:0 0 auto; margin-left:6px;" hidden>
-                <input type="text" id="node-input-rangeLow" placeholder="20" style="width:80px">
-                <span style="margin:0 6px; color:#888;">to</span>
-                <input type="text" id="node-input-compareHigh" placeholder="24" style="width:80px">
+                <input type="text" id="node-input-rangeLow" placeholder="20" style="width:60px">
+                <span style="margin:0 4px; color:#888;">&ndash;</span>
+                <input type="text" id="node-input-compareHigh" placeholder="24" style="width:60px">
             </span>
             <input type="hidden" id="node-input-compareType">
         </div>
@@ -652,6 +652,11 @@
                 var type = $("#node-input-operator").children("option:selected").val();
                 // The wrapper, not the widget: hiding the typedInput alone would leave its flex
                 // space behind and the row would look like it had lost something.
+                // A <select> left to itself is as wide as its longest option, so adding
+                // "outside range" widened the box for every operator including "==". Sized to
+                // what is actually selected instead; the dropdown list is unaffected.
+                $("#node-input-operator").css('width',
+                    halRangeOperator(type) ? '118px' : (type.length < 4 ? '55px' : '90px'));
                 var takesValue = !halRangeOperator(type) &&
                                  type !== "always" && type !== "true" && type !== "false";
                 $("#wrap-compare-value").toggle(takesValue);

@@ -529,6 +529,17 @@
                     var valField = $('<input/>', { class: "bs-val", type: "text", style: "width:100%;" })
                         .appendTo(valWrap).typedInput({ default: step.valueType || 'str',
                             types: ['str', 'num', 'bool', 're', halTypeState()] });
+                    // The two bounds stand where the value field would. A range is one value and
+                    // reads as one, and it replaces what it sits beside rather than adding a row.
+                    var rangeSpan = $('<span/>', { class: "bs-range-span",
+                        style: "flex:1 1 0; min-width:0; margin-left:4px; display:flex; align-items:center;" })
+                        .appendTo(line2).hide();
+                    $('<input/>', { class: "bs-low", type: "number", step: "any", placeholder: "20",
+                        style: "flex:0 0 60px; min-width:0;" }).appendTo(rangeSpan).val(step.value);
+                    $('<span/>', { style: "flex:0 0 auto; margin:0 4px; color:#888;" }).appendTo(rangeSpan).html('&ndash;');
+                    $('<input/>', { class: "bs-high", type: "number", step: "any", placeholder: "24",
+                        style: "flex:0 0 60px; min-width:0;" }).appendTo(rangeSpan).val(step.valueHigh);
+
                     $('<span/>', { class: "bs-endpad", style: "flex:0 0 34px;" }).appendTo(line2);
                     valField.typedInput('value', step.value === undefined ? '' : step.value);
 
@@ -538,19 +549,6 @@
                     // One row, in line 1's own proportions: the source at flex:5 and what is read
                     // from it at flex:3, so the compare pair sits directly under the thing and
                     // item it is being compared against.
-                    // A range's two bounds, on their own line for the same reason the compare
-                    // pair is: line 2 already carries the operator and the value, and two number
-                    // fields with a word between them do not fit beside them.
-                    var rangeRow = $('<div/>', { class: "bs-range-row",
-                        style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
-                    $('<span/>', { style: "flex:0 0 50px;" }).appendTo(rangeRow);
-                    $('<input/>', { class: "bs-low", type: "number", step: "any", placeholder: "20",
-                        style: "flex:0 0 80px; min-width:0;" }).appendTo(rangeRow).val(step.value);
-                    $('<span/>', { style: "flex:0 0 auto; margin:0 6px; color:#888;" }).appendTo(rangeRow).text('to');
-                    $('<input/>', { class: "bs-high", type: "number", step: "any", placeholder: "24",
-                        style: "flex:0 0 80px; min-width:0;" }).appendTo(rangeRow).val(step.valueHigh);
-                    $('<span/>', { class: "bs-endpad", style: "flex:1 1 0;" }).appendTo(rangeRow);
-
                     var cmpRow = $('<div/>', { class: "bs-cmp-row",
                         style: "display:flex; align-items:center; margin-top:4px;" }).appendTo(stepDiv).hide();
                     $('<span/>', { style: "flex:0 0 50px; text-align:right; padding-right:8px; box-sizing:border-box; color:#888;" })
@@ -664,7 +662,10 @@
                     var opHandler = function() {
                         var op = opSel.val();
                         valWrap.toggle(op !== 'true' && op !== 'false' && !halRangeOperator(op));
-                        rangeRow.toggle(halRangeOperator(op));
+                        rangeSpan.toggle(halRangeOperator(op));
+                        // Sized to the selection: "outside range" would otherwise set the width
+                        // of the box for every operator, including the two-character ones.
+                        opSel.css('flex', halRangeOperator(op) ? '0 0 118px' : '0 0 130px');
                         // This runs on every operator change and at construction, so it is the
                         // last writer of the type list — anything missing here is missing, however
                         // carefully it was offered elsewhere.
@@ -900,7 +901,7 @@
                         var isRange = !isTime && halRangeOperator(stepOp);
                         var takesValue = !isTime && ['true', 'false'].indexOf(stepOp) < 0 && !isRange;
                         el.find('.bs-val-wrap').toggle(takesValue);
-                        el.find('.bs-range-row').toggle(isRange);
+                        el.find('.bs-range-span').toggle(isRange);
                         // The tip row as well as the compare row: refreshRuleView runs on every
                         // change and would otherwise leave the tip behind.
                         var showsCmp = takesValue && el.find('.bs-val').typedInput('type') === 'state';
