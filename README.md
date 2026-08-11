@@ -119,6 +119,16 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 
 ### MCP server
 
+> **Breaking change in 2.17.7 — public client (PKCE) only.** Client secrets and the
+> node-side redirect URI allowlist are gone: the open client-registration endpoint handed
+> any configured secret to every caller, and redirect URIs are validated by the identity
+> provider at `/authorize` anyway. **Migration:** switch the IdP client to **public with
+> PKCE** (a still-confidential client fails token exchange with `invalid_client`), make
+> sure the MCP client callback URLs are whitelisted at the IdP, and if the node warns
+> about a stored secret, open the Event handler's config, click **Done**, and deploy to
+> delete it. MCP clients connected before the upgrade may have cached the old
+> registration — remove and re-add the server in the client if sign-in misbehaves.
+
 The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental.
 
 It ships with a catalog of built-in tools:
@@ -197,9 +207,9 @@ labels:
 
 - An **OIDC provider with discovery** — hal2 reads `‹issuer›/.well-known/openid-configuration` and uses the advertised `authorization_endpoint`, `token_endpoint`, `userinfo_endpoint` and `jwks_uri`. If discovery is unavailable it falls back to PocketID's path layout, so no extra config is needed for either.
 - It must issue **JWT access tokens** signed with a key published on its **JWKS** (hal2 verifies tokens locally). Providers that issue *opaque* access tokens are not supported (no introspection path yet).
-- A client configured with the **redirect URI(s)** from the *Redirect URIs* setting (default `https://claude.ai/api/mcp/auth_callback`; add more for other MCP clients), grant types `authorization_code` + `refresh_token`, **PKCE (S256)**, and — if a client secret is set — `client_secret_post` auth. Leave the secret empty to run as a **public/PKCE client (recommended)**.
+- A **public client** with **PKCE (S256)**, grant types `authorization_code` + `refresh_token`, and the MCP client's **redirect URI(s)** whitelisted (for Claude.ai: `https://claude.ai/api/mcp/auth_callback`). Redirect URIs are configured and validated at the identity provider only — the node no longer keeps its own allowlist, so IdP wildcard support (e.g. PocketID's) works as-is. Client secrets are no longer supported: the open client-registration endpoint handed any configured secret to every caller, so it could never actually be secret. If a secret is still stored from an earlier version it is ignored with a warning — switch the IdP client to public, then open the event handler's config, click Done, and deploy to delete the stored secret and clear the warning.
 
-> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** (MCP client). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
+> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** and **Hermes** (MCP clients). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
 
 ### Custom MCP tools (hal2MCPIn / hal2MCPOut)
 

@@ -760,18 +760,17 @@ module.exports = function(RED) {
             // endpoints are auto-discovered (see getOidcConfig below).
             const issuerUrl     = (config.pocketidUrl || '').replace(/\/$/, '');
             const mcpServerName = config.mcpServerName || 'hal2-mcp';
-            // Redirect URI(s) the DCR shim advertises (space/newline/comma-separated). These must
-            // also be whitelisted on the IdP client. Defaults to the Claude.ai MCP callback.
-            const redirectUris  = (config.mcpRedirectUris || 'https://claude.ai/api/mcp/auth_callback')
-                                    .split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
+            // Used when a registering client doesn't request any redirect_uris of its own — the
+            // DCR response must still carry the field for the authorization-code grant. The IdP
+            // validates the actual redirect URI at /authorize, so no allowlist is kept here.
+            const defaultRedirectUris = ['https://claude.ai/api/mcp/auth_callback'];
 
             node.log('MCP init: serverUrl=' + mcpServerUrl + ', issuer=' + issuerUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
             const clientId      = ((node.credentials && node.credentials.pocketidClientId)     || '').trim();
-            // With no client secret configured the IdP client is treated as a public client:
-            // PKCE-only, and the DCR endpoint has no secret to disclose. With a secret set the
-            // legacy confidential-client behavior is kept (the secret is handed out via DCR).
-            const clientSecret  = ((node.credentials && node.credentials.pocketidClientSecret) || '').trim();
+            // Read only to warn below — the server always registers clients as public (PKCE);
+            // a secret handed out by the open DCR endpoint could never actually be secret.
+            const storedClientSecret = ((node.credentials && node.credentials.pocketidClientSecret) || '').trim();
             // Audience enforcement: explicit mcpAudience wins, otherwise tokens must carry the
             // client id in `aud` (OIDC providers set aud to the client the token was issued for).
             // Only when both are empty is the audience check skipped — issuer is always enforced
@@ -2027,10 +2026,11 @@ module.exports = function(RED) {
             const guard = hostFilter(expectedHost);
             guard._mcpOwner = node.id;
 
-            if (clientSecret) {
-                node.warn('MCP: a client secret is configured, so /oauth/register hands it out to every '
-                    + 'caller (legacy confidential-client mode) — the secret is effectively public. '
-                    + 'Switch the IdP client to public (PKCE) and clear the secret field.');
+            if (storedClientSecret) {
+                node.warn('MCP: a stored OAuth client secret is being ignored — this server now always '
+                    + 'registers MCP clients as a public client (PKCE). Update the IdP client to '
+                    + 'public with PKCE enabled, then open the hal2 event handler\'s config, click '
+                    + 'Done, and deploy: that deletes the stored secret and clears this warning.');
             }
 
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
@@ -2065,7 +2065,9 @@ module.exports = function(RED) {
                     response_types_supported              : ['code'],
                     grant_types_supported                 : ['authorization_code', 'refresh_token'],
                     code_challenge_methods_supported      : ['S256'],
-                    token_endpoint_auth_methods_supported : clientSecret ? ['client_secret_post', 'none'] : ['none']
+                    // Always a public client: anything the open DCR endpoint hands out is
+                    // world-readable, so a client secret could never actually be secret.
+                    token_endpoint_auth_methods_supported : ['none']
                 });
             };
             for (const p of wellKnownPaths('oauth-authorization-server')) {
@@ -2077,30 +2079,22 @@ module.exports = function(RED) {
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
             RED.httpNode.post(mcpPrefix + '/oauth/register', guard, rateLimit('register', 20), (req, res) => {
-                const requested       = req.body || {};
-                // Never echo attacker-controlled redirect_uris. Constrain any requested URIs to the
-                // configured allowlist so this endpoint can't be used to poison the OAuth callback;
-                // fall back to the full configured set when none (valid) were requested.
-                const requestedUris = Array.isArray(requested.redirect_uris) ? requested.redirect_uris : [];
-                const allowed = requestedUris.filter(u => redirectUris.includes(u));
-                if (requestedUris.length && !allowed.length) {
-                    return res.status(400).json({
-                        error: 'invalid_redirect_uri',
-                        error_description: 'requested redirect_uris are not allowed'
-                    });
-                }
-                const clientRedirects = allowed.length ? allowed : redirectUris;
-                const registration = {
+                // Echo the client's requested redirect_uris; the IdP validates the actual
+                // redirect URI at /authorize against its own client registration (which may
+                // use wildcards this shim couldn't express), and PKCE makes an intercepted
+                // code useless — so no parallel allowlist is kept here.
+                const requestedUris = (Array.isArray(req.body && req.body.redirect_uris)
+                        ? req.body.redirect_uris : [])
+                    .filter(u => typeof u === 'string' && u.trim() !== '');
+                res.status(201).json({
                     client_id                  : clientId,
                     client_id_issued_at        : Math.floor(Date.now() / 1000),
-                    redirect_uris              : clientRedirects,
+                    redirect_uris              : requestedUris.length ? requestedUris : defaultRedirectUris,
                     grant_types                : ['authorization_code', 'refresh_token'],
                     response_types             : ['code'],
-                    token_endpoint_auth_method : clientSecret ? 'client_secret_post' : 'none',
+                    token_endpoint_auth_method : 'none',
                     scope                      : mcpScopesStr
-                };
-                if (clientSecret) registration.client_secret = clientSecret;
-                res.status(201).json(registration);
+                });
             });
 
             // ── MCP: /mcp ─────────────────────────────────────────────────────

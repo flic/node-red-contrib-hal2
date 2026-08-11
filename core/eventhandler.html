@@ -121,19 +121,13 @@
                     <label for="node-config-input-pocketidClientId" style="width:150px"><i class="fa fa-id-card"></i> Client ID</label>
                     <input type="text" id="node-config-input-pocketidClientId" placeholder="Client ID" style="width:calc(100% - 185px)" autocomplete="off">
                 </div>
-                <div class="form-row">
-                    <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
-                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="(empty = public client, recommended)" style="width:calc(100% - 185px)" autocomplete="off">
-                </div>
+                <!-- Client secrets are no longer supported: the open DCR endpoint made any
+                     configured secret world-readable. The hidden field stays so that saving
+                     the dialog submits an empty value, which deletes a previously stored
+                     secret (the editor only submits credential fields present in the DOM). -->
+                <input type="hidden" id="node-config-input-pocketidClientSecret">
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Leave empty to run as a <b>public client</b> (recommended): configure the identity provider's client as public/PKCE and no secret is ever disclosed. When set, the secret is handed out to any caller of the client-registration endpoint — the redirect-URI allowlist is then the only thing keeping authorization codes away from attackers.</small>
-                </div>
-                <div class="form-row">
-                    <label for="node-config-input-mcpRedirectUris" style="width:150px"><i class="fa fa-mail-forward"></i> Redirect URIs</label>
-                    <input type="text" id="node-config-input-mcpRedirectUris" placeholder="https://claude.ai/api/mcp/auth_callback" style="width:calc(100% - 185px)">
-                </div>
-                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Allowed MCP-client callback URL(s), space/comma-separated (add more for other clients). Defaults to Claude.ai. These must also be whitelisted on the identity provider's client.</small>
+                    <small>The identity provider's client must be configured as a <b>public client with PKCE</b>, with the MCP client callback URL(s) (e.g. <code>https://claude.ai/api/mcp/auth_callback</code>) whitelisted there.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpScopes" style="width:150px"><i class="fa fa-list"></i> OIDC scopes</label>
@@ -332,7 +326,6 @@
             httpPathPrefix:    { value: '' },
             mcpFilterHost:     { value: false },
             pocketidUrl:       { value: '' },
-            mcpRedirectUris:   { value: 'https://claude.ai/api/mcp/auth_callback' },
             mcpScopes:         { value: 'openid profile email' },
             mcpAudience:       { value: '' },
             tokenCacheTTL:     { value: 300 },
@@ -372,6 +365,11 @@
             tabs.addTab({ id: 'hal2eh-tab-history',   label: 'History' });
             tabs.addTab({ id: 'hal2eh-tab-mcp',       label: 'MCP' });
             tabs.addTab({ id: 'hal2eh-tab-libraries', label: 'Shared Functions' });
+
+            // Client secrets are deprecated: blank the hidden field (the editor pre-fills
+            // it with the __PWRD__ placeholder when a secret is stored) so saving the
+            // dialog submits '' and deletes any previously stored secret.
+            $('#node-config-input-pocketidClientSecret').val('');
 
             // ── Context stores ────────────────────────────────────────────────
             var contextStores = RED.settings.context.stores;
