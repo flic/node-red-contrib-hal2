@@ -53,12 +53,24 @@
             // Optional: only a Group rule needs it, and requiring it would flag every
             // existing Gate node as invalid.
             eventHandler: {
-                value: "", type: "hal2EventHandler", required: false,
-                // Needed only once a rule reads a group. Rules are harvested on save, so this
-                // judges the saved ruleset — a group rule added and left without a handler is
-                // flagged as soon as the dialog closes.
+                // No `required: false` on purpose. Node-RED short-circuits to valid on an empty
+                // value for a property declared that way, *before* calling validate — so with it
+                // set, the one case worth flagging (no handler at all) was the one case never
+                // judged. The handler is still optional; validate below is what decides when.
+                value: "", type: "hal2EventHandler",
+                // Needed only once a rule reads a group; a group is resolved through the handler,
+                // so a group rule without one can never match.
                 validate: function (v) {
-                    var needed = (this.rules || []).some(function (r) { return r && r.category === 'hal2Group'; });
+                    // The rule rows carry .hal2-group-rule while the dialog is open, which is the
+                    // only live account of what the rules currently select — r.category is written
+                    // when the rules are harvested on save, so it lags the open form by a save.
+                    // The marker attribute pins the open dialog to *this* node: two Gate nodes
+                    // share the same template, and matching on an element id alone would let one
+                    // Gate's open form decide another Gate's validity during deploy validation.
+                    var open   = $("#node-input-checkall").attr('data-hal2-node') === this.id;
+                    var needed = open
+                        ? $("#node-input-rule-container .hal2-group-rule").length > 0
+                        : (this.rules || []).some(function (r) { return r && r.category === 'hal2Group'; });
                     return !needed || (!!v && v !== '_ADD_');
                 }
             },
@@ -76,6 +88,8 @@
         },
         paletteLabel: "gate",
         oneditprepare: function () {
+            // Tells the eventHandler validate that the open dialog is this node's — see there.
+            $("#node-input-checkall").attr('data-hal2-node', this.id);
             var operators = halOperators([
                 { v: "last_update_gte", t: "TSU >=" },
                 { v: "last_update_lte", t: "TSU <=" },
@@ -213,6 +227,19 @@
                     thingsField.change(function() {
                         var thing;
                         var thingType;
+                        // Mark the row so the eventHandler field's validate can see, while the
+                        // dialog is open, that a group is selected. r.category only appears when
+                        // the rules are harvested on save, so judging by that alone let a group
+                        // rule sit in an open dialog with no handler and nothing to say so.
+                        // Re-validating the handler is what turns the field red as soon as the
+                        // group is picked rather than on the way out; only on a flip, since this
+                        // handler also runs for every ordinary thing change and once per row
+                        // while the dialog is being built.
+                        var isGroup = isGroupRule();
+                        if (container.hasClass('hal2-group-rule') !== isGroup) {
+                            container.toggleClass('hal2-group-rule', isGroup);
+                            $("#node-input-eventHandler").trigger('change');
+                        }
                         // A group has one value and no items, so the item row is what the
                         // group id goes into — the same place a thing's item id would.
                         if (isGroupRule()) {
