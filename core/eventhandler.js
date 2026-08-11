@@ -4,6 +4,7 @@ const crypto          = require('crypto');
 const analyzePatterns = require('./analyzePatterns');
 const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
+const oauthDiscovery = require('../lib/oauth-discovery');
 const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
 
 const {
@@ -2036,14 +2037,13 @@ module.exports = function(RED) {
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
             const protectedResourceHandler = (_req, res) => {
-                res.status(200).json({
-                    // RFC 9728: must equal the resource identifier the client connects to —
-                    // the MCP endpoint URL, not the bare server base.
-                    resource                 : publicBase + '/mcp',
-                    authorization_servers    : [publicBase],
-                    bearer_methods_supported : ['header'],
-                    scopes_supported         : mcpScopesArr
-                });
+                // RFC 9728: the resource must equal the URL the client connects to — the MCP
+                // endpoint, not the bare server base.
+                res.status(200).json(oauthDiscovery.buildProtectedResourceMetadata({
+                    resourceUrl   : publicBase + '/mcp',
+                    authServerUrl : publicBase,
+                    scopes        : mcpScopesArr
+                }));
             };
             for (const p of resourceMetadataPaths) {
                 node.log('MCP registering route: GET ' + p);
@@ -2054,21 +2054,12 @@ module.exports = function(RED) {
 
             const authServerHandler = async (_req, res) => {
                 const oidc = await getOidcConfig();
-                res.status(200).json({
-                    issuer                                : publicBase,
-                    authorization_endpoint                : oidc.authorization_endpoint,
-                    token_endpoint                        : oidc.token_endpoint,
-                    userinfo_endpoint                     : oidc.userinfo_endpoint,
-                    registration_endpoint                 : publicBase + '/oauth/register',
-                    jwks_uri                              : oidc.jwks_uri,
-                    scopes_supported                      : mcpScopesArr,
-                    response_types_supported              : ['code'],
-                    grant_types_supported                 : ['authorization_code', 'refresh_token'],
-                    code_challenge_methods_supported      : ['S256'],
-                    // Always a public client: anything the open DCR endpoint hands out is
-                    // world-readable, so a client secret could never actually be secret.
-                    token_endpoint_auth_methods_supported : ['none']
-                });
+                res.status(200).json(oauthDiscovery.buildAuthorizationServerMetadata({
+                    issuerBase           : publicBase,
+                    oidc                 : oidc,
+                    registrationEndpoint : publicBase + '/oauth/register',
+                    scopes               : mcpScopesArr
+                }));
             };
             for (const p of wellKnownPaths('oauth-authorization-server')) {
                 node.log('MCP registering route: GET ' + p);
@@ -2079,22 +2070,12 @@ module.exports = function(RED) {
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
             RED.httpNode.post(mcpPrefix + '/oauth/register', guard, rateLimit('register', 20), (req, res) => {
-                // Echo the client's requested redirect_uris; the IdP validates the actual
-                // redirect URI at /authorize against its own client registration (which may
-                // use wildcards this shim couldn't express), and PKCE makes an intercepted
-                // code useless — so no parallel allowlist is kept here.
-                const requestedUris = (Array.isArray(req.body && req.body.redirect_uris)
-                        ? req.body.redirect_uris : [])
-                    .filter(u => typeof u === 'string' && u.trim() !== '');
-                res.status(201).json({
-                    client_id                  : clientId,
-                    client_id_issued_at        : Math.floor(Date.now() / 1000),
-                    redirect_uris              : requestedUris.length ? requestedUris : defaultRedirectUris,
-                    grant_types                : ['authorization_code', 'refresh_token'],
-                    response_types             : ['code'],
-                    token_endpoint_auth_method : 'none',
-                    scope                      : mcpScopesStr
-                });
+                res.status(201).json(oauthDiscovery.buildDcrRegistration({
+                    clientId     : clientId,
+                    redirectUris : oauthDiscovery.resolveRedirectUris(
+                                       req.body && req.body.redirect_uris, defaultRedirectUris),
+                    scopeStr     : mcpScopesStr
+                }));
             });
 
             // ── MCP: /mcp ─────────────────────────────────────────────────────
