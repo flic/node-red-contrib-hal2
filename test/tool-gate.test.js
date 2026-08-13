@@ -5,16 +5,19 @@
 // policy: which tool classes clear which value list, and what the empty defaults mean.
 
 const assert = require('node:assert');
-const { createToolGate } = require('../lib/claim-gate');
+const { createToolGate, grants, tokenScopes, scopeAllows } = require('../lib/claim-gate');
 const { toolClass, MCP_TOOLS } = require('../core/mcp-tools');
 
 // Mirrors buildGate() in core/eventhandler.js.
-function buildGate(claims, { claimName = 'groups', readValue = '', writeValue = '' } = {}) {
-    const gate = createToolGate({ claims, claimName, serverValue: readValue });
+function buildGate(claims, { claimName = 'groups', readValue = '', writeValue = '',
+                            scopeClaim = 'scope', readScope = '', writeScope = '' } = {}) {
+    const gate = createToolGate({ claims, claimName, serverValue: readValue,
+                                  scopeClaim, serverScope: readScope });
     return {
         allows(toolName) {
             if (!gate.serverGranted) { return false; }
-            return toolClass(toolName) === 'write' ? gate.allows(writeValue) : true;
+            return toolClass(toolName) === 'write'
+                ? gate.allows(writeValue, writeScope) : true;
         },
         allowsValue: list => gate.allows(list)
     };
@@ -102,5 +105,86 @@ describe('read/write tool gate', function () {
         assert.strictEqual(buildGate(WRITER, opts).allowsValue('ops'), true);
         // The server list still applies even when the tool asks for nothing.
         assert.strictEqual(buildGate(OUTSIDE, opts).allowsValue(''), false);
+    });
+});
+
+
+describe('client scope gate', function () {
+    // The user axis is satisfied throughout, so every result below is the scope axis speaking.
+    const opts = { readValue: 'family', writeValue: 'ops',
+                   readScope: 'mcp:read', writeScope: 'mcp:write' };
+    const withScope = scope => Object.assign({ groups: ['family', 'ops'] }, { scope });
+
+    it('bounds a privileged user by a read-only client', function () {
+        // The whole point: this user may write, and still cannot, because the client holding
+        // the token was never granted the scope to. Delegation, not impersonation.
+        const g = buildGate(withScope('openid mcp:read'), opts);
+        assert.strictEqual(g.allows('get_state'), true);
+        assert.strictEqual(g.allows('set_light'), false);
+    });
+
+    it('lets a client holding both scopes do what its user may', function () {
+        const g = buildGate(withScope('openid mcp:read mcp:write'), opts);
+        assert.strictEqual(g.allows('get_state'), true);
+        assert.strictEqual(g.allows('set_light'), true);
+    });
+
+    it('refuses everything to a client with neither scope', function () {
+        const g = buildGate(withScope('openid profile'), opts);
+        assert.strictEqual(g.allows('get_state'), false);
+        assert.strictEqual(g.allows('set_light'), false);
+    });
+
+    it('refuses a token carrying no scope claim at all once a scope is required', function () {
+        // Fail closed: a missing claim is not an empty constraint.
+        const g = buildGate({ groups: ['family', 'ops'] }, opts);
+        assert.strictEqual(g.allows('get_state'), false);
+    });
+
+    it('reads a scope claim sent as an array', function () {
+        const g = buildGate({ groups: ['family', 'ops'], scope: ['mcp:read', 'mcp:write'] }, opts);
+        assert.strictEqual(g.allows('set_light'), true);
+    });
+
+    it('reads a differently named claim, as Entra sends scp', function () {
+        const claims = { groups: ['family', 'ops'], scp: 'mcp:read mcp:write' };
+        const g = buildGate(claims, Object.assign({ scopeClaim: 'scp' }, opts));
+        assert.strictEqual(g.allows('set_light'), true);
+    });
+
+    it('is no constraint when the scope fields are empty', function () {
+        // What every install that never fills these in must keep doing.
+        const g = buildGate({ groups: ['family', 'ops'], scope: 'openid' },
+                            { readValue: 'family', writeValue: 'ops' });
+        assert.strictEqual(g.allows('get_state'), true);
+        assert.strictEqual(g.allows('set_light'), true);
+    });
+
+    it('still denies a user who fails the claim axis, whatever the client holds', function () {
+        // AND, not OR: a fully scoped client cannot lift a user over the group gate.
+        const g = buildGate({ groups: ['guest'], scope: 'mcp:read mcp:write' }, opts);
+        assert.strictEqual(g.allows('get_state'), false);
+    });
+});
+
+
+describe('scope matching', function () {
+    it('reads a space-delimited scope string, as OAuth defines it', function () {
+        assert.deepStrictEqual(tokenScopes({ scope: 'openid  mcp:read ' }, 'scope'),
+                               ['openid', 'mcp:read']);
+        assert.deepStrictEqual(tokenScopes({ scp: 'a b' }, 'scp'), ['a', 'b']);
+        assert.deepStrictEqual(tokenScopes({ scope: 42 }, 'scope'), []);
+    });
+
+    it('matches any-of against a comma-separated field', function () {
+        assert.strictEqual(scopeAllows({ scope: 'openid mcp:read' }, 'scope', 'mcp:write, mcp:read'), true);
+        assert.strictEqual(scopeAllows({ scope: 'openid' }, 'scope', 'mcp:write, mcp:read'), false);
+    });
+
+    it('does not split a group claim on whitespace', function () {
+        // The reason scopes got their own matcher rather than a change to grants(): a group
+        // name may contain spaces, and the claim axis must keep comparing it whole.
+        assert.strictEqual(grants({ groups: 'Home Admins' }, 'groups', 'Home Admins'), true);
+        assert.strictEqual(grants({ groups: 'Home Admins' }, 'groups', 'Home'), false);
     });
 });

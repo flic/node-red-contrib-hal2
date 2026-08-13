@@ -800,6 +800,12 @@ module.exports = function(RED) {
             // behaves exactly as before until the fields are filled in.
             const readValue     = (config.readRequiredValue  || '').trim();
             const writeValue    = (config.writeRequiredValue || '').trim();
+            // The client axis, independent of the user axis above. `scope` by convention; Entra
+            // names it `scp`. Empty required scopes mean no constraint, so an install that never
+            // fills these in behaves exactly as it did before they existed.
+            const scopeClaim    = (config.scopeClaim || 'scope').trim();
+            const readScope     = (config.readRequiredScope  || '').trim();
+            const writeScope    = (config.writeRequiredScope || '').trim();
 
             // Admin keeps its own check inside dispatchAdminTools, where it also guards the
             // hal2Api path — only the matcher changes, so a single value still behaves as
@@ -812,12 +818,14 @@ module.exports = function(RED) {
             // must not be able to self-grant. No opts.gate means no read/write gating, which
             // is exactly the local-flow case.
             function buildGate(claims) {
-                const gate = createToolGate({ claims, claimName: gateClaim, serverValue: readValue });
+                const gate = createToolGate({ claims, claimName: gateClaim, serverValue: readValue,
+                                              scopeClaim, serverScope: readScope });
                 return {
                     // Every tool must clear the read list; writes must clear both.
                     allows(toolName) {
                         if (!gate.serverGranted) { return false; }
-                        return toolClass(toolName) === 'write' ? gate.allows(writeValue) : true;
+                        return toolClass(toolName) === 'write'
+                            ? gate.allows(writeValue, writeScope) : true;
                     },
                     // Dynamic hal2MCPIn tools carry their own list instead of a class.
                     allowsValue: list => gate.allows(list)

@@ -155,6 +155,16 @@ On the Event handler's *MCP* tab, one **Access claim** (default `groups`) carrie
 
 The read list is the floor: a caller who fails it reaches nothing at all. Writes are checked **on top of** it, so `Read tools = family`, `Write tools = ops` gives the whole household visibility while only ops can switch anything. A tool that is in neither set — a future addition, or the undocumented `control_light` alias of `set_light` — is treated as a **write**, so an unclassified tool fails closed rather than slipping through.
 
+### The client axis: required scopes
+
+The lists above answer *what may this user do*. **Scope claim**, **Read scope** and **Write scope** answer a different question — *what was this client authorized to do on the user's behalf* — and the two are checked with **AND**.
+
+The distinction matters because they are not interchangeable. A group says who is at the keyboard; a scope says how much of that person's authority they delegated to the software holding the token. Collapse them into one field and only one gets consulted: a client granted a read-only scope, driven by someone who may write, would write. The client's grant has to bound the user's rights, not be ignored — that is what delegation means.
+
+The scope claim is read the way OAuth defines it ([RFC 6749 §3.3](https://datatracker.ietf.org/doc/html/rfc6749#section-3.3)): a space-delimited string, or an array if your provider sends one. Name the claim `scp` for Microsoft Entra. The fields themselves are comma-separated any-of lists like the ones above. Empty means no constraint, so an install that never fills them in is unaffected; a configured scope the token does not carry is refused, including when the token has no scope claim at all.
+
+Providers that model APIs as resources — Pocket ID, Auth0 — are where this earns its keep: the IdP grants a client access to the MCP server's resource with a specific set of scopes, and this is where the server enforces what it was handed.
+
 Two further gates layer on the custom-tool side:
 
 - **Standalone-server gate** (`hal2MCPServer` in *Standalone* mode, `Required claim`/`Required value`): gates a whole standalone MCP server and its own claim name, independent of the Event handler's.
