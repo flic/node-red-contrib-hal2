@@ -800,10 +800,9 @@ module.exports = function(RED) {
             // behaves exactly as before until the fields are filled in.
             const readValue     = (config.readRequiredValue  || '').trim();
             const writeValue    = (config.writeRequiredValue || '').trim();
-            // The client axis, independent of the user axis above. `scope` by convention; Entra
-            // names it `scp`. Empty required scopes mean no constraint, so an install that never
-            // fills these in behaves exactly as it did before they existed.
-            const scopeClaim    = (config.scopeClaim || 'scope').trim();
+            // The client axis, independent of the user axis above. The claim it reads is not
+            // configurable — see tokenScopes. Empty required scopes mean no constraint, so an
+            // install that never fills these in behaves exactly as it did before they existed.
             const readScope     = (config.readRequiredScope  || '').trim();
             const writeScope    = (config.writeRequiredScope || '').trim();
 
@@ -819,7 +818,7 @@ module.exports = function(RED) {
             // is exactly the local-flow case.
             function buildGate(claims) {
                 const gate = createToolGate({ claims, claimName: gateClaim, serverValue: readValue,
-                                              scopeClaim, serverScope: readScope });
+                                              serverScope: readScope });
                 return {
                     // Every tool must clear the read list; writes must clear both.
                     allows(toolName) {

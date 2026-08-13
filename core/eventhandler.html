@@ -188,21 +188,12 @@
                     <input type="text" id="node-config-input-writeRequiredValue" placeholder="(empty = same as read)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>One claim (a dotted path such as <code>realm_access.roles</code> reaches a nested one),
-                    one comma-separated <b>any-of</b> list per class, combined with <b>AND</b>.
-                    <b>Read tools</b> observe (<code>get_state</code>, <code>get_history</code>, <code>get_presence</code>…);
-                    <b>write tools</b> change the house (<code>set_light</code>, <code>control_cover</code>,
-                    <code>activate_scene</code>…). A write also has to clear the read list, so
-                    read&nbsp;=&nbsp;<code>family</code> and write&nbsp;=&nbsp;<code>ops</code> lets the family look
-                    but only ops act. Both empty is the default and leaves every tool open to any authenticated
-                    caller. Applies to the MCP endpoint only — the hal2Api node is a local flow node and is not
-                    gated by these.</small>
+                    <small>Comma-separated <b>any-of</b> lists against one claim, combined with <b>AND</b>.
+                    <b>Read tools</b> observe, <b>write tools</b> change the house — and a write must
+                    clear the read list too. Both empty (the default) leaves every tool open to any
+                    authenticated caller.</small>
                 </div>
 
-                <div class="form-row">
-                    <label for="node-config-input-scopeClaim" style="width:150px"><i class="fa fa-key"></i> Scope claim</label>
-                    <input type="text" id="node-config-input-scopeClaim" placeholder="scope" style="width:calc(100% - 185px)">
-                </div>
                 <div class="form-row">
                     <label for="node-config-input-readRequiredScope" style="width:150px"><i class="fa fa-eye"></i> Read scope</label>
                     <input type="text" id="node-config-input-readRequiredScope" placeholder="(empty = no scope required)" style="width:calc(100% - 185px)">
@@ -212,15 +203,9 @@
                     <input type="text" id="node-config-input-writeRequiredScope" placeholder="(empty = no scope required)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small><b>A second, independent axis.</b> The claim above asks what the <i>user</i> may do;
-                    this asks what the <i>client</i> was authorized to do on their behalf. Both must pass, so
-                    the client's grant bounds the user's rights rather than being ignored — a client holding
-                    only a read scope cannot write, however privileged the person driving it.<br><br>
-                    The claim value is read as OAuth defines it: a space-delimited string, or an array if your
-                    provider sends one. Name the claim <code>scp</code> for Microsoft Entra. The fields
-                    themselves are comma-separated <b>any-of</b> lists, like the ones above. Empty means no
-                    constraint; a configured scope that the token does not carry is refused, including when
-                    the token has no scope claim at all.</small>
+                    <small>What the <i>client</i> was authorized to do, checked with <b>AND</b> on top of
+                    the claim above — so a read-only client cannot write for a user who may. Empty means
+                    no constraint; a required scope the token lacks is refused.</small>
                 </div>
                 <hr style="margin:12px 0">
 
@@ -307,6 +292,28 @@
     <li><strong>Heartbeat</strong>: per-thing liveness tracking surfaced as the <code>alive</code>
     flag in <code>get_all_states</code>.</li>
 
+    <h3>Access gates</h3>
+    <p>Two independent axes, checked with <b>AND</b>. The <b>claim</b> axis asks what the
+    <i>user</i> may do; the <b>scope</b> axis asks what the <i>client</i> was authorized to do on
+    their behalf. Keeping them apart is what stops a client holding a read-only scope from acting
+    for a user who may write — delegation, not impersonation.</p>
+
+    <p><b>Access claim</b> names one claim that every list on this server matches against. A dotted
+    path reaches a nested one, e.g. <code>realm_access.roles</code> for Keycloak. Read is the floor:
+    a caller who fails it reaches nothing, and writes are checked on top of it, so
+    read&nbsp;=&nbsp;<code>family</code> with write&nbsp;=&nbsp;<code>ops</code> lets the household
+    look while only ops act. A tool in neither class — a future addition, or the undocumented
+    <code>control_light</code> alias — counts as a <b>write</b>, so an unclassified tool fails closed.</p>
+
+    <p><b>Read scope</b> and <b>Write scope</b> are matched against the token's <code>scope</code>
+    claim, falling back to <code>scp</code> when that is absent (Microsoft Entra, Okta). The claim
+    name is not configurable because it is standardised (<a href="https://datatracker.ietf.org/doc/html/rfc9068" target="_blank">RFC 9068</a>);
+    the value may be a space-delimited string or an array. A required scope that the token does not
+    carry is refused, including when the token has no scope claim at all.</p>
+
+    <p>All of this applies to the MCP endpoint only. The <code>hal2Api</code> node is a local flow
+    node and is not gated by any of it.</p>
+
     <p>Full configuration, the reverse-proxy paths the MCP server needs, and identity-provider
     requirements are documented in the
     <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README on GitHub</a>.
@@ -370,7 +377,6 @@
             adminRequiredValue:{ value: 'admin' },
             readRequiredValue: { value: '' },
             writeRequiredValue:{ value: '' },
-            scopeClaim:        { value: 'scope' },
             readRequiredScope: { value: '' },
             writeRequiredScope:{ value: '' },
             // Shared function libraries

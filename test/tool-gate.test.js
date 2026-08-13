@@ -10,9 +10,9 @@ const { toolClass, MCP_TOOLS } = require('../core/mcp-tools');
 
 // Mirrors buildGate() in core/eventhandler.js.
 function buildGate(claims, { claimName = 'groups', readValue = '', writeValue = '',
-                            scopeClaim = 'scope', readScope = '', writeScope = '' } = {}) {
+                            readScope = '', writeScope = '' } = {}) {
     const gate = createToolGate({ claims, claimName, serverValue: readValue,
-                                  scopeClaim, serverScope: readScope });
+                                  serverScope: readScope });
     return {
         allows(toolName) {
             if (!gate.serverGranted) { return false; }
@@ -146,9 +146,8 @@ describe('client scope gate', function () {
         assert.strictEqual(g.allows('set_light'), true);
     });
 
-    it('reads a differently named claim, as Entra sends scp', function () {
-        const claims = { groups: ['family', 'ops'], scp: 'mcp:read mcp:write' };
-        const g = buildGate(claims, Object.assign({ scopeClaim: 'scp' }, opts));
+    it('falls back to scp, as Entra and Okta name it', function () {
+        const g = buildGate({ groups: ['family', 'ops'], scp: 'mcp:read mcp:write' }, opts);
         assert.strictEqual(g.allows('set_light'), true);
     });
 
@@ -170,15 +169,20 @@ describe('client scope gate', function () {
 
 describe('scope matching', function () {
     it('reads a space-delimited scope string, as OAuth defines it', function () {
-        assert.deepStrictEqual(tokenScopes({ scope: 'openid  mcp:read ' }, 'scope'),
-                               ['openid', 'mcp:read']);
-        assert.deepStrictEqual(tokenScopes({ scp: 'a b' }, 'scp'), ['a', 'b']);
-        assert.deepStrictEqual(tokenScopes({ scope: 42 }, 'scope'), []);
+        assert.deepStrictEqual(tokenScopes({ scope: 'openid  mcp:read ' }), ['openid', 'mcp:read']);
+        assert.deepStrictEqual(tokenScopes({ scope: 42 }), []);
+    });
+
+    it('reads scp only when scope is absent, so the answer never depends on which looked better',
+       function () {
+        assert.deepStrictEqual(tokenScopes({ scp: ['a', 'b'] }), ['a', 'b']);
+        assert.deepStrictEqual(tokenScopes({ scope: 'a', scp: 'b' }), ['a']);
+        assert.deepStrictEqual(tokenScopes({ scope: 42, scp: 'b' }), []);
     });
 
     it('matches any-of against a comma-separated field', function () {
-        assert.strictEqual(scopeAllows({ scope: 'openid mcp:read' }, 'scope', 'mcp:write, mcp:read'), true);
-        assert.strictEqual(scopeAllows({ scope: 'openid' }, 'scope', 'mcp:write, mcp:read'), false);
+        assert.strictEqual(scopeAllows({ scope: 'openid mcp:read' }, 'mcp:write, mcp:read'), true);
+        assert.strictEqual(scopeAllows({ scope: 'openid' }, 'mcp:write, mcp:read'), false);
     });
 
     it('does not split a group claim on whitespace', function () {
