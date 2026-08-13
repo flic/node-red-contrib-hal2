@@ -301,6 +301,41 @@ describe('core/mcp-auth OIDC discovery retry', function () {
     });
 });
 
+describe('core/mcp-auth WWW-Authenticate scope challenge', function () {
+    // MCP clients treat a challenged scope as authoritative, ahead of the scopes_supported
+    // they would otherwise fall back to. Without this a scope the gate requires but the
+    // server never advertises hides every tool, with nothing logged anywhere.
+    const chal = async (opts) => {
+        const { auth } = build(opts);
+        let header = null;
+        const res = { set: (k, v) => { if (k === 'WWW-Authenticate') { header = v; } },
+                      status: () => res, json: () => res };
+        await auth.requireBearer({ headers: {} }, res);
+        return header;
+    };
+
+    it('names the required scopes when there are any', async function () {
+        const h = await chal({ challengeScopes: 'read:ha write:ha' });
+        assert.ok(h.includes('scope="read:ha write:ha"'), h);
+        assert.ok(h.includes('resource_metadata='), h);
+    });
+
+    it('omits the parameter entirely when nothing is required', async function () {
+        const h = await chal({});
+        assert.strictEqual(h.indexOf('scope='), -1, h);
+    });
+
+    it('carries both the error and the scope on an invalid token', async function () {
+        const { auth } = build({ challengeScopes: 'read:ha' });
+        let header = null;
+        const res = { set: (k, v) => { if (k === 'WWW-Authenticate') { header = v; } },
+                      status: () => res, json: () => res };
+        await auth.requireBearer({ headers: { authorization: 'Bearer bad' } }, res);
+        assert.ok(header.includes('error="invalid_token"'), header);
+        assert.ok(header.includes('scope="read:ha"'), header);
+    });
+});
+
 describe('core/mcp-auth requireBearer', function () {
     function mockRes() {
         return {

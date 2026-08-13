@@ -5,7 +5,8 @@
 // policy: which tool classes clear which value list, and what the empty defaults mean.
 
 const assert = require('node:assert');
-const { createToolGate, grants, tokenScopes, scopeAllows } = require('../lib/claim-gate');
+const { createToolGate, grants, tokenScopes, scopeAllows,
+        requiredScopeChallenge } = require('../lib/claim-gate');
 const { toolClass, MCP_TOOLS } = require('../core/mcp-tools');
 
 // Mirrors buildGate() in core/eventhandler.js.
@@ -190,5 +191,22 @@ describe('scope matching', function () {
         // name may contain spaces, and the claim axis must keep comparing it whole.
         assert.strictEqual(grants({ groups: 'Home Admins' }, 'groups', 'Home Admins'), true);
         assert.strictEqual(grants({ groups: 'Home Admins' }, 'groups', 'Home'), false);
+    });
+});
+
+
+describe('requiredScopeChallenge', function () {
+    it('joins the gate fields into the header\'s space-delimited grammar', function () {
+        assert.strictEqual(requiredScopeChallenge(['read:ha', 'write:ha']), 'read:ha write:ha');
+    });
+
+    it('flattens any-of fields and drops duplicates, keeping configured order', function () {
+        assert.strictEqual(requiredScopeChallenge(['a, b', 'b, c']), 'a b c');
+    });
+
+    it('is empty when nothing is required, so no scope parameter is sent at all', function () {
+        assert.strictEqual(requiredScopeChallenge(['', '']), '');
+        assert.strictEqual(requiredScopeChallenge([]), '');
+        assert.strictEqual(requiredScopeChallenge(undefined), '');
     });
 });

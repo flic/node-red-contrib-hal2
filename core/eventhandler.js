@@ -11,7 +11,7 @@ const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories
 } = require('./mcp-tools');
-const { createToolGate, claimAllows } = require('../lib/claim-gate');
+const { createToolGate, claimAllows, requiredScopeChallenge } = require('../lib/claim-gate');
 const groupAggregate = require('../resources/group-aggregate');
 const groupTools = require('../lib/group-tools');
 
@@ -805,6 +805,20 @@ module.exports = function(RED) {
             // install that never fills these in behaves exactly as it did before they existed.
             const readScope     = (config.readRequiredScope  || '').trim();
             const writeScope    = (config.writeRequiredScope || '').trim();
+            // Named in the 401 challenge so a client asks for what the gate requires, and
+            // checked against what this server advertises: a required scope missing from MCP
+            // scopes is invisible to any client that falls back to scopes_supported, and the
+            // symptom is every tool hidden with nothing logged. Warned, not silently fixed —
+            // the scope also has to exist at the identity provider and be granted there.
+            const challengeScopes = requiredScopeChallenge([readScope, writeScope]);
+            const unadvertised = challengeScopes.split(' ')
+                .filter(v => v && !mcpScopesArr.includes(v));
+            if (unadvertised.length) {
+                node.warn('MCP required scope not advertised: ' + unadvertised.join(' ') +
+                          ' — add it to MCP scopes, or clients that do not honour the ' +
+                          'WWW-Authenticate challenge will never request it and every tool ' +
+                          'will be hidden from them.');
+            }
 
             // Admin keeps its own check inside dispatchAdminTools, where it also guards the
             // hal2Api path — only the matcher changes, so a single value still behaves as
@@ -849,6 +863,7 @@ module.exports = function(RED) {
 
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
+                challengeScopes,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 localDebugGroups,
                 httpGet,

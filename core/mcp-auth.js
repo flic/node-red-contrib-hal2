@@ -83,6 +83,9 @@ function createMcpAuth(opts) {
         // The RFC 9728 resource identifier — the MCP endpoint clients connect to. Distinct
         // from mcpServerUrl, which is the base the WWW-Authenticate challenge points at.
         resourceUrl        = '',
+        // Space-delimited scopes named in the 401 challenge, so a client asks for what the
+        // gate will actually require. Empty leaves the challenge as it was.
+        challengeScopes    = '',
         discoveryRetryMs   = 30000,
         httpGet,
         log                = () => {},
@@ -254,21 +257,24 @@ function createMcpAuth(opts) {
         }
     }
 
+    // RFC 6750 3: the challenge parameters, with `scope` only when there is one to name.
+    const challenge = extra => 'Bearer ' + (extra ? extra + ', ' : '')
+        + `resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`
+        + (challengeScopes ? `, scope="${challengeScopes}"` : '');
+
     async function requireBearer(req, res) {
         const authHeader = req.headers['authorization'] || '';
         // Scheme matched case-insensitively per RFC 7235 — "bearer x" is as valid as "Bearer x".
         const m = /^Bearer\s+(.+)$/i.exec(authHeader);
         if (!m) {
-            res.set('WWW-Authenticate',
-                `Bearer resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`);
+            res.set('WWW-Authenticate', challenge(''));
             res.status(401).json({ error: 'unauthorized' });
             return null;
         }
         const token  = m[1];
         const claims = await validateToken(token);
         if (!claims) {
-            res.set('WWW-Authenticate',
-                `Bearer error="invalid_token", resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`);
+            res.set('WWW-Authenticate', challenge('error="invalid_token"'));
             res.status(401).json({ error: 'invalid_token' });
             return null;
         }
