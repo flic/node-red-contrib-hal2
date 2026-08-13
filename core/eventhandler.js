@@ -728,6 +728,10 @@ module.exports = function(RED) {
             // under mcpPrefix, so every advertised discovery URL must include it too —
             // otherwise clients get 404 on the well-known documents when a prefix is set.
             const publicBase    = mcpServerUrl + mcpPrefix;
+            // The RFC 9728 resource identifier: the MCP endpoint a client actually connects
+            // to. Named once here because both the protected-resource metadata and the token
+            // audience check have to mean the same string by it.
+            const resourceUrl   = publicBase + '/mcp';
             // Optional Host-header filtering. Lets several EventHandlers share the same paths
             // (e.g. /mcp) on one Node-RED instance, split by the hostname in each node's MCP
             // server URL. Off by default so single-server setups — and anyone behind a proxy
@@ -830,7 +834,7 @@ module.exports = function(RED) {
                 .split(',').map(s => s.trim()).filter(Boolean);
 
             const auth = createMcpAuth({
-                issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase,
+                issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 localDebugGroups,
                 httpGet,
@@ -2040,7 +2044,7 @@ module.exports = function(RED) {
                 // RFC 9728: the resource must equal the URL the client connects to — the MCP
                 // endpoint, not the bare server base.
                 res.status(200).json(oauthDiscovery.buildProtectedResourceMetadata({
-                    resourceUrl   : publicBase + '/mcp',
+                    resourceUrl   : resourceUrl,
                     authServerUrl : publicBase,
                     scopes        : mcpScopesArr
                 }));
@@ -2069,7 +2073,17 @@ module.exports = function(RED) {
             // ── DCR: /oauth/register ──────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
-            RED.httpNode.post(mcpPrefix + '/oauth/register', guard, rateLimit('register', 20), (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/oauth/register', guard, rateLimit('register', 20), async (req, res) => {
+                // DCR is deprecated as of MCP 2026-07-28 and kept only as a fallback, so record
+                // who still needs it. When the IdP advertises CIMD, reaching this route means the
+                // client skipped it in the spec's priority order — i.e. it cannot do CIMD, and it
+                // is the reason this shim still exists. Logged at info: a registration is routine,
+                // and node.warn would republish it into every editor's debug sidebar.
+                const who = oauthDiscovery.describeDcrClient(req.body, req.headers);
+                const oidc = await getOidcConfig().catch(() => ({}));
+                node.log(oidc.client_id_metadata_document_supported === true
+                    ? 'MCP DCR fallback (client lacks CIMD): ' + who
+                    : 'MCP DCR registration (IdP does not offer CIMD): ' + who);
                 res.status(201).json(oauthDiscovery.buildDcrRegistration({
                     clientId     : clientId,
                     redirectUris : oauthDiscovery.resolveRedirectUris(

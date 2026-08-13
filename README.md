@@ -184,6 +184,12 @@ The MCP server implements the MCP OAuth flow itself: it advertises itself as a *
 | `GET /.well-known/oauth-authorization-server` | Auth-server metadata (RFC 8414) — issuer is hal2, endpoints point at your IdP |
 | `POST /oauth/register` | Dynamic client registration shim — returns your pre-registered client |
 
+**Client ID Metadata Documents (CIMD).** MCP 2026-07-28 deprecates dynamic client registration in favour of [CIMD](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-01), where a client's id is the HTTPS URL of a metadata document it hosts itself. hal2 advertises `client_id_metadata_document_supported` by mirroring what your IdP's discovery document says — it is never configured here, because it is the IdP that resolves the client id, and hal2 is in no position to promise support the IdP doesn't have. Enable CIMD on the IdP and hal2 follows without a deploy.
+
+Both mechanisms stay available on purpose. Clients pick in the spec's order — pre-registered, then CIMD, then DCR — so a client without CIMD support keeps using `/oauth/register` exactly as before. Each registration is logged (`MCP DCR fallback` when the IdP does advertise CIMD), which is how you find out which clients still need the shim.
+
+Tokens from a CIMD client carry that document URL as their audience rather than your pre-registered client id, and hal2 accepts them whenever the IdP advertises CIMD. It does not keep a second allowlist of its own, so the IdP's list of accepted metadata documents is the boundary — any CIMD client on it can reach this server, with the claim gates as the remaining check.
+
 Each **standalone** `hal2MCPServer` node adds one more endpoint, `POST /mcp/<path>` (e.g. `/mcp/jellyfin`), sharing the same auth. Setting an *HTTP path prefix* shifts every route under it (`/prefix/mcp`, `/prefix/.well-known/…`), so update the proxy to match.
 
 > **Allowlist these paths — don't blanket-proxy everything to Node-RED.** hal2's MCP routes live on Node-RED's shared HTTP server, alongside the flow editor, admin API and any other `http in` endpoints. A catch-all proxy would put *all* of those on the public hostname; hal2 forwards anything it doesn't own to Node-RED, so you can't know what else would be exposed. Route only the specific paths below.

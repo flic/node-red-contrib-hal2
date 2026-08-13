@@ -14,7 +14,8 @@ const {
     buildProtectedResourceMetadata,
     buildAuthorizationServerMetadata,
     resolveRedirectUris,
-    buildDcrRegistration
+    buildDcrRegistration,
+    describeDcrClient
 } = require('../lib/oauth-discovery');
 
 describe('lib/oauth-discovery buildProtectedResourceMetadata', function () {
@@ -57,6 +58,76 @@ describe('lib/oauth-discovery buildAuthorizationServerMetadata', function () {
             scopes: []
         });
         assert.deepStrictEqual(meta.token_endpoint_auth_methods_supported, ['none']);
+    });
+
+    // CIMD is resolved by the IdP, so this server may only report what the IdP told it. A
+    // client that sees the flag prefers CIMD over the DCR endpoint, so claiming support the
+    // IdP does not have would strand it — hence false rather than undefined when unknown.
+    const cimd = oidc => buildAuthorizationServerMetadata({
+        issuerBase: 'https://x', oidc, registrationEndpoint: 'https://x/oauth/register', scopes: []
+    }).client_id_metadata_document_supported;
+
+    it('advertises CIMD when the IdP does', function () {
+        assert.strictEqual(cimd({ client_id_metadata_document_supported: true }), true);
+    });
+
+    it('does not advertise CIMD when the IdP says false or omits it', function () {
+        assert.strictEqual(cimd({ client_id_metadata_document_supported: false }), false);
+        assert.strictEqual(cimd({}), false);
+    });
+
+    it('keeps advertising the registration endpoint alongside CIMD', function () {
+        // DCR stays a valid fallback: a client without CIMD support skips it in the spec's
+        // priority order and lands here. Dropping the endpoint would break those clients.
+        const meta = buildAuthorizationServerMetadata({
+            issuerBase: 'https://x', oidc: { client_id_metadata_document_supported: true },
+            registrationEndpoint: 'https://x/oauth/register', scopes: []
+        });
+        assert.strictEqual(meta.registration_endpoint, 'https://x/oauth/register');
+    });
+});
+
+describe('lib/oauth-discovery describeDcrClient', function () {
+    it('names the client and what it asked for', function () {
+        const line = describeDcrClient(
+            { client_name: 'Hermes', software_id: 'hermes-1', redirect_uris: ['https://h/cb'] },
+            { 'user-agent': 'hermes/2.0' });
+        assert.strictEqual(line,
+            'client_name="Hermes" software_id="hermes-1" redirect_uris=[https://h/cb] ua="hermes/2.0"');
+    });
+
+    it('falls back to the User-Agent when the client sent no name', function () {
+        assert.strictEqual(describeDcrClient({}, { 'user-agent': 'curl/8' }),
+                           'client_name=(none) ua="curl/8"');
+    });
+
+    it('survives a missing or non-object body', function () {
+        for (const body of [undefined, null, 'nope', 42, ['a']]) {
+            assert.strictEqual(describeDcrClient(body, null), 'client_name=(none)', String(body));
+        }
+    });
+
+    it('strips control characters so a name cannot forge a second log line', function () {
+        // The body is unauthenticated: without this, any caller could write whatever it liked
+        // into the log this change exists to be counted from.
+        const line = describeDcrClient({ client_name: 'ok\nMCP DCR fallback: fake' }, {});
+        assert.strictEqual(line.indexOf('\n'), -1);
+        assert.strictEqual(line, 'client_name="ok MCP DCR fallback: fake"');
+    });
+
+    it('truncates an over-long field', function () {
+        const line = describeDcrClient({ client_name: 'a'.repeat(500) }, {});
+        assert.ok(line.length < 200, 'line was ' + line.length + ' chars');
+        assert.ok(line.endsWith('\u2026"'));
+    });
+
+    it('caps how many redirect_uris are printed and drops junk entries', function () {
+        const uris = ['https://a/1', 'https://a/2', 'https://a/3', 'https://a/4', 'https://a/5',
+                      'https://a/6', null, 42, ''];
+        const line = describeDcrClient({ redirect_uris: uris }, {});
+        assert.ok(line.includes('https://a/5'));
+        assert.ok(!line.includes('https://a/6'));
+        assert.ok(line.includes('\u2026]'));
     });
 });
 

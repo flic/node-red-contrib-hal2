@@ -17,6 +17,41 @@ function secretEqual(a, b) {
     return crypto.timingSafeEqual(ha, hb);
 }
 
+// A CIMD client identifies itself with the https URL its metadata document is hosted at, per
+// draft-ietf-oauth-client-id-metadata-document-01 §2: https scheme, a path component, no
+// fragment and no userinfo. Anything else that merely looks URL-ish is not a client id.
+function isCimdClientId(value) {
+    if (typeof value !== 'string') { return false; }
+    let u;
+    try { u = new URL(value); } catch (e) { return false; }
+    return u.protocol === 'https:' && u.hash === '' && u.username === '' && u.password === ''
+        && u.pathname !== '' && u.pathname !== '/';
+}
+
+// Decides whether a signature-valid token was issued for this server. This replaces handing
+// `audience` to jwtVerify, because a CIMD client's id is its document URL: the IdP issues the
+// token to that URL, so `aud` never equals the pre-registered client id and jose would reject
+// it before anything here could look.
+//
+// Accepting a CIMD audience is safe only because the IdP resolves such a client_id against its
+// own allowlist of metadata documents before issuing anything — which is why it is gated on
+// `allowCimd`, mirrored from the IdP's advertised support, rather than on the shape of the
+// string alone. It does mean any CIMD client the IdP allowlists for any application can reach
+// this server, with the claim gate as the remaining check; narrowing that later means passing
+// a list of accepted client ids here instead of the boolean, and nothing else moves.
+function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd = false } = {}) {
+    if (!expected) { return true; }        // unconfigured — unchanged from before this existed
+    const p = (payload && typeof payload === 'object') ? payload : {};
+    const values = Array.isArray(p.aud) ? p.aud.slice() : (p.aud ? [p.aud] : []);
+    // azp too: which of aud/azp carries a CIMD client id is provider-specific, and reading
+    // only one of them would make this depend on a detail no spec pins down.
+    if (typeof p.azp === 'string' && p.azp) { values.push(p.azp); }
+    return values.some(v =>
+        v === expected
+        || (!!resourceUrl && v === resourceUrl)   // RFC 8707: the token is bound to the resource
+        || (allowCimd && isCimdClientId(v)));
+}
+
 function createMcpAuth(opts) {
     const {
         issuerUrl          = '',
@@ -25,6 +60,9 @@ function createMcpAuth(opts) {
         localDebugToken    = '',
         localDebugGroups   = ['admin'],
         mcpServerUrl       = '',
+        // The RFC 9728 resource identifier — the MCP endpoint clients connect to. Distinct
+        // from mcpServerUrl, which is the base the WWW-Authenticate challenge points at.
+        resourceUrl        = '',
         discoveryRetryMs   = 30000,
         httpGet,
         log                = () => {},
@@ -72,7 +110,13 @@ function createMcpAuth(opts) {
                     const r = await httpGet(issuerUrl + '/.well-known/openid-configuration', {});
                     if (r.status === 200 && r.body && typeof r.body === 'object' && r.body.jwks_uri) {
                         oidcConfig = Object.assign(fb, r.body);   // discovered values win, per-field fallback
-                        log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer);
+                        // Say which registration mechanisms are live. Without it, a client
+                        // that cannot authenticate leaves no way to tell "the IdP has CIMD
+                        // switched off" apart from "the client isn't using it".
+                        log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer +
+                            ', CIMD=' + (oidcConfig.client_id_metadata_document_supported === true
+                                ? 'advertised by the IdP — CIMD client ids accepted as audience'
+                                : 'not advertised by the IdP — DCR only'));
                         return oidcConfig;
                     }
                     warn('MCP OIDC discovery returned ' + r.status + ' — using fallback endpoint paths');
@@ -138,8 +182,18 @@ function createMcpAuth(opts) {
             // be accepted.
             const verifyOpts = {};
             if (oidc.issuer) verifyOpts.issuer = oidc.issuer;
-            if (tokenAudience) verifyOpts.audience = tokenAudience;
             const { payload } = await jwtVerify(token, await getJwks(), verifyOpts);
+            // Audience is checked here rather than by jose so a CIMD client id can be accepted
+            // as well — see acceptsAudience.
+            if (!acceptsAudience(payload, {
+                expected    : tokenAudience,
+                resourceUrl : resourceUrl,
+                allowCimd   : oidc.client_id_metadata_document_supported === true
+            })) {
+                warn('MCP token rejected: audience ' + JSON.stringify(payload.aud) +
+                     ' is not this server');
+                return null;
+            }
             // Enrich with userinfo — access tokens are minimal by OIDC convention, rich claims
             // (email, name, groups) live in the userinfo response. JWT payload wins on collisions
             // so verified fields stay authoritative.
@@ -194,4 +248,4 @@ function createMcpAuth(opts) {
     };
 }
 
-module.exports = { createMcpAuth, secretEqual };
+module.exports = { createMcpAuth, secretEqual, acceptsAudience };

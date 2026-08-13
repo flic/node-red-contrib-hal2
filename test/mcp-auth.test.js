@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { createMcpAuth, secretEqual } = require('../core/mcp-auth');
+const { createMcpAuth, secretEqual, acceptsAudience } = require('../core/mcp-auth');
 
 const DISCOVERY = {
     status: 200,
@@ -12,7 +12,7 @@ const DISCOVERY = {
     }
 };
 
-function build(overrides = {}) {
+function build(overrides = {}, payload = {}) {
     const state = { verifyOpts: null, verifyCalls: 0 };
     const httpGet = async (url) => {
         if (url.includes('openid-configuration')) return DISCOVERY;
@@ -28,7 +28,8 @@ function build(overrides = {}) {
             state.verifyOpts = opts;
             state.verifyCalls += 1;
             if (token === 'bad') throw new Error('invalid signature');
-            return { payload: { sub: 'abc', exp: Math.floor(Date.now() / 1000) + 3600 } };
+            return { payload: Object.assign(
+                { sub: 'abc', exp: Math.floor(Date.now() / 1000) + 3600 }, payload) };
         }
     }, overrides));
     return { auth, state };
@@ -42,6 +43,65 @@ describe('core/mcp-auth secretEqual', function () {
     it('handles different lengths without throwing', function () {
         assert.doesNotThrow(() => secretEqual('short', 'a-much-longer-secret'));
         assert.strictEqual(secretEqual('short', 'a-much-longer-secret'), false);
+    });
+});
+
+describe('core/mcp-auth acceptsAudience', function () {
+    const CIMD = 'https://claude.ai/api/mcp/client-metadata.json';
+    const opts = o => Object.assign({ expected: 'pre-registered-id' }, o);
+
+    it('accepts anything when no audience is configured', function () {
+        // What this server did before an audience check existed, and still does for an
+        // install that never filled the field in.
+        assert.strictEqual(acceptsAudience({ aud: 'whatever' }, { expected: '' }), true);
+        assert.strictEqual(acceptsAudience({}, {}), true);
+    });
+
+    it('accepts the configured audience and rejects another', function () {
+        // The DCR path, unchanged: this is the isolation that stops a token issued to some
+        // other application on the same IdP from being usable here.
+        assert.strictEqual(acceptsAudience({ aud: 'pre-registered-id' }, opts()), true);
+        assert.strictEqual(acceptsAudience({ aud: 'another-app' }, opts()), false);
+    });
+
+    it('accepts an aud array containing the configured audience', function () {
+        assert.strictEqual(acceptsAudience({ aud: ['x', 'pre-registered-id'] }, opts()), true);
+        assert.strictEqual(acceptsAudience({ aud: ['x', 'y'] }, opts()), false);
+    });
+
+    it('accepts a CIMD client id only when the IdP advertises CIMD', function () {
+        assert.strictEqual(acceptsAudience({ aud: CIMD }, opts({ allowCimd: false })), false);
+        assert.strictEqual(acceptsAudience({ aud: CIMD }, opts({ allowCimd: true })), true);
+    });
+
+    it('reads azp as well as aud', function () {
+        // Which of the two carries a CIMD client id is provider-specific and unpinned by any
+        // spec, so both are consulted.
+        assert.strictEqual(acceptsAudience({ aud: 'other', azp: CIMD }, opts({ allowCimd: true })), true);
+        assert.strictEqual(acceptsAudience({ aud: 'other', azp: 'pre-registered-id' }, opts()), true);
+    });
+
+    it('rejects values that only look like a CIMD client id', function () {
+        const bad = [
+            'http://claude.ai/client.json',          // not https
+            'https://claude.ai',                     // no path component
+            'https://claude.ai/',                    // ditto
+            'https://claude.ai/c.json#x',            // fragment
+            'https://user:pw@claude.ai/c.json',      // userinfo
+            'not a url', 42, null
+        ];
+        for (const v of bad) {
+            assert.strictEqual(acceptsAudience({ aud: v }, opts({ allowCimd: true })), false,
+                               String(v));
+        }
+    });
+
+    it('accepts the resource identifier itself', function () {
+        // RFC 8707: clients MUST send resource=<canonical MCP URI>. If the IdP ever honours
+        // it the audience becomes the resource, and this is what keeps working then.
+        const o = opts({ resourceUrl: 'https://mcp.example.com/mcp' });
+        assert.strictEqual(acceptsAudience({ aud: 'https://mcp.example.com/mcp' }, o), true);
+        assert.strictEqual(acceptsAudience({ aud: 'https://mcp.example.com/other' }, o), false);
     });
 });
 
@@ -65,10 +125,24 @@ describe('core/mcp-auth validateToken', function () {
         assert.strictEqual(state.verifyOpts.audience, undefined); // not set when unconfigured
     });
 
-    it('enforces audience only when configured', async function () {
-        const { auth, state } = build({ tokenAudience: 'my-mcp-resource' });
+    // Audience is no longer jose's job — it is checked after verification so a CIMD client id
+    // can be accepted too (see acceptsAudience). These two pin that the move did not weaken it.
+    it('accepts a token whose audience matches the configured one', async function () {
+        const { auth } = build({ tokenAudience: 'my-mcp-resource' }, { aud: 'my-mcp-resource' });
+        assert.ok(await auth.validateToken('good'));
+    });
+
+    it('rejects a signature-valid token issued for someone else', async function () {
+        const { auth } = build({ tokenAudience: 'my-mcp-resource' }, { aud: 'another-app' });
+        assert.strictEqual(await auth.validateToken('good'), null);
+    });
+
+    it('leaves the audience to acceptsAudience rather than jose', async function () {
+        const { auth, state } = build({ tokenAudience: 'my-mcp-resource' },
+                                      { aud: 'my-mcp-resource' });
         await auth.validateToken('good');
-        assert.strictEqual(state.verifyOpts.audience, 'my-mcp-resource');
+        assert.strictEqual(state.verifyOpts.audience, undefined);
+        assert.strictEqual(state.verifyOpts.issuer, 'https://idp.example.com');
     });
 
     it('caches the result so a repeat call does not re-verify', async function () {
