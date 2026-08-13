@@ -136,7 +136,10 @@
                     <input type="text" id="node-config-input-mcpScopes" placeholder="openid profile email" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Space-separated list. Add e.g. <code>groups</code> to include group membership in the JWT — requires your identity provider to be configured to send that claim for the scope.</small>
+                    <small>Space-separated list, advertised to clients as the scopes to request. Add e.g.
+                    <code>groups</code> to include group membership in the JWT — your provider must be
+                    configured to send that claim. Any <b>Read scope</b> or <b>Write scope</b> below is
+                    added automatically; you do not repeat it here.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpAudience" style="width:150px"><i class="fa fa-id-badge"></i> Token audience</label>
