@@ -314,9 +314,11 @@ describe('core/mcp-auth WWW-Authenticate scope challenge', function () {
         return header;
     };
 
-    it('names the required scopes when there are any', async function () {
-        const h = await chal({ challengeScopes: 'read:ha write:ha' });
-        assert.ok(h.includes('scope="read:ha write:ha"'), h);
+    it('names the whole advertised set, not just what the gate requires', async function () {
+        // A client treats this as authoritative and requests it instead of scopes_supported,
+        // so anything left out here is a scope it will never ask for — including openid.
+        const h = await chal({ advertisedScopes: 'openid groups read:ha write:ha' });
+        assert.ok(h.includes('scope="openid groups read:ha write:ha"'), h);
         assert.ok(h.includes('resource_metadata='), h);
     });
 
@@ -326,13 +328,13 @@ describe('core/mcp-auth WWW-Authenticate scope challenge', function () {
     });
 
     it('carries both the error and the scope on an invalid token', async function () {
-        const { auth } = build({ challengeScopes: 'read:ha' });
+        const { auth } = build({ advertisedScopes: 'openid read:ha' });
         let header = null;
         const res = { set: (k, v) => { if (k === 'WWW-Authenticate') { header = v; } },
                       status: () => res, json: () => res };
         await auth.requireBearer({ headers: { authorization: 'Bearer bad' } }, res);
         assert.ok(header.includes('error="invalid_token"'), header);
-        assert.ok(header.includes('scope="read:ha"'), header);
+        assert.ok(header.includes('scope="openid read:ha"'), header);
     });
 });
 

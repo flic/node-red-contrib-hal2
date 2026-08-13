@@ -810,9 +810,9 @@ module.exports = function(RED) {
             // require, and folded into what this server advertises so a client that never reads
             // the challenge is told the same thing (see advertisedScopes). Nothing to keep in
             // sync by hand, and no way to require a scope no client is told to ask for.
-            const challengeScopes = requiredScopeChallenge([readScope, writeScope]);
-            const advertisedArr   = advertisedScopes(mcpScopesArr, challengeScopes);
-            const advertisedStr   = advertisedArr.join(' ');
+            const requiredScopes = requiredScopeChallenge([readScope, writeScope]);
+            const advertisedArr  = advertisedScopes(mcpScopesArr, requiredScopes);
+            const advertisedStr  = advertisedArr.join(' ');
 
             // Admin keeps its own check inside dispatchAdminTools, where it also guards the
             // hal2Api path — only the matcher changes, so a single value still behaves as
@@ -857,7 +857,7 @@ module.exports = function(RED) {
 
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
-                challengeScopes,
+                advertisedScopes: advertisedStr,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 localDebugGroups,
                 httpGet,

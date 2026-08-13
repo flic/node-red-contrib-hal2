@@ -83,9 +83,12 @@ function createMcpAuth(opts) {
         // The RFC 9728 resource identifier — the MCP endpoint clients connect to. Distinct
         // from mcpServerUrl, which is the base the WWW-Authenticate challenge points at.
         resourceUrl        = '',
-        // Space-delimited scopes named in the 401 challenge, so a client asks for what the
-        // gate will actually require. Empty leaves the challenge as it was.
-        challengeScopes    = '',
+        // The full space-delimited set this server advertises, named in the 401 challenge.
+        // It must be the whole set, not just what the gate requires: MCP clients treat a
+        // challenged scope as authoritative and request it *instead of* scopes_supported, so
+        // naming only the gate's scopes strips openid and the claim the gate itself reads.
+        // Empty leaves the challenge without a scope parameter.
+        advertisedScopes   = '',
         discoveryRetryMs   = 30000,
         httpGet,
         log                = () => {},
@@ -260,7 +263,7 @@ function createMcpAuth(opts) {
     // RFC 6750 3: the challenge parameters, with `scope` only when there is one to name.
     const challenge = extra => 'Bearer ' + (extra ? extra + ', ' : '')
         + `resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`
-        + (challengeScopes ? `, scope="${challengeScopes}"` : '');
+        + (advertisedScopes ? `, scope="${advertisedScopes}"` : '');
 
     async function requireBearer(req, res) {
         const authHeader = req.headers['authorization'] || '';
