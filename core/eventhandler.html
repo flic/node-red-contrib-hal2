@@ -332,6 +332,15 @@
     instance, split by <code>Host</code> header. Leave it off when a reverse proxy rewrites that
     header, or nothing will match.</p>
 
+    <p>Claims come from the verified access token alone — there is no userinfo round-trip. MCP
+    clients are required to send <code>resource</code>
+    (<a href="https://www.rfc-editor.org/rfc/rfc8707.html" target="_blank">RFC 8707</a>), a provider
+    that honours it binds the token to this server, and such a token is not one the provider's own
+    userinfo endpoint accepts. So configure your provider to put what you gate on — group
+    membership above all — into the access token itself, via the scopes this server advertises. A
+    claim that exists only in userinfo will not be seen, and a gate configured against it will
+    refuse every tool.</p>
+
     <h3>Access gates</h3>
     <p>Two independent axes, checked with <b>AND</b>. The <b>claim</b> axis asks what the
     <i>user</i> may do; the <b>scope</b> axis asks what the <i>client</i> was authorized to do on

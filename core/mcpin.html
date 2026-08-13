@@ -58,7 +58,7 @@
         <li><code>msg.payload</code> — the tool call arguments, shaped by <b>Parameters</b> below.</li>
         <li><code>msg._mcpCallId</code> — an opaque id identifying this specific call.</li>
         <li><code>msg.topic</code> — set to the <b>msg.topic</b> field below, or the tool name if left blank.</li>
-        <li><code>msg.jwtClaims</code> — the caller's verified JWT claims, only when <b>Expose JWT claims</b> is on.</li>
+        <li><code>msg.jwtClaims</code> — the caller's verified JWT claims, only when <b>Expose JWT claims</b> is on. These are the access token's own claims; nothing is fetched from the provider's userinfo endpoint, so a claim your provider keeps only there will not appear.</li>
     </ul>
     <p>Wire the rest of the flow to do the actual work, then finish with a <code>hal2MCPOut</code>
     node pointed at the <em>same</em> MCP Server. <code>msg._mcpCallId</code> must reach that
