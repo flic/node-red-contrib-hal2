@@ -1,6 +1,6 @@
 {
   "name": "node-red-contrib-hal2",
-  "version": "2.23.0",
+  "version": "2.23.1",
   "description": "A set of nodes to help with basic home automation logic, now with MCP server support",
   "repository": {
     "type": "git",
@@ -45,10 +45,10 @@
     }
   },
   "dependencies": {
-    "@atproto/api": "^0.20.34",
     "jose": "^6.2.3"
   },
   "devDependencies": {
+    "@atproto/api": "^0.20.34",
     "mocha": "^10.7.3"
   },
   "optionalDependencies": {
