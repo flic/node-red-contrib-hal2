@@ -130,6 +130,20 @@ describe('core/mcp-auth cimdClientId', function () {
         assert.strictEqual(cimdClientId({}), '');
         assert.strictEqual(cimdClientId(null), '');
     });
+
+    it('does not mistake the resource identifier for a client', function () {
+        // An IdP that honours RFC 8707 binds the token to the resource, so `aud` is the MCP
+        // endpoint URL — CIMD-shaped, and first in the list. Reporting that as the client is
+        // what the first real token actually did.
+        const R = 'https://mcp.example.com/mcp';
+        assert.strictEqual(cimdClientId({ aud: R }, { resourceUrl: R }), '');
+        assert.strictEqual(cimdClientId({ aud: [R], azp: CIMD }, { resourceUrl: R }), CIMD);
+    });
+
+    it('does not mistake a URL-shaped configured audience for a client', function () {
+        const A = 'https://mcp.example.com/mcp';
+        assert.strictEqual(cimdClientId({ aud: A }, { expected: A }), '');
+    });
 });
 
 describe('core/mcp-auth CIMD client logging', function () {
@@ -139,8 +153,9 @@ describe('core/mcp-auth CIMD client logging', function () {
     it('announces a CIMD client once, not once per token', async function () {
         // The counterpart to the DCR fallback line. Two distinct tokens so the token cache is
         // not what makes this pass — the point is one line per client, not per credential.
-        const { auth, state } = build({ httpGet: cimdHttpGet, tokenAudience: 'pre-registered-id' },
-                                      { aud: CIMD });
+        const { auth, state } = build({ httpGet: cimdHttpGet, tokenAudience: 'pre-registered-id',
+                                        resourceUrl: 'https://mcp.example.com/mcp' },
+                                      { aud: ['https://mcp.example.com/mcp'], azp: CIMD });
         await auth.validateToken('token-one');
         await auth.validateToken('token-two');
         assert.deepStrictEqual(cimdLines(state), ['MCP CIMD client authenticated: ' + CIMD]);

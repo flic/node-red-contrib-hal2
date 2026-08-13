@@ -28,17 +28,8 @@ function isCimdClientId(value) {
         && u.pathname !== '' && u.pathname !== '/';
 }
 
-// Decides whether a signature-valid token was issued for this server. This replaces handing
-// `audience` to jwtVerify, because a CIMD client's id is its document URL: the IdP issues the
-// token to that URL, so `aud` never equals the pre-registered client id and jose would reject
-// it before anything here could look.
-//
-// Accepting a CIMD audience is safe only because the IdP resolves such a client_id against its
-// own allowlist of metadata documents before issuing anything — which is why it is gated on
-// `allowCimd`, mirrored from the IdP's advertised support, rather than on the shape of the
-// string alone. It does mean any CIMD client the IdP allowlists for any application can reach
-// this server, with the claim gate as the remaining check; narrowing that later means passing
-// a list of accepted client ids here instead of the boolean, and nothing else moves.
+// Every value a token offers as its audience: `aud` (string or array) plus `azp`. Which of
+// them carries what is provider-specific, so both are read as one list.
 function audienceValues(payload) {
     const p = (payload && typeof payload === 'object') ? payload : {};
     const values = Array.isArray(p.aud) ? p.aud.slice() : (p.aud ? [p.aud] : []);
@@ -52,8 +43,14 @@ function audienceValues(payload) {
 // acceptsAudience because the answer is worth logging, not only deciding on: a DCR fallback
 // announces itself by hitting /oauth/register, and without this its opposite — a client that
 // has moved to CIMD — would be the one case that leaves no trace anywhere.
-function cimdClientId(payload) {
-    return audienceValues(payload).find(isCimdClientId) || '';
+//
+// The resource identifier and a configured audience are excluded, because either can be an
+// https URL with a path and so is CIMD-shaped too. An IdP that honours RFC 8707 binds the
+// token to the resource, which then sits in `aud` ahead of anything else — reporting that as
+// the client is how this first went wrong against a real token.
+function cimdClientId(payload, { expected = '', resourceUrl = '' } = {}) {
+    return audienceValues(payload)
+        .find(v => v !== expected && v !== resourceUrl && isCimdClientId(v)) || '';
 }
 
 // Decides whether a signature-valid token was issued for this server. This replaces handing
@@ -72,7 +69,7 @@ function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd =
     return audienceValues(payload).some(v =>
                v === expected
                || (!!resourceUrl && v === resourceUrl))   // RFC 8707: token bound to the resource
-        || (allowCimd && !!cimdClientId(payload));
+        || (allowCimd && !!cimdClientId(payload, { expected, resourceUrl }));
 }
 
 function createMcpAuth(opts) {
@@ -227,7 +224,7 @@ function createMcpAuth(opts) {
             // The counterpart to the DCR fallback line: say which clients have moved to CIMD,
             // so the two logs together account for every client that reaches this server.
             if (oidc.client_id_metadata_document_supported === true) {
-                const cimd = cimdClientId(payload);
+                const cimd = cimdClientId(payload, { expected: tokenAudience, resourceUrl });
                 if (cimd && !seenCimdClients.has(cimd) && seenCimdClients.size < CIMD_LOG_MAX) {
                     seenCimdClients.add(cimd);
                     log('MCP CIMD client authenticated: ' + cimd);
