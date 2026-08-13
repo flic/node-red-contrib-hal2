@@ -105,7 +105,9 @@
                     <label for="node-config-input-mcpFilterHost" style="margin:0; width:auto;"> Only serve requests for this hostname</label>
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Off by default. When on, this handler only answers requests whose <code>Host</code> header matches the hostname in the MCP server URL above — letting several event handlers share the same paths (e.g. <code>/mcp</code>) on one Node-RED instance, split by hostname. Leave off for a single server, or when a reverse proxy rewrites the <code>Host</code> header.</small>
+                    <small>Off by default. When on, this handler answers only requests whose <code>Host</code>
+                        header matches the MCP server URL above, so several handlers can share the same
+                        paths on one Node-RED instance. Leave off unless you need that.</small>
                 </div>
 
                 <hr style="margin:12px 0">
@@ -141,7 +143,10 @@
                     <input type="text" id="node-config-input-mcpAudience" placeholder="(defaults to Client ID)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Incoming tokens must carry this value in their <code>aud</code> (or <code>azp</code>) claim. Defaults to the <b>Client ID</b> when left empty, so tokens issued to other apps at the same identity provider are rejected. Set it explicitly if your provider uses a different audience; the check is skipped only when both fields are empty. The MCP endpoint's own URL is always accepted as well, for providers that honour the RFC 8707 <code>resource</code> parameter. The issuer is always verified against the discovered identity provider.<br><br><b>Client ID Metadata Documents:</b> when the identity provider advertises <code>client_id_metadata_document_supported</code>, a CIMD client's id is the HTTPS URL of its metadata document, so its tokens carry that URL as the audience rather than the value above — those are accepted too. That relies on the provider only issuing to metadata documents it has allowlisted, so keep that allowlist tight: any CIMD client it accepts for any application can reach this server, with the claim gates below as the remaining check.</small>
+                    <small>Incoming tokens must carry this value in their <code>aud</code> (or <code>azp</code>)
+                        claim. Empty defaults to the <b>Client ID</b>, so tokens issued to other apps at the
+                        same provider are rejected; the check is skipped only when both are empty. The MCP
+                        endpoint's own URL and a CIMD client's document URL are always accepted too.</small>
                 </div>
 
                 <div class="form-row" style="margin-bottom:4px;">
@@ -150,7 +155,10 @@
                     <label for="node-config-input-dcrShim" style="margin:0; width:auto;"> Dynamic client registration shim</label>
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small><b>Leave this off unless you need it.</b> It is for one situation only: an MCP client that cannot use Client ID Metadata Documents, talking to an identity provider that cannot do dynamic client registration itself.<br><br>When on, this server advertises <i>itself</i> as the authorization server and answers <code>POST /oauth/register</code> with your pre-registered client. That is the only way such a client can obtain a client ID — but it also means the <code>iss</code> your provider returns does not match the issuer the client discovered here, and a client that enforces <a href="https://datatracker.ietf.org/doc/html/rfc9207">RFC 9207</a> (required by MCP 2026-07-28) will refuse to complete the flow.<br><br>When off, clients are pointed straight at your identity provider and must use CIMD or a pre-registered client ID.</small>
+                    <small><b>Leave this off unless you need it:</b> a client that cannot use CIMD, talking to a
+                        provider that cannot do dynamic client registration itself. When on, this server
+                        advertises <i>itself</i> as the authorization server — which breaks the RFC 9207
+                        issuer check for any client that enforces it.</small>
                 </div>
 
                 <hr style="margin:12px 0">
@@ -291,6 +299,35 @@
     without being allowed to change it.</li>
     <li><strong>Heartbeat</strong>: per-thing liveness tracking surfaced as the <code>alive</code>
     flag in <code>get_all_states</code>.</li>
+
+    <h3>MCP authentication</h3>
+    <p>The issuer is always verified against the discovered identity provider. The audience is
+    checked too, and three values pass: the <b>Token audience</b> field (defaulting to the
+    <b>Client ID</b>), the MCP endpoint's own URL — for providers that honour the
+    <a href="https://www.rfc-editor.org/rfc/rfc8707.html" target="_blank">RFC 8707</a>
+    <code>resource</code> parameter, which MCP clients are required to send — and the HTTPS URL of
+    a client's metadata document when the provider advertises
+    <code>client_id_metadata_document_supported</code>.</p>
+
+    <p>That last one is worth understanding before relying on it: a CIMD client's id <i>is</i> its
+    document URL, and this server accepts any such client the provider was willing to issue a token
+    to. It keeps no second allowlist, so the provider's list of accepted metadata documents is the
+    boundary — keep it tight, because any CIMD client on it can reach this server, with the access
+    gates below as the only remaining check.</p>
+
+    <p>The <b>dynamic client registration shim</b> is off by default and should stay off. Turned on,
+    this server advertises itself as the authorization server and answers
+    <code>POST /oauth/register</code> with your pre-registered client — the only way a client that
+    cannot do CIMD can obtain a client ID against a provider that has no registration endpoint of
+    its own. The cost is that the <code>iss</code> your provider returns no longer matches the
+    issuer the client discovered here, so any client enforcing
+    <a href="https://datatracker.ietf.org/doc/html/rfc9207" target="_blank">RFC 9207</a> (required
+    by MCP 2026-07-28) refuses to finish the flow. With it off, clients are sent straight to the
+    provider and must use CIMD or a pre-registered client ID.</p>
+
+    <p><b>Hostname filtering</b> lets several event handlers share the same paths on one Node-RED
+    instance, split by <code>Host</code> header. Leave it off when a reverse proxy rewrites that
+    header, or nothing will match.</p>
 
     <h3>Access gates</h3>
     <p>Two independent axes, checked with <b>AND</b>. The <b>claim</b> axis asks what the
