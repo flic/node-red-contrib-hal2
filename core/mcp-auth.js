@@ -103,6 +103,9 @@ function createMcpAuth(opts) {
     }
 
     let tokenCache = {};
+    // Set once the provider refuses a token at userinfo; see validateToken. Reset by a
+    // restart or redeploy, which is also when a provider's configuration would have changed.
+    let userinfoRefused = false;
     // CIMD client ids already announced in the log, so the confirmation is one line per client
     // per restart rather than one per token or per cache miss. Capped for the same reason the
     // token cache is: the values come off tokens arriving at an internet-exposed endpoint. At
@@ -236,19 +239,37 @@ function createMcpAuth(opts) {
                     log('MCP CIMD client authenticated: ' + cimd);
                 }
             }
-            // Enrich with userinfo — access tokens are minimal by OIDC convention, rich claims
-            // (email, name, groups) live in the userinfo response. JWT payload wins on collisions
-            // so verified fields stay authoritative.
+            // Enrich with userinfo — access tokens are minimal by OIDC convention, and with many
+            // providers the rich claims (email, name, groups) live only in that response. JWT
+            // payload wins on collisions so verified fields stay authoritative.
+            //
+            // A 4xx here is not a hiccup, it is an answer: this provider does not accept this
+            // server's tokens at its userinfo endpoint, and it will keep not accepting them.
+            // That is the normal outcome once tokens are audience-bound to the MCP resource,
+            // which every MCP client asks for by sending `resource` (RFC 8707). So the refusal
+            // is recorded and the call is not made again — one line in the log instead of one
+            // per cache miss forever, and one fewer round-trip on every token.
+            //
+            // Only 4xx. A network error or a 5xx is a provider that is unwell rather than one
+            // that has decided, and disabling enrichment for the life of the node over a blip
+            // would silently strip claims the gate may depend on.
             let claims = payload;
-            try {
-                const r = await httpGet(oidc.userinfo_endpoint, { 'Authorization': 'Bearer ' + token });
-                if (r.status === 200 && r.body && typeof r.body === 'object') {
-                    claims = Object.assign({}, r.body, payload);
-                } else {
-                    warn('MCP userinfo returned ' + r.status + ' — using JWT claims only');
+            if (!userinfoRefused) {
+                try {
+                    const r = await httpGet(oidc.userinfo_endpoint, { 'Authorization': 'Bearer ' + token });
+                    if (r.status === 200 && r.body && typeof r.body === 'object') {
+                        claims = Object.assign({}, r.body, payload);
+                    } else if (r.status >= 400 && r.status < 500) {
+                        userinfoRefused = true;
+                        warn('MCP userinfo returned ' + r.status + ' — using JWT claims only, and ' +
+                             'not asking again. Expected when the provider binds tokens to the ' +
+                             'resource; the JWT carries the claims in that case.');
+                    } else {
+                        warn('MCP userinfo returned ' + r.status + ' — using JWT claims only');
+                    }
+                } catch (e) {
+                    warn('MCP userinfo fetch failed: ' + e.message + ' — using JWT claims only');
                 }
-            } catch (e) {
-                warn('MCP userinfo fetch failed: ' + e.message + ' — using JWT claims only');
             }
             const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
             const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);

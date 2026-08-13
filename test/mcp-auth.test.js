@@ -301,6 +301,68 @@ describe('core/mcp-auth OIDC discovery retry', function () {
     });
 });
 
+describe('core/mcp-auth userinfo enrichment', function () {
+    // Counts what actually reached the provider, since the point of the change is the calls
+    // that stop being made — not just the warnings that stop being logged.
+    function buildWithUserinfo(userinfoStatus, { throwOn = false } = {}) {
+        const state = { userinfoCalls: 0, warns: [] };
+        const httpGet = async (url) => {
+            if (url.includes('openid-configuration')) return DISCOVERY;
+            if (url.includes('userinfo')) {
+                state.userinfoCalls += 1;
+                if (throwOn) { throw new Error('ECONNREFUSED'); }
+                return { status: userinfoStatus, body: { email: 'u@example.com', groups: ['admin'] } };
+            }
+            return { status: 404, body: {} };
+        };
+        const auth = createMcpAuth({
+            issuerUrl: 'https://idp.example.com', tokenTTL: 300000, httpGet,
+            createRemoteJWKSet: () => ({}),
+            warn: m => state.warns.push(m),
+            jwtVerify: async () => ({ payload: { sub: 'abc', exp: Math.floor(Date.now() / 1000) + 3600 } })
+        });
+        return { auth, state };
+    }
+
+    it('enriches from userinfo when the provider accepts the token', async function () {
+        const { auth, state } = buildWithUserinfo(200);
+        const claims = await auth.validateToken('one');
+        assert.strictEqual(claims.email, 'u@example.com');
+        assert.strictEqual(state.userinfoCalls, 1);
+    });
+
+    it('stops calling userinfo after a 401, and says so once', async function () {
+        // The normal outcome once tokens are resource-bound: a standing answer, not a hiccup.
+        const { auth, state } = buildWithUserinfo(401);
+        await auth.validateToken('one');
+        await auth.validateToken('two');
+        await auth.validateToken('three');
+        assert.strictEqual(state.userinfoCalls, 1);
+        assert.strictEqual(state.warns.filter(w => w.includes('userinfo returned')).length, 1);
+    });
+
+    it('keeps trying after a 500 — an unwell provider is not a decided one', async function () {
+        const { auth, state } = buildWithUserinfo(503);
+        await auth.validateToken('one');
+        await auth.validateToken('two');
+        assert.strictEqual(state.userinfoCalls, 2);
+    });
+
+    it('keeps trying after a network error', async function () {
+        const { auth, state } = buildWithUserinfo(200, { throwOn: true });
+        await auth.validateToken('one');
+        await auth.validateToken('two');
+        assert.strictEqual(state.userinfoCalls, 2);
+        assert.ok(state.warns.every(w => w.includes('fetch failed')));
+    });
+
+    it('still returns the JWT claims when userinfo is refused', async function () {
+        const { auth } = buildWithUserinfo(403);
+        const claims = await auth.validateToken('one');
+        assert.strictEqual(claims.sub, 'abc');
+    });
+});
+
 describe('core/mcp-auth WWW-Authenticate scope challenge', function () {
     // MCP clients treat a challenged scope as authoritative, ahead of the scopes_supported
     // they would otherwise fall back to. Without this a scope the gate requires but the
