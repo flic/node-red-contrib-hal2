@@ -144,6 +144,15 @@
                     <small>Incoming tokens must carry this value in their <code>aud</code> (or <code>azp</code>) claim. Defaults to the <b>Client ID</b> when left empty, so tokens issued to other apps at the same identity provider are rejected. Set it explicitly if your provider uses a different audience; the check is skipped only when both fields are empty. The MCP endpoint's own URL is always accepted as well, for providers that honour the RFC 8707 <code>resource</code> parameter. The issuer is always verified against the discovered identity provider.<br><br><b>Client ID Metadata Documents:</b> when the identity provider advertises <code>client_id_metadata_document_supported</code>, a CIMD client's id is the HTTPS URL of its metadata document, so its tokens carry that URL as the audience rather than the value above — those are accepted too. That relies on the provider only issuing to metadata documents it has allowlisted, so keep that allowlist tight: any CIMD client it accepts for any application can reach this server, with the claim gates below as the remaining check.</small>
                 </div>
 
+                <div class="form-row" style="margin-bottom:4px;">
+                    <label style="width:150px">&nbsp;</label>
+                    <input type="checkbox" id="node-config-input-dcrShim" style="width:23px; margin:0">
+                    <label for="node-config-input-dcrShim" style="margin:0; width:auto;"> Dynamic client registration shim</label>
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small><b>Leave this off unless you need it.</b> It is for one situation only: an MCP client that cannot use Client ID Metadata Documents, talking to an identity provider that cannot do dynamic client registration itself.<br><br>When on, this server advertises <i>itself</i> as the authorization server and answers <code>POST /oauth/register</code> with your pre-registered client. That is the only way such a client can obtain a client ID — but it also means the <code>iss</code> your provider returns does not match the issuer the client discovered here, and a client that enforces <a href="https://datatracker.ietf.org/doc/html/rfc9207">RFC 9207</a> (required by MCP 2026-07-28) will refuse to complete the flow.<br><br>When off, clients are pointed straight at your identity provider and must use CIMD or a pre-registered client ID.</small>
+                </div>
+
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
@@ -328,6 +337,7 @@
             pocketidUrl:       { value: '' },
             mcpScopes:         { value: 'openid profile email' },
             mcpAudience:       { value: '' },
+            dcrShim:           { value: false },
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },
             adminPort:         { value: 1880 },
@@ -656,6 +666,16 @@
             }
             $('#node-config-input-mcpEnabled').on('change', toggleMcp);
             toggleMcp();
+
+            // A node saved before this switch existed has no dcrShim property, and Node-RED does
+            // not backfill declared defaults into nodes that predate them. Left alone the box
+            // would render unchecked and the first Done would silently turn off a shim the
+            // install has been relying on — so an absent value is shown as on, matching what the
+            // runtime does with it. The runtime keeps its own copy of this rule; neither can be
+            // derived from the other, because only one of them ever sees the DOM.
+            if (this.dcrShim === undefined) {
+                $('#node-config-input-dcrShim').prop('checked', true);
+            }
 
             // ── Admin tools toggle ────────────────────────────────────────────
             function toggleAdmin() {

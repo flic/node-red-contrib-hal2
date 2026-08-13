@@ -15,7 +15,8 @@ const {
     buildAuthorizationServerMetadata,
     resolveRedirectUris,
     buildDcrRegistration,
-    describeDcrClient
+    describeDcrClient,
+    resolveAuthServerUrl
 } = require('../lib/oauth-discovery');
 
 describe('lib/oauth-discovery buildProtectedResourceMetadata', function () {
@@ -84,6 +85,30 @@ describe('lib/oauth-discovery buildAuthorizationServerMetadata', function () {
             registrationEndpoint: 'https://x/oauth/register', scopes: []
         });
         assert.strictEqual(meta.registration_endpoint, 'https://x/oauth/register');
+    });
+});
+
+describe('lib/oauth-discovery resolveAuthServerUrl', function () {
+    const US = 'https://mcp.example.com';
+    const IDP = 'https://idp.example.com';
+
+    it('names this server while the DCR shim is on', function () {
+        // The shim only works if clients come here for the authorization-server metadata that
+        // advertises /oauth/register — the two are one feature.
+        assert.strictEqual(resolveAuthServerUrl(true, US, IDP), US);
+    });
+
+    it('names the identity provider once the shim is off', function () {
+        // What makes RFC 9207 hold: the client records this issuer and the IdP returns it as
+        // `iss`. With the shim on those two disagree by construction.
+        assert.strictEqual(resolveAuthServerUrl(false, US, IDP), IDP);
+    });
+
+    it('falls back to this server when no issuer is configured', function () {
+        // Advertising an empty authorization server leaves the client nothing to discover,
+        // which is a worse failure than the mismatch the shim causes.
+        assert.strictEqual(resolveAuthServerUrl(false, US, ''), US);
+        assert.strictEqual(resolveAuthServerUrl(false, US, undefined), US);
     });
 });
 
