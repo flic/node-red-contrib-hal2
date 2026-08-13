@@ -39,17 +39,40 @@ function isCimdClientId(value) {
 // string alone. It does mean any CIMD client the IdP allowlists for any application can reach
 // this server, with the claim gate as the remaining check; narrowing that later means passing
 // a list of accepted client ids here instead of the boolean, and nothing else moves.
-function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd = false } = {}) {
-    if (!expected) { return true; }        // unconfigured — unchanged from before this existed
+function audienceValues(payload) {
     const p = (payload && typeof payload === 'object') ? payload : {};
     const values = Array.isArray(p.aud) ? p.aud.slice() : (p.aud ? [p.aud] : []);
     // azp too: which of aud/azp carries a CIMD client id is provider-specific, and reading
     // only one of them would make this depend on a detail no spec pins down.
     if (typeof p.azp === 'string' && p.azp) { values.push(p.azp); }
-    return values.some(v =>
-        v === expected
-        || (!!resourceUrl && v === resourceUrl)   // RFC 8707: the token is bound to the resource
-        || (allowCimd && isCimdClientId(v)));
+    return values;
+}
+
+// The CIMD client id a token was issued to, or '' if it was not a CIMD client. Separate from
+// acceptsAudience because the answer is worth logging, not only deciding on: a DCR fallback
+// announces itself by hitting /oauth/register, and without this its opposite — a client that
+// has moved to CIMD — would be the one case that leaves no trace anywhere.
+function cimdClientId(payload) {
+    return audienceValues(payload).find(isCimdClientId) || '';
+}
+
+// Decides whether a signature-valid token was issued for this server. This replaces handing
+// `audience` to jwtVerify, because a CIMD client's id is its document URL: the IdP issues the
+// token to that URL, so `aud` never equals the pre-registered client id and jose would reject
+// it before anything here could look.
+//
+// Accepting a CIMD audience is safe only because the IdP resolves such a client_id against its
+// own allowlist of metadata documents before issuing anything — which is why it is gated on
+// `allowCimd`, mirrored from the IdP's advertised support, rather than on the shape of the
+// string alone. It does mean any CIMD client the IdP allowlists for any application can reach
+// this server, with the claim gate as the remaining check; narrowing that later means passing
+// a list of accepted client ids here instead of the boolean, and nothing else moves.
+function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd = false } = {}) {
+    if (!expected) { return true; }        // unconfigured — unchanged from before this existed
+    return audienceValues(payload).some(v =>
+               v === expected
+               || (!!resourceUrl && v === resourceUrl))   // RFC 8707: token bound to the resource
+        || (allowCimd && !!cimdClientId(payload));
 }
 
 function createMcpAuth(opts) {
@@ -77,6 +100,13 @@ function createMcpAuth(opts) {
     }
 
     let tokenCache = {};
+    // CIMD client ids already announced in the log, so the confirmation is one line per client
+    // per restart rather than one per token or per cache miss. Capped for the same reason the
+    // token cache is: the values come off tokens arriving at an internet-exposed endpoint. At
+    // the cap it stops logging rather than stops working — a silent new client is a smaller
+    // problem than unbounded growth, and 100 distinct CIMD clients is far past any real use.
+    const seenCimdClients = new Set();
+    const CIMD_LOG_MAX = 100;
     let oidcConfig = null, oidcConfigPromise = null, oidcRetryAt = 0;
     let jwks = null, jwksUri = null;
 
@@ -194,6 +224,15 @@ function createMcpAuth(opts) {
                      ' is not this server');
                 return null;
             }
+            // The counterpart to the DCR fallback line: say which clients have moved to CIMD,
+            // so the two logs together account for every client that reaches this server.
+            if (oidc.client_id_metadata_document_supported === true) {
+                const cimd = cimdClientId(payload);
+                if (cimd && !seenCimdClients.has(cimd) && seenCimdClients.size < CIMD_LOG_MAX) {
+                    seenCimdClients.add(cimd);
+                    log('MCP CIMD client authenticated: ' + cimd);
+                }
+            }
             // Enrich with userinfo — access tokens are minimal by OIDC convention, rich claims
             // (email, name, groups) live in the userinfo response. JWT payload wins on collisions
             // so verified fields stay authoritative.
@@ -248,4 +287,4 @@ function createMcpAuth(opts) {
     };
 }
 
-module.exports = { createMcpAuth, secretEqual, acceptsAudience };
+module.exports = { createMcpAuth, secretEqual, acceptsAudience, cimdClientId };

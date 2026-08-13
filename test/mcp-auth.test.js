@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { createMcpAuth, secretEqual, acceptsAudience } = require('../core/mcp-auth');
+const { createMcpAuth, secretEqual, acceptsAudience, cimdClientId } = require('../core/mcp-auth');
 
 const DISCOVERY = {
     status: 200,
@@ -12,8 +12,18 @@ const DISCOVERY = {
     }
 };
 
+const cimdHttpGet = async (url) => {
+    if (url.includes('openid-configuration')) {
+        return { status: 200,
+                 body: Object.assign({ client_id_metadata_document_supported: true },
+                                     DISCOVERY.body) };
+    }
+    if (url.includes('userinfo')) return { status: 200, body: { groups: ['admin'] } };
+    return { status: 404, body: {} };
+};
+
 function build(overrides = {}, payload = {}) {
-    const state = { verifyOpts: null, verifyCalls: 0 };
+    const state = { verifyOpts: null, verifyCalls: 0, logs: [] };
     const httpGet = async (url) => {
         if (url.includes('openid-configuration')) return DISCOVERY;
         if (url.includes('userinfo')) return { status: 200, body: { email: 'u@example.com', groups: ['admin'] } };
@@ -23,6 +33,7 @@ function build(overrides = {}, payload = {}) {
         issuerUrl: 'https://idp.example.com',
         tokenTTL: 300000,
         httpGet,
+        log: msg => state.logs.push(msg),
         createRemoteJWKSet: () => ({}),
         jwtVerify: async (token, jwks, opts) => {
             state.verifyOpts = opts;
@@ -102,6 +113,53 @@ describe('core/mcp-auth acceptsAudience', function () {
         const o = opts({ resourceUrl: 'https://mcp.example.com/mcp' });
         assert.strictEqual(acceptsAudience({ aud: 'https://mcp.example.com/mcp' }, o), true);
         assert.strictEqual(acceptsAudience({ aud: 'https://mcp.example.com/other' }, o), false);
+    });
+});
+
+describe('core/mcp-auth cimdClientId', function () {
+    const CIMD = 'https://claude.ai/oauth/claude-code-client-metadata';
+
+    it('finds the client id in aud or in azp', function () {
+        assert.strictEqual(cimdClientId({ aud: CIMD }), CIMD);
+        assert.strictEqual(cimdClientId({ aud: ['other', CIMD] }), CIMD);
+        assert.strictEqual(cimdClientId({ aud: 'other', azp: CIMD }), CIMD);
+    });
+
+    it('is empty for a token that is not from a CIMD client', function () {
+        assert.strictEqual(cimdClientId({ aud: 'pre-registered-id' }), '');
+        assert.strictEqual(cimdClientId({}), '');
+        assert.strictEqual(cimdClientId(null), '');
+    });
+});
+
+describe('core/mcp-auth CIMD client logging', function () {
+    const CIMD = 'https://claude.ai/oauth/claude-code-client-metadata';
+    const cimdLines = state => state.logs.filter(l => l.startsWith('MCP CIMD client authenticated'));
+
+    it('announces a CIMD client once, not once per token', async function () {
+        // The counterpart to the DCR fallback line. Two distinct tokens so the token cache is
+        // not what makes this pass — the point is one line per client, not per credential.
+        const { auth, state } = build({ httpGet: cimdHttpGet, tokenAudience: 'pre-registered-id' },
+                                      { aud: CIMD });
+        await auth.validateToken('token-one');
+        await auth.validateToken('token-two');
+        assert.deepStrictEqual(cimdLines(state), ['MCP CIMD client authenticated: ' + CIMD]);
+    });
+
+    it('says nothing for a client using the pre-registered id', async function () {
+        // That client announces itself at /oauth/register instead; logging it here too would
+        // double-count it.
+        const { auth, state } = build({ httpGet: cimdHttpGet, tokenAudience: 'pre-registered-id' },
+                                      { aud: 'pre-registered-id' });
+        await auth.validateToken('good');
+        assert.deepStrictEqual(cimdLines(state), []);
+    });
+
+    it('says nothing when the IdP does not advertise CIMD', async function () {
+        // Such a token would have been rejected anyway; the log must not imply it got in.
+        const { auth, state } = build({ tokenAudience: 'pre-registered-id' }, { aud: CIMD });
+        assert.strictEqual(await auth.validateToken('good'), null);
+        assert.deepStrictEqual(cimdLines(state), []);
     });
 });
 
