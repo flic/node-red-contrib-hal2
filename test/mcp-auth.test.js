@@ -23,13 +23,10 @@ const cimdHttpGet = async (url) => {
 };
 
 function build(overrides = {}, payload = {}) {
-    const state = { verifyOpts: null, verifyCalls: 0, logs: [], userinfoCalls: 0 };
+    const state = { verifyOpts: null, verifyCalls: 0, logs: [] };
     const httpGet = async (url) => {
         if (url.includes('openid-configuration')) return DISCOVERY;
-        if (url.includes('userinfo')) {
-            state.userinfoCalls += 1;
-            return { status: 200, body: { email: 'u@example.com', groups: ['admin'] } };
-        }
+        if (url.includes('userinfo')) return { status: 200, body: { email: 'u@example.com', groups: ['admin'] } };
         return { status: 404, body: {} };
     };
     const auth = createMcpAuth(Object.assign({
@@ -187,14 +184,11 @@ describe('core/mcp-auth validateToken', function () {
         assert.strictEqual(await auth.validateToken('bad'), null);
     });
 
-    it('returns the verified JWT claims, and only those', async function () {
-        // No userinfo round-trip: the stub would answer with groups, and the absence of that
-        // key is what pins the enrichment as gone rather than merely unused.
-        const { auth, state } = build({}, { groups: ['ops'] });
+    it('returns merged JWT + userinfo claims for a valid token', async function () {
+        const { auth } = build();
         const claims = await auth.validateToken('good');
-        assert.strictEqual(claims.sub, 'abc');
-        assert.deepStrictEqual(claims.groups, ['ops']);
-        assert.strictEqual(state.userinfoCalls, 0);
+        assert.strictEqual(claims.sub, 'abc');           // from JWT payload
+        assert.deepStrictEqual(claims.groups, ['admin']); // from userinfo
     });
 
     it('pins the discovered issuer on jwtVerify', async function () {
@@ -233,7 +227,7 @@ describe('core/mcp-auth validateToken', function () {
     });
 
     it('isolates callers from the cache — mutating returned claims cannot poison later requests', async function () {
-        const { auth } = build({}, { groups: ['admin'] });
+        const { auth } = build();
         const first = await auth.validateToken('good');
         // A flow receiving msg.jwtClaims does exactly this kind of damage, deliberately or not.
         first.groups.push('root');

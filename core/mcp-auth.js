@@ -236,17 +236,20 @@ function createMcpAuth(opts) {
                     log('MCP CIMD client authenticated: ' + cimd);
                 }
             }
-            // Claims come from the verified JWT alone. No userinfo round-trip: MCP clients are
-            // required to send `resource` (RFC 8707), a provider that honours it binds the token
-            // to the MCP endpoint, and such a token is not one the provider's own userinfo
-            // endpoint accepts — so the call was refused on every token that mattered.
-            //
-            // The cost is real and worth stating: a provider that keeps email, name or the group
-            // claim in userinfo *only* will now yield a token without them, and a claim gate
-            // configured against such a claim will deny every tool. Put those claims in the
-            // access token at the provider — with `scope` values like `groups`, which this server
-            // already advertises — rather than expecting them to be fetched afterwards.
-            const claims = payload;
+            // Enrich with userinfo — access tokens are minimal by OIDC convention, rich claims
+            // (email, name, groups) live in the userinfo response. JWT payload wins on collisions
+            // so verified fields stay authoritative.
+            let claims = payload;
+            try {
+                const r = await httpGet(oidc.userinfo_endpoint, { 'Authorization': 'Bearer ' + token });
+                if (r.status === 200 && r.body && typeof r.body === 'object') {
+                    claims = Object.assign({}, r.body, payload);
+                } else {
+                    warn('MCP userinfo returned ' + r.status + ' — using JWT claims only');
+                }
+            } catch (e) {
+                warn('MCP userinfo fetch failed: ' + e.message + ' — using JWT claims only');
+            }
             const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
             const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
             cacheToken(cacheKey, { claims, exp: cacheExp });
