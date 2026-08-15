@@ -239,16 +239,26 @@ function createMcpAuth(opts) {
             // Enrich with userinfo — access tokens are minimal by OIDC convention, rich claims
             // (email, name, groups) live in the userinfo response. JWT payload wins on collisions
             // so verified fields stay authoritative.
+            //
+            // A failure here is named, because an anonymous recurring warning cannot be acted on:
+            // one client whose tokens are always refused looks exactly like every client being
+            // refused occasionally, and those call for opposite responses. The first means that
+            // client silently loses whatever claims live in userinfo — including the one the gate
+            // reads — while the others are fine.
+            const who = () => 'client=' + (payload.azp || payload.client_id || '?')
+                            + ' sub=' + (payload.sub || '?');
             let claims = payload;
             try {
                 const r = await httpGet(oidc.userinfo_endpoint, { 'Authorization': 'Bearer ' + token });
                 if (r.status === 200 && r.body && typeof r.body === 'object') {
                     claims = Object.assign({}, r.body, payload);
                 } else {
-                    warn('MCP userinfo returned ' + r.status + ' — using JWT claims only');
+                    warn('MCP userinfo returned ' + r.status + ' for ' + who() +
+                         ' — using JWT claims only');
                 }
             } catch (e) {
-                warn('MCP userinfo fetch failed: ' + e.message + ' — using JWT claims only');
+                warn('MCP userinfo fetch failed for ' + who() + ': ' + e.message +
+                     ' — using JWT claims only');
             }
             const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
             const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);

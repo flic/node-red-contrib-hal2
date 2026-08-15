@@ -301,6 +301,44 @@ describe('core/mcp-auth OIDC discovery retry', function () {
     });
 });
 
+describe('core/mcp-auth userinfo failure reporting', function () {
+    // An anonymous recurring warning cannot be acted on: one client always refused looks the
+    // same as every client refused sometimes, and those need opposite responses.
+    it('names the client and subject a refusal belongs to', async function () {
+        const state = { warns: [] };
+        const auth = createMcpAuth({
+            issuerUrl: 'https://idp.example.com', tokenTTL: 300000,
+            httpGet: async (url) => url.includes('openid-configuration') ? DISCOVERY
+                                 : { status: 401, body: {} },
+            createRemoteJWKSet: () => ({}), warn: m => state.warns.push(m),
+            jwtVerify: async () => ({ payload: {
+                sub: 'user-1', azp: 'client-a', exp: Math.floor(Date.now() / 1000) + 3600 } })
+        });
+        await auth.validateToken('t');
+        assert.ok(state.warns[0].includes('client=client-a'), state.warns[0]);
+        assert.ok(state.warns[0].includes('sub=user-1'), state.warns[0]);
+    });
+
+    it('falls back to client_id, and to ? when the token names neither', async function () {
+        for (const [payload, expected] of [
+            [{ client_id: 'client-b' }, 'client=client-b'],
+            [{}, 'client=?']
+        ]) {
+            const state = { warns: [] };
+            const auth = createMcpAuth({
+                issuerUrl: 'https://idp.example.com', tokenTTL: 300000,
+                httpGet: async (url) => url.includes('openid-configuration') ? DISCOVERY
+                                     : { status: 401, body: {} },
+                createRemoteJWKSet: () => ({}), warn: m => state.warns.push(m),
+                jwtVerify: async () => ({ payload: Object.assign(
+                    { exp: Math.floor(Date.now() / 1000) + 3600 }, payload) })
+            });
+            await auth.validateToken('t' + expected);
+            assert.ok(state.warns[0].includes(expected), state.warns[0]);
+        }
+    });
+});
+
 describe('core/mcp-auth WWW-Authenticate scope challenge', function () {
     // MCP clients treat a challenged scope as authoritative, ahead of the scopes_supported
     // they would otherwise fall back to. Without this a scope the gate requires but the
