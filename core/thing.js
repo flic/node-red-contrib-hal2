@@ -94,7 +94,7 @@ module.exports = function(RED) {
         function getAttributes() {
             var attribute = [];
             if (typeof node.thingType.attributes === 'object') {
-                for (d in node.thingType.attributes) {
+                for (let d in node.thingType.attributes) {
                     attribute[node.thingType.attributes[d].name] = ""
                     if (typeof node.attributes === 'object') {
                         for (let a in node.attributes) {
@@ -112,7 +112,7 @@ module.exports = function(RED) {
 
         function getItems() {
             var item = [];
-            for (n in node.thingType.items) {
+            for (let n in node.thingType.items) {
                 item[node.thingType.items[n].name] = (typeof node.state[node.thingType.items[n].id] === 'undefined') ? 'no value' : node.state[node.thingType.items[n].id];
             }
             return item;
@@ -288,7 +288,7 @@ module.exports = function(RED) {
             nodeContext.set("last_change",node.last_change,node.thingType.contextStore);            
 
             var attribute = getAttributes();
-            eventmsg = {
+            let eventmsg = {
                 _msgid: RED.util.generateId(),
                 state: state,
                 laststate: node.laststate[node.thingType.items[item].id],
@@ -469,7 +469,7 @@ module.exports = function(RED) {
                     return;
                 }
     
-                for (i in node.thingType.items) {
+                for (let i in node.thingType.items) {
                     if (node.thingType.items[i].id == itemid){
                         item = node.thingType.items[i];
                         break;
