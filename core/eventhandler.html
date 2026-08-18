@@ -123,11 +123,17 @@
                     <label for="node-config-input-pocketidClientId" style="width:150px"><i class="fa fa-id-card"></i> Client ID</label>
                     <input type="text" id="node-config-input-pocketidClientId" placeholder="Client ID" style="width:calc(100% - 185px)" autocomplete="off">
                 </div>
-                <!-- Client secrets are no longer supported: the open DCR endpoint made any
-                     configured secret world-readable. The hidden field stays so that saving
-                     the dialog submits an empty value, which deletes a previously stored
-                     secret (the editor only submits credential fields present in the DOM). -->
-                <input type="hidden" id="node-config-input-pocketidClientSecret">
+                <div class="form-row">
+                    <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
+                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="(optional)" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
+                    <small>Optional, and never handed to a client. It authenticates <i>this server</i> to your
+                        provider's token introspection endpoint (<a href="https://datatracker.ietf.org/doc/html/rfc7662" target="_blank">RFC 7662</a>),
+                        which is the standards-sanctioned way for a resource server to learn about a token it has
+                        been given. Set it and the log will say, once per restart, what introspection knows that
+                        the token itself does not.</small>
+                </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
                     <small>A <b>public client with PKCE</b> at your identity provider. Its callback URLs matter only
                         while the <b>DCR shim</b> below is on, since that is when every MCP client authenticates as
@@ -451,11 +457,6 @@
             tabs.addTab({ id: 'hal2eh-tab-history',   label: 'History' });
             tabs.addTab({ id: 'hal2eh-tab-mcp',       label: 'MCP' });
             tabs.addTab({ id: 'hal2eh-tab-libraries', label: 'Shared Functions' });
-
-            // Client secrets are deprecated: blank the hidden field (the editor pre-fills
-            // it with the __PWRD__ placeholder when a secret is stored) so saving the
-            // dialog submits '' and deletes any previously stored secret.
-            $('#node-config-input-pocketidClientSecret').val('');
 
             // ── Context stores ────────────────────────────────────────────────
             var contextStores = RED.settings.context.stores;

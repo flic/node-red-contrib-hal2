@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('node:assert');
-const { createMcpAuth, secretEqual, acceptsAudience, cimdClientId } = require('../core/mcp-auth');
+const { createMcpAuth, secretEqual, acceptsAudience, cimdClientId,
+        describeIntrospection } = require('../core/mcp-auth');
 
 const DISCOVERY = {
     status: 200,
@@ -346,6 +347,117 @@ describe('core/mcp-auth userinfo failure reporting', function () {
             await auth.validateToken('t' + expected);
             assert.ok(state.warns[0].includes(expected), state.warns[0]);
         }
+    });
+});
+
+describe('core/mcp-auth describeIntrospection', function () {
+    const token = { sub: 'u', aud: ['r'], scope: 'openid groups', exp: 1 };
+
+    it('reports the identity claims introspection carries and the token does not', function () {
+        // The whole question: RFC 7662 is only worth building on if it fills the gap the
+        // access token leaves.
+        const line = describeIntrospection(token,
+            { active: true, sub: 'u', scope: 'openid groups', client_id: 'c',
+              groups: ['ops'], email: 'u@example.com' });
+        assert.ok(line.includes('usable as an identity source'), line);
+        assert.ok(line.includes('groups'), line);
+    });
+
+    it('says so plainly when it returns only RFC 7662 fields', function () {
+        const line = describeIntrospection(token,
+            { active: true, sub: 'u', scope: 'openid groups', client_id: 'c', iss: 'p' });
+        assert.ok(line.includes('NOT usable as an identity source'), line);
+    });
+
+    it('does not count a claim the token already carries', function () {
+        // `scope` is in both; reporting it as something introspection adds would overstate it.
+        const line = describeIntrospection({ groups: ['ops'], scope: 'x' },
+                                           { active: true, groups: ['ops'], scope: 'x' });
+        // `active` is genuinely new; groups and scope are not, and counting them would overstate
+        // what introspection is worth — the token already had them.
+        assert.strictEqual(line.indexOf('groups'), -1, line);
+        assert.strictEqual(line.indexOf('scope'), -1, line);
+        assert.ok(line.includes('NOT usable as an identity source'), line);
+    });
+
+    it('reports an inactive token rather than comparing it', function () {
+        assert.ok(describeIntrospection(token, { active: false }).includes('inactive'));
+        assert.ok(describeIntrospection(token, {}).includes('inactive'));
+    });
+});
+
+describe('core/mcp-auth introspection probe', function () {
+    function build(overrides) {
+        const state = { posts: [], logs: [], warns: [] };
+        const auth = createMcpAuth(Object.assign({
+            issuerUrl: 'https://idp.example.com', tokenTTL: 300000,
+            httpGet: async (url) => url.includes('openid-configuration')
+                ? { status: 200, body: Object.assign({ introspection_endpoint: 'https://idp.example.com/introspect' }, DISCOVERY.body) }
+                : { status: 200, body: {} },
+            httpPost: async (url, headers, form) => {
+                state.posts.push({ url, headers, form });
+                return { status: 200, body: { active: true, groups: ['ops'] } };
+            },
+            createRemoteJWKSet: () => ({}),
+            log: m => state.logs.push(m), warn: m => state.warns.push(m),
+            jwtVerify: async (tok) => ({ payload: { sub: 'abc', azp: 'client-' + String(tok).slice(-1),
+                                                    exp: Math.floor(Date.now() / 1000) + 3600 } })
+        }, overrides));
+        return { auth, state };
+    }
+    const settle = () => new Promise(r => setImmediate(r));
+
+    it('probes once, with the token and basic auth, and reports the answer', async function () {
+        const { auth, state } = build({ clientId: 'cid', clientSecret: 'sec' });
+        await auth.validateToken('t1');
+        await settle();
+        assert.strictEqual(state.posts.length, 1);
+        assert.strictEqual(state.posts[0].form.token, 't1');
+        assert.strictEqual(state.posts[0].headers.Authorization,
+                           'Basic ' + Buffer.from('cid:sec').toString('base64'));
+        assert.ok(state.logs.some(l => l.includes('introspection probe for client=client-1: adds')),
+                  state.logs.join('|'));
+    });
+
+    it('probes once per client, not once per token', async function () {
+        // A diagnostic must not become a per-request round-trip on the auth path — but one
+        // sample for the whole node cannot distinguish a dead token from one this caller may
+        // not ask about, and that difference is the point of the probe.
+        const { auth, state } = build({ clientId: 'cid', clientSecret: 'sec' });
+        await auth.validateToken('a1'); await settle();
+        await auth.validateToken('b1'); await settle();   // same azp as a1
+        await auth.validateToken('c2'); await settle();   // different azp
+        assert.strictEqual(state.posts.length, 2);
+    });
+
+    it('logs the whole response when active is false, since that answer is ambiguous', async function () {
+        const { auth, state } = build({
+            clientId: 'cid', clientSecret: 'sec',
+            httpPost: async () => ({ status: 200, body: { active: false } })
+        });
+        await auth.validateToken('t1');
+        await settle();
+        const line = state.logs.find(l => l.includes('introspection probe'));
+        assert.ok(line.includes('raw='), line);
+        assert.ok(line.includes('client=client-1'), line);
+    });
+
+    it('does nothing without a secret', async function () {
+        const { auth, state } = build({ clientId: 'cid' });
+        await auth.validateToken('t1');
+        await settle();
+        assert.strictEqual(state.posts.length, 0);
+    });
+
+    it('never fails an authentication that already succeeded', async function () {
+        const { auth, state } = build({
+            clientId: 'cid', clientSecret: 'sec',
+            httpPost: async () => { throw new Error('connection refused'); }
+        });
+        const claims = await auth.validateToken('t1');
+        await settle();
+        assert.strictEqual(claims.sub, 'abc');
+        assert.ok(state.warns.some(w => w.includes('introspection probe failed')), state.warns.join('|'));
     });
 });
 

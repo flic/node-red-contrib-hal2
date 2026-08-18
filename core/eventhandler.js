@@ -42,6 +42,38 @@ function httpGet(url, headers) {
     });
 }
 
+// Form-encoded POST to an absolute URL, over TLS when the URL says so. Distinct from
+// httpRequest below, which is JSON over plain http and exists for the localhost admin API:
+// OAuth endpoints want application/x-www-form-urlencoded (RFC 6749 4.1.3) and are remote.
+function httpPostForm(url, headers, form) {
+    return new Promise((resolve, reject) => {
+        const u    = new URL(url);
+        const lib  = u.protocol === 'https:' ? https : http;
+        const data = new URLSearchParams(form).toString();
+        const opts = {
+            hostname : u.hostname,
+            port     : u.port || (u.protocol === 'https:' ? 443 : 80),
+            path     : u.pathname + (u.search || ''),
+            method   : 'POST',
+            headers  : Object.assign({
+                'Content-Type'   : 'application/x-www-form-urlencoded',
+                'Content-Length' : Buffer.byteLength(data)
+            }, headers || {})
+        };
+        const req = lib.request(opts, res => {
+            let raw = '';
+            res.on('data', c => raw += c);
+            res.on('end', () => {
+                try   { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
+                catch { resolve({ status: res.statusCode, body: raw }); }
+            });
+        });
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+    });
+}
+
 function httpRequest(method, hostname, port, path, headers, body) {
     return new Promise((resolve, reject) => {
         const data = body ? JSON.stringify(body) : null;
@@ -776,7 +808,10 @@ module.exports = function(RED) {
             const clientId      = ((node.credentials && node.credentials.pocketidClientId)     || '').trim();
             // Read only to warn below — the server always registers clients as public (PKCE);
             // a secret handed out by the open DCR endpoint could never actually be secret.
-            const storedClientSecret = ((node.credentials && node.credentials.pocketidClientSecret) || '').trim();
+            // Authenticates this server to the provider's introspection endpoint. Never handed
+            // out: the DCR endpoint that once made a stored secret world-readable is gone, and
+            // this credential is only ever used server-to-server.
+            const clientSecret = ((node.credentials && node.credentials.pocketidClientSecret) || '').trim();
             // Audience enforcement: explicit mcpAudience wins, otherwise tokens must carry the
             // client id in `aud` (OIDC providers set aud to the client the token was issued for).
             // Only when both are empty is the audience check skipped — issuer is always enforced
@@ -858,6 +893,7 @@ module.exports = function(RED) {
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
                 advertisedScopes: advertisedStr,
+                clientId, clientSecret, httpPost: httpPostForm,
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 localDebugGroups,
                 httpGet,
@@ -2054,12 +2090,7 @@ module.exports = function(RED) {
             const guard = hostFilter(expectedHost);
             guard._mcpOwner = node.id;
 
-            if (storedClientSecret) {
-                node.warn('MCP: a stored OAuth client secret is being ignored — this server now always '
-                    + 'registers MCP clients as a public client (PKCE). Update the IdP client to '
-                    + 'public with PKCE enabled, then open the hal2 event handler\'s config, click '
-                    + 'Done, and deploy: that deletes the stored secret and clears this warning.');
-            }
+
 
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
