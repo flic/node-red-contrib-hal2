@@ -61,10 +61,20 @@ describe('core/mcp-auth acceptsAudience', function () {
     const CIMD = 'https://claude.ai/api/mcp/client-metadata.json';
     const opts = o => Object.assign({ expected: 'pre-registered-id' }, o);
 
-    it('accepts anything when no audience is configured', function () {
+    it('still requires the resource when only the audience is unset', function () {
+        // The Client ID field is otherwise vestigial, so clearing it looks harmless — and used
+        // to switch the whole check off. A token for another app at the same provider must not
+        // become acceptable just because this server no longer names a client.
+        const R = 'https://mcp.example.com/mcp';
+        assert.strictEqual(acceptsAudience({ aud: 'https://other.example.com' },
+                                           { expected: '', resourceUrl: R }), false);
+        assert.strictEqual(acceptsAudience({ aud: R }, { expected: '', resourceUrl: R }), true);
+    });
+
+    it('accepts anything only when neither audience nor resource is known', function () {
         // What this server did before an audience check existed, and still does for an
         // install that never filled the field in.
-        assert.strictEqual(acceptsAudience({ aud: 'whatever' }, { expected: '' }), true);
+        assert.strictEqual(acceptsAudience({ aud: 'whatever' }, { expected: '', resourceUrl: '' }), true);
         assert.strictEqual(acceptsAudience({}, {}), true);
     });
 

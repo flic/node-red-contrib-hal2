@@ -65,7 +65,12 @@ function cimdClientId(payload, { expected = '', resourceUrl = '' } = {}) {
 // this server, with the claim gate as the remaining check; narrowing that later means passing
 // a list of accepted client ids here instead of the boolean, and nothing else moves.
 function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd = false } = {}) {
-    if (!expected) { return true; }        // unconfigured — unchanged from before this existed
+    // Only a server that knows neither an audience nor its own resource identifier has nothing
+    // to check against. Previously an empty `expected` alone waved everything through, which
+    // made the whole check vanish the moment the Client ID field was cleared — and that field is
+    // otherwise vestigial, so clearing it looks harmless. With a resource identifier in hand the
+    // token must still be for this server.
+    if (!expected && !resourceUrl) { return true; }
     return audienceValues(payload).some(v =>
                v === expected
                || (!!resourceUrl && v === resourceUrl))   // RFC 8707: token bound to the resource

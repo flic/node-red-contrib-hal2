@@ -129,7 +129,10 @@
                      secret (the editor only submits credential fields present in the DOM). -->
                 <input type="hidden" id="node-config-input-pocketidClientSecret">
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>The identity provider's client must be configured as a <b>public client with PKCE</b>, with the MCP client callback URL(s) (e.g. <code>https://claude.ai/api/mcp/auth_callback</code>) whitelisted there.</small>
+                    <small>A <b>public client with PKCE</b> at your identity provider. Its callback URLs matter only
+                        while the <b>DCR shim</b> below is on, since that is when every MCP client authenticates as
+                        <i>this</i> client. With the shim off each client has its own registration, and its callbacks
+                        belong there.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpScopes" style="width:150px"><i class="fa fa-list"></i> OIDC scopes</label>
@@ -143,13 +146,13 @@
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpAudience" style="width:150px"><i class="fa fa-id-badge"></i> Token audience</label>
-                    <input type="text" id="node-config-input-mcpAudience" placeholder="(defaults to Client ID)" style="width:calc(100% - 185px)">
+                    <input type="text" id="node-config-input-mcpAudience" placeholder="(defaults to the MCP endpoint URL)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
                     <small>Incoming tokens must carry this value in their <code>aud</code> (or <code>azp</code>)
-                        claim. Empty defaults to the <b>Client ID</b>, so tokens issued to other apps at the
-                        same provider are rejected; the check is skipped only when both are empty. The MCP
-                        endpoint's own URL and a CIMD client's document URL are always accepted too.</small>
+                        claim. Leave it empty and the MCP endpoint's own URL is required instead &mdash; which is
+                        what your provider puts in <code>aud</code> for an API. The <b>Client ID</b> is accepted as
+                        well, for tokens issued through the DCR shim.</small>
                 </div>
 
                 <div class="form-row" style="margin-bottom:4px;">
