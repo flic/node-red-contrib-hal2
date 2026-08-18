@@ -195,7 +195,7 @@
                     <input type="text" id="node-config-input-writeRequiredScope" placeholder="(empty = no scope required)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>What the <i>client</i> was authorized to do, checked with <b>AND</b> on top of
+                    <small>What the <i>client</i> is authorized to do, checked with <b>AND</b> on top of
                     the claim above — so a read-only client cannot write for a user who may. Empty means
                     no constraint; a required scope the token lacks is refused.</small>
                 </div>
@@ -310,7 +310,7 @@
 
     <h3>Access gates</h3>
     <p>Two independent axes, checked with <b>AND</b>. The <b>claim</b> axis asks what the
-    <i>user</i> may do; the <b>scope</b> axis asks what the <i>client</i> was authorized to do on
+    <i>user</i> may do; the <b>scope</b> axis asks what the <i>client</i> is authorized to do on
     their behalf. Keeping them apart is what stops a client holding a read-only scope from acting
     for a user who may write — delegation, not impersonation.</p>
 
