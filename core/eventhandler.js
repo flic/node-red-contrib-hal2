@@ -42,38 +42,6 @@ function httpGet(url, headers) {
     });
 }
 
-// Form-encoded POST to an absolute URL, over TLS when the URL says so. Distinct from
-// httpRequest below, which is JSON over plain http and exists for the localhost admin API:
-// OAuth endpoints want application/x-www-form-urlencoded (RFC 6749 4.1.3) and are remote.
-function httpPostForm(url, headers, form) {
-    return new Promise((resolve, reject) => {
-        const u    = new URL(url);
-        const lib  = u.protocol === 'https:' ? https : http;
-        const data = new URLSearchParams(form).toString();
-        const opts = {
-            hostname : u.hostname,
-            port     : u.port || (u.protocol === 'https:' ? 443 : 80),
-            path     : u.pathname + (u.search || ''),
-            method   : 'POST',
-            headers  : Object.assign({
-                'Content-Type'   : 'application/x-www-form-urlencoded',
-                'Content-Length' : Buffer.byteLength(data)
-            }, headers || {})
-        };
-        const req = lib.request(opts, res => {
-            let raw = '';
-            res.on('data', c => raw += c);
-            res.on('end', () => {
-                try   { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
-                catch { resolve({ status: res.statusCode, body: raw }); }
-            });
-        });
-        req.on('error', reject);
-        req.write(data);
-        req.end();
-    });
-}
-
 function httpRequest(method, hostname, port, path, headers, body) {
     return new Promise((resolve, reject) => {
         const data = body ? JSON.stringify(body) : null;
@@ -805,29 +773,20 @@ module.exports = function(RED) {
 
             node.log('MCP init: serverUrl=' + mcpServerUrl + ', issuer=' + issuerUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
-            const clientId      = ((node.credentials && node.credentials.pocketidClientId)     || '').trim();
-            // Read only to warn below — the server always registers clients as public (PKCE);
-            // a secret handed out by the open DCR endpoint could never actually be secret.
-            // Authenticates this server to the provider's introspection endpoint. Never handed
-            // out: the DCR endpoint that once made a stored secret world-readable is gone, and
-            // this credential is only ever used server-to-server.
-            const clientSecret = ((node.credentials && node.credentials.pocketidClientSecret) || '').trim();
-            // Audience enforcement: explicit mcpAudience wins, otherwise tokens must carry the
-            // client id in `aud` (OIDC providers set aud to the client the token was issued for).
-            // Only when both are empty is the audience check skipped — issuer is always enforced
-            // regardless (see validateToken).
-            const tokenAudience = (config.mcpAudience || '').trim() || clientId;
-            // The DCR shim: this server acting as the authorization server and answering
-            // /oauth/register. Default ON when the property is absent — a node saved before
-            // this switch existed has been proxying all along, and dropping its DCR endpoint
-            // on upgrade would break whatever client depends on it. New nodes get false from
-            // the editor's defaults, because pointing clients straight at the IdP is correct
-            // wherever the IdP can serve them (see resolveAuthServerUrl).
-            const dcrShim = (config.dcrShim === undefined) ? true : config.dcrShim === true;
+            // Audience enforcement. Empty means the resource identifier is required instead —
+            // which is what MCP mandates a client asks for (RFC 8707) and what a provider puts
+            // in `aud` for an API, so the field is only needed by a provider that uses something
+            // else. The issuer is always enforced regardless (see validateToken).
+            const tokenAudience = (config.mcpAudience || '').trim();
             const adminEnabled  = config.adminToolsEnabled === true;
             const adminPort     = Number(config.adminPort || 1880);
-            const mcpScopesStr  = (config.mcpScopes || 'openid profile email').trim();
-            const mcpScopesArr  = mcpScopesStr.split(/\s+/).filter(Boolean);
+            // A fixed base plus whatever the provider needs to release the claim the gate reads.
+            // `openid` is not negotiable — without it the flow is not OIDC at all — and `profile`
+            // earns its place because providers commonly attach custom claims to it. The rest of
+            // the advertised set is derived from the gate, so there is nothing to keep in sync.
+            const BASE_SCOPES   = ['openid', 'profile', 'email'];
+            const extraScopes   = (config.mcpExtraScopes || '').trim().split(/\s+/).filter(Boolean);
+            const mcpScopesArr  = BASE_SCOPES.concat(extraScopes).filter((v, i, a) => a.indexOf(v) === i);
             const gateClaim     = (config.adminRequiredClaim || 'groups').trim();
             // Default 'admin' only when never set (undefined). Empty string is respected
             // as "allow any authenticated user" per the UI help text.
@@ -893,7 +852,7 @@ module.exports = function(RED) {
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
                 advertisedScopes: advertisedStr,
-                clientId, clientSecret, httpPost: httpPostForm,
+                gateClaim, gateClaimRequired: !!(readValue || writeValue),
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 localDebugGroups,
                 httpGet,
@@ -2099,61 +2058,13 @@ module.exports = function(RED) {
                 // endpoint, not the bare server base.
                 res.status(200).json(oauthDiscovery.buildProtectedResourceMetadata({
                     resourceUrl   : resourceUrl,
-                    authServerUrl : oauthDiscovery.resolveAuthServerUrl(dcrShim, publicBase, issuerUrl),
+                    authServerUrl : issuerUrl || publicBase,
                     scopes        : advertisedArr
                 }));
             };
             for (const p of resourceMetadataPaths) {
                 node.log('MCP registering route: GET ' + p);
                 RED.httpNode.get(p, guard, rateLimit('wk', 120), protectedResourceHandler);
-            }
-
-            // ── The DCR shim: our own authorization-server identity, and /oauth/register ──
-            // Both or neither. Advertising ourselves as the issuer is what makes the register
-            // route discoverable, and it is also what makes the `iss` of the IdP's
-            // authorization response disagree with the issuer a client recorded — so leaving
-            // the metadata up while dropping the route would keep the cost and lose the point.
-            if (dcrShim) {
-                // ── OAuth: /.well-known/oauth-authorization-server ────────────────
-
-                const authServerHandler = async (_req, res) => {
-                    const oidc = await getOidcConfig();
-                    res.status(200).json(oauthDiscovery.buildAuthorizationServerMetadata({
-                        issuerBase           : publicBase,
-                        oidc                 : oidc,
-                        registrationEndpoint : publicBase + '/oauth/register',
-                        scopes               : advertisedArr
-                    }));
-                };
-                for (const p of wellKnownPaths('oauth-authorization-server')) {
-                    node.log('MCP registering route: GET ' + p);
-                    RED.httpNode.get(p, guard, rateLimit('wk', 120), authServerHandler);
-                }
-
-                // ── DCR: /oauth/register ──────────────────────────────────────────
-
-                node.log('MCP registering route: POST ' + mcpPrefix + '/oauth/register');
-                RED.httpNode.post(mcpPrefix + '/oauth/register', guard, rateLimit('register', 20), async (req, res) => {
-                    // DCR is deprecated as of MCP 2026-07-28 and kept only as a fallback, so record
-                    // who still needs it. When the IdP advertises CIMD, reaching this route means the
-                    // client skipped it in the spec's priority order — i.e. it cannot do CIMD, and it
-                    // is the reason this shim still exists. Logged at info: a registration is routine,
-                    // and node.warn would republish it into every editor's debug sidebar.
-                    const who = oauthDiscovery.describeDcrClient(req.body, req.headers);
-                    const oidc = await getOidcConfig().catch(() => ({}));
-                    node.log(oidc.client_id_metadata_document_supported === true
-                        ? 'MCP DCR fallback (client lacks CIMD): ' + who
-                        : 'MCP DCR registration (IdP does not offer CIMD): ' + who);
-                    res.status(201).json(oauthDiscovery.buildDcrRegistration({
-                        clientId     : clientId,
-                        redirectUris : oauthDiscovery.resolveRedirectUris(
-                                           req.body && req.body.redirect_uris, defaultRedirectUris),
-                        scopeStr     : advertisedStr
-                    }));
-                });
-            } else {
-                node.log('MCP DCR shim off: authorization server is ' + (issuerUrl || publicBase) +
-                         ' — no /oauth/register, clients must use CIMD or pre-registration');
             }
 
             // ── MCP: /mcp ─────────────────────────────────────────────────────
@@ -2257,8 +2168,6 @@ module.exports = function(RED) {
                 node.log('MCP removing routes with prefix: "' + mcpPrefix + '"');
                 const router = RED.httpNode && RED.httpNode._router;
                 for (const p of resourceMetadataPaths)                        { removeOwnedRoutes(router, 'get', p, node.id); }
-                for (const p of wellKnownPaths('oauth-authorization-server')) { removeOwnedRoutes(router, 'get', p, node.id); }
-                removeOwnedRoutes(router, 'post', mcpPrefix + '/oauth/register', node.id);
                 removeOwnedRoutes(router, 'post', mcpPrefix + '/mcp', node.id);
             }
         });
@@ -2266,8 +2175,6 @@ module.exports = function(RED) {
 
     RED.nodes.registerType("hal2EventHandler", hal2EventHandler, {
         credentials: {
-            pocketidClientId     : { type: 'text' },
-            pocketidClientSecret : { type: 'password' },
             adminToken           : { type: 'password' },
             localDebugToken      : { type: 'password' }
         }

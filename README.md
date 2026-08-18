@@ -184,7 +184,7 @@ Off by default. When **Only serve requests for this hostname** is enabled on the
 
 ### Authentication & reverse proxy
 
-The MCP server implements the MCP OAuth flow itself: it advertises itself as a **protected resource**, proxies the **authorization-server metadata** to your identity provider (IdP), and hands the MCP client a fixed, pre-registered client via a small dynamic-client-registration shim. It does **not** run its own login — your IdP does.
+The MCP server advertises itself as a **protected resource** and points clients at your identity provider. It does **not** run its own login, and since 3.0.0 it no longer pretends to be an authorization server either.
 
 **Routes to expose through your reverse proxy.** With the default (empty) *HTTP path prefix*, the Event handler registers these on the public *MCP server URL* — all must be reachable from the MCP client:
 
@@ -193,16 +193,12 @@ The MCP server implements the MCP OAuth flow itself: it advertises itself as a *
 | `POST /mcp` | The JSON-RPC MCP endpoint (bearer-token protected) |
 | `GET /.well-known/oauth-protected-resource` | Resource metadata (RFC 9728) — points the client at the auth server |
 | `GET /.well-known/oauth-protected-resource/mcp` | Same metadata, path-inserted form some clients probe |
-| `GET /.well-known/oauth-authorization-server` | Auth-server metadata (RFC 8414) — issuer is hal2, endpoints point at your IdP |
-| `POST /oauth/register` | Dynamic client registration shim — returns your pre-registered client |
 
-**Client ID Metadata Documents (CIMD).** MCP 2026-07-28 deprecates dynamic client registration in favour of [CIMD](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-01), where a client's id is the HTTPS URL of a metadata document it hosts itself. hal2 advertises `client_id_metadata_document_supported` by mirroring what your IdP's discovery document says — it is never configured here, because it is the IdP that resolves the client id, and hal2 is in no position to promise support the IdP doesn't have. Discovery is fetched once and cached for the lifetime of the node, so enabling or disabling CIMD on the IdP is picked up at the next Node-RED restart or deploy — not live.
+**This server is a resource server, and nothing else.** It runs no login, holds no client credentials and performs no OAuth flow. It publishes [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) protected-resource metadata naming your identity provider, and clients go there directly — with a [Client ID Metadata Document](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-01) or a pre-registered client ID. Dynamic client registration is deprecated by MCP 2026-07-28 and, as of 3.0.0, is no longer offered here.
 
-**The DCR shim is off by default and should stay off.** It exists for one situation: a client that cannot use CIMD, talking to an IdP that cannot do DCR itself. When it is on, this server advertises *itself* as the authorization server so that the registration endpoint is discoverable — which also means the `iss` your IdP returns will not match the issuer the client recorded, and a client enforcing [RFC 9207](https://datatracker.ietf.org/doc/html/rfc9207) (required by MCP 2026-07-28) will refuse to finish the flow. With it off, clients are sent straight to the IdP and must use CIMD or a pre-registered client ID. A node configured before this switch existed keeps the shim on, since that is what it has been doing.
+**A request is authenticated by the access token alone.** The signature is checked against the provider's JWKS, the issuer is pinned to the discovered provider, expiry is enforced, and the audience must name this server — the MCP endpoint's URL, which is what MCP requires clients to ask for ([RFC 8707](https://www.rfc-editor.org/rfc/rfc8707.html)) and what a provider puts in `aud` for an API.
 
-Both mechanisms stay available on purpose. Clients pick in the spec's order — pre-registered, then CIMD, then DCR — so a client without CIMD support keeps using `/oauth/register` exactly as before. Which mechanism each client took is readable from the log: `MCP CIMD client authenticated: <url>` the first time a CIMD client is seen after a restart, and `MCP DCR fallback` for a client that registered even though the IdP advertises CIMD. Between them the two lines account for every client that reaches the server.
-
-Tokens from a CIMD client carry that document URL as their audience rather than your pre-registered client id, and hal2 accepts them whenever the IdP advertises CIMD. It does not keep a second allowlist of its own, so the IdP's list of accepted metadata documents is the boundary — any CIMD client on it can reach this server, with the claim gates as the remaining check.
+There is no second call. Nothing is fetched from `/userinfo`: that endpoint serves a client asking about its own user ([OIDC Core §5.3](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo)), not a resource server asking about a token, and a provider may refuse it once the token is bound to this server. **Everything the access gates read must therefore be in the token** — see [RFC 9068 §2.2.3.1](https://www.rfc-editor.org/rfc/rfc9068.html), which is where an authorization server is told to put `groups`, `roles` and `entitlements`. A provider that keeps them in the ID token or userinfo alone will leave the claim gate with nothing to match, and the log will say so, once per client.
 
 Each **standalone** `hal2MCPServer` node adds one more endpoint, `POST /mcp/<path>` (e.g. `/mcp/jellyfin`), sharing the same auth. Setting an *HTTP path prefix* shifts every route under it (`/prefix/mcp`, `/prefix/.well-known/…`), so update the proxy to match.
 
@@ -217,8 +213,6 @@ labels:
   caddy_1.reverse_proxy_1: /mcp/* "{{upstreams 1880}}"
   caddy_1.reverse_proxy_2: /.well-known/oauth-protected-resource "{{upstreams 1880}}"
   caddy_1.reverse_proxy_3: /.well-known/oauth-protected-resource/mcp "{{upstreams 1880}}"
-  caddy_1.reverse_proxy_4: /.well-known/oauth-authorization-server "{{upstreams 1880}}"
-  caddy_1.reverse_proxy_5: /oauth/register "{{upstreams 1880}}"
 ```
 
 `/mcp` (exact) and `/mcp/*` are deliberately **separate** matchers — in Caddy `/mcp/*` does *not* match the bare `/mcp`. To serve several MCP servers on different hostnames from one backend, give each its own `caddy_N` site block and enable [hostname filtering](#hostname-filtering).

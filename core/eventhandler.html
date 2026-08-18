@@ -120,35 +120,14 @@
                     <small>OIDC issuer base URL. Endpoints are auto-discovered from <code>/.well-known/openid-configuration</code> (falling back to PocketID's path layout). The provider must issue <b>JWT access tokens</b> verifiable via its JWKS.</small>
                 </div>
                 <div class="form-row">
-                    <label for="node-config-input-pocketidClientId" style="width:150px"><i class="fa fa-id-card"></i> Client ID</label>
-                    <input type="text" id="node-config-input-pocketidClientId" placeholder="Client ID" style="width:calc(100% - 185px)" autocomplete="off">
-                </div>
-                <div class="form-row">
-                    <label for="node-config-input-pocketidClientSecret" style="width:150px"><i class="fa fa-key"></i> Client secret</label>
-                    <input type="password" id="node-config-input-pocketidClientSecret" placeholder="(optional)" style="width:calc(100% - 185px)">
+                    <label for="node-config-input-mcpExtraScopes" style="width:150px"><i class="fa fa-list"></i> Additional scopes</label>
+                    <input type="text" id="node-config-input-mcpExtraScopes" placeholder="(e.g. groups)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Optional, and never handed to a client. It authenticates <i>this server</i> to your
-                        provider's token introspection endpoint (<a href="https://datatracker.ietf.org/doc/html/rfc7662" target="_blank">RFC 7662</a>),
-                        which is the standards-sanctioned way for a resource server to learn about a token it has
-                        been given. Set it and the log will say, once per restart, what introspection knows that
-                        the token itself does not.</small>
-                </div>
-                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>A <b>public client with PKCE</b> at your identity provider. Its callback URLs matter only
-                        while the <b>DCR shim</b> below is on, since that is when every MCP client authenticates as
-                        <i>this</i> client. With the shim off each client has its own registration, and its callbacks
-                        belong there.</small>
-                </div>
-                <div class="form-row">
-                    <label for="node-config-input-mcpScopes" style="width:150px"><i class="fa fa-list"></i> OIDC scopes</label>
-                    <input type="text" id="node-config-input-mcpScopes" placeholder="openid profile email" style="width:calc(100% - 185px)">
-                </div>
-                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Space-separated list, advertised to clients as the scopes to request. Add e.g.
-                    <code>groups</code> to include group membership in the JWT — your provider must be
-                    configured to send that claim. Any <b>Read scope</b> or <b>Write scope</b> below is
-                    added automatically; you do not repeat it here.</small>
+                    <small>Clients are always told to request <code>openid profile email</code>, plus any
+                        <b>Read scope</b> and <b>Write scope</b> set below. Add here only what your provider
+                        needs in order to put the <b>Access claim</b> into the access token &mdash; commonly
+                        <code>groups</code>.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-mcpAudience" style="width:150px"><i class="fa fa-id-badge"></i> Token audience</label>
@@ -157,20 +136,8 @@
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
                     <small>Incoming tokens must carry this value in their <code>aud</code> (or <code>azp</code>)
                         claim. Leave it empty and the MCP endpoint's own URL is required instead &mdash; which is
-                        what your provider puts in <code>aud</code> for an API. The <b>Client ID</b> is accepted as
-                        well, for tokens issued through the DCR shim.</small>
-                </div>
-
-                <div class="form-row" style="margin-bottom:4px;">
-                    <label style="width:150px">&nbsp;</label>
-                    <input type="checkbox" id="node-config-input-dcrShim" style="width:23px; margin:0">
-                    <label for="node-config-input-dcrShim" style="margin:0; width:auto;"> Dynamic client registration shim</label>
-                </div>
-                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small><b>Leave this off unless you need it:</b> a client that cannot use CIMD, talking to a
-                        provider that cannot do dynamic client registration itself. When on, this server
-                        advertises <i>itself</i> as the authorization server — which breaks the RFC 9207
-                        issuer check for any client that enforces it.</small>
+                        what your provider puts in <code>aud</code> for an API, and what MCP requires clients to
+                        ask for. Only set it for a provider that uses something else.</small>
                 </div>
 
                 <hr style="margin:12px 0">
@@ -208,7 +175,12 @@
                     <input type="text" id="node-config-input-writeRequiredValue" placeholder="(empty = same as read)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Comma-separated <b>any-of</b> lists against one claim, combined with <b>AND</b>.
+                    <small><b>Requires the claim to be in the access token.</b> This server reads the token and
+                    nothing else, so a provider that keeps the claim in the ID token or userinfo alone leaves
+                    this gate with nothing to match and every tool hidden &mdash; the log says so when it
+                    happens. Ask your provider for it in the access token
+                    (<a href="https://www.rfc-editor.org/rfc/rfc9068.html" target="_blank">RFC 9068 §2.2.3.1</a>).<br><br>
+                    Comma-separated <b>any-of</b> lists against one claim, combined with <b>AND</b>.
                     <b>Read tools</b> observe, <b>write tools</b> change the house — and a write must
                     clear the read list too. Both empty (the default) leaves every tool open to any
                     authenticated caller.</small>
@@ -313,29 +285,24 @@
     flag in <code>get_all_states</code>.</li>
 
     <h3>MCP authentication</h3>
-    <p>The issuer is always verified against the discovered identity provider. The audience is
-    checked too, and three values pass: the <b>Token audience</b> field (defaulting to the
-    <b>Client ID</b>), the MCP endpoint's own URL — for providers that honour the
-    <a href="https://www.rfc-editor.org/rfc/rfc8707.html" target="_blank">RFC 8707</a>
-    <code>resource</code> parameter, which MCP clients are required to send — and the HTTPS URL of
-    a client's metadata document when the provider advertises
-    <code>client_id_metadata_document_supported</code>.</p>
+    <p>This server is an OAuth 2.1 <i>resource server</i> and nothing else: it runs no login, holds
+    no client credentials and performs no OAuth flow. It publishes
+    <a href="https://datatracker.ietf.org/doc/html/rfc9728" target="_blank">RFC 9728</a>
+    protected-resource metadata naming your identity provider, and clients go there directly &mdash;
+    with a <a href="https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-01" target="_blank">Client ID Metadata Document</a>
+    or a pre-registered client ID. Dynamic client registration is deprecated by MCP 2026-07-28 and
+    is no longer offered here.</p>
 
-    <p>That last one is worth understanding before relying on it: a CIMD client's id <i>is</i> its
-    document URL, and this server accepts any such client the provider was willing to issue a token
-    to. It keeps no second allowlist, so the provider's list of accepted metadata documents is the
-    boundary — keep it tight, because any CIMD client on it can reach this server, with the access
-    gates below as the only remaining check.</p>
+    <p>A request is authenticated by the access token alone. The signature is checked against the
+    provider's JWKS, the issuer is pinned to the discovered provider, expiry is enforced, and the
+    audience must name this server &mdash; the MCP endpoint's own URL, which is what MCP requires
+    clients to ask for (<a href="https://www.rfc-editor.org/rfc/rfc8707.html" target="_blank">RFC 8707</a>)
+    and what a provider puts in <code>aud</code> for an API.</p>
 
-    <p>The <b>dynamic client registration shim</b> is off by default and should stay off. Turned on,
-    this server advertises itself as the authorization server and answers
-    <code>POST /oauth/register</code> with your pre-registered client — the only way a client that
-    cannot do CIMD can obtain a client ID against a provider that has no registration endpoint of
-    its own. The cost is that the <code>iss</code> your provider returns no longer matches the
-    issuer the client discovered here, so any client enforcing
-    <a href="https://datatracker.ietf.org/doc/html/rfc9207" target="_blank">RFC 9207</a> (required
-    by MCP 2026-07-28) refuses to finish the flow. With it off, clients are sent straight to the
-    provider and must use CIMD or a pre-registered client ID.</p>
+    <p>There is no second call. Nothing is fetched from <code>/userinfo</code>, which serves a client
+    asking about its own user rather than a resource server asking about a token, and which a provider
+    may refuse outright once the token is bound to this server. Everything the gates below read must
+    therefore be <i>in the token</i>.</p>
 
     <p><b>Hostname filtering</b> lets several event handlers share the same paths on one Node-RED
     instance, split by <code>Host</code> header. Leave it off when a reverse proxy rewrites that
@@ -415,9 +382,8 @@
             httpPathPrefix:    { value: '' },
             mcpFilterHost:     { value: false },
             pocketidUrl:       { value: '' },
-            mcpScopes:         { value: 'openid profile email' },
+            mcpExtraScopes:    { value: '' },
             mcpAudience:       { value: '' },
-            dcrShim:           { value: false },
             tokenCacheTTL:     { value: 300 },
             adminToolsEnabled: { value: false },
             adminPort:         { value: 1880 },
@@ -433,8 +399,6 @@
             egressLibrary:     { value: [], required: false }
         },
         credentials: {
-            pocketidClientId:     { type: 'text' },
-            pocketidClientSecret: { type: 'password' },
             adminToken:           { type: 'password' },
             localDebugToken:      { type: 'password' }
         },
@@ -743,16 +707,6 @@
             }
             $('#node-config-input-mcpEnabled').on('change', toggleMcp);
             toggleMcp();
-
-            // A node saved before this switch existed has no dcrShim property, and Node-RED does
-            // not backfill declared defaults into nodes that predate them. Left alone the box
-            // would render unchecked and the first Done would silently turn off a shim the
-            // install has been relying on — so an absent value is shown as on, matching what the
-            // runtime does with it. The runtime keeps its own copy of this rule; neither can be
-            // derived from the other, because only one of them ever sees the DOM.
-            if (this.dcrShim === undefined) {
-                $('#node-config-input-dcrShim').prop('checked', true);
-            }
 
             // ── Admin tools toggle ────────────────────────────────────────────
             function toggleAdmin() {

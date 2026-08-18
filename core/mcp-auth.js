@@ -6,6 +6,9 @@
 
 const crypto = require('crypto');
 const jose   = require('jose');
+// Only for readClaim: the missing-claim warning has to resolve a dotted claim name exactly the
+// way the gate does, or it would report a claim as absent that the gate goes on to find.
+const { readClaim } = require('../lib/claim-gate');
 
 const TOKEN_CACHE_MAX = 1000;
 
@@ -77,26 +80,6 @@ function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd =
         || (allowCimd && !!cimdClientId(payload, { expected, resourceUrl }));
 }
 
-// What an introspection response adds over the token's own claims — the one question that
-// decides whether RFC 7662 can serve as this server's identity source. The claim gate reads an
-// identity claim; an access token audience-bound to the MCP endpoint generally does not carry
-// one, and a provider's userinfo endpoint may refuse such a token outright. If introspection
-// carries it, it is the standards-sanctioned channel. If it returns only RFC 7662's own fields,
-// it cannot help and the claim has to come from the token itself.
-const IDENTITY_CLAIMS = ['groups', 'roles', 'email', 'name', 'preferred_username'];
-
-function describeIntrospection(payload, intro) {
-    const p = (payload && typeof payload === 'object') ? payload : {};
-    const i = (intro   && typeof intro   === 'object') ? intro   : {};
-    if (i.active !== true) { return 'token reported inactive — nothing to compare'; }
-    const added    = Object.keys(i).filter(k => !(k in p)).sort();
-    const identity = IDENTITY_CLAIMS.filter(k => (k in i) && !(k in p));
-    return 'adds ' + (added.join(' ') || 'nothing')
-        + (identity.length
-            ? ' — usable as an identity source, it carries ' + identity.join(' ')
-            : ' — NOT usable as an identity source, no identity claim the token lacks');
-}
-
 function createMcpAuth(opts) {
     const {
         issuerUrl          = '',
@@ -114,12 +97,11 @@ function createMcpAuth(opts) {
         // naming only the gate's scopes strips openid and the claim the gate itself reads.
         // Empty leaves the challenge without a scope parameter.
         advertisedScopes   = '',
-        // Only used to authenticate this server to the provider's introspection endpoint, which
-        // is a server-to-server call — categorically unlike the secret the DCR endpoint used to
-        // hand out to arbitrary clients. Absent, the probe below simply never runs.
-        clientId           = '',
-        clientSecret       = '',
-        httpPost,
+        // The claim the access gate reads, and whether any gate value is actually set. Used
+        // only to warn when an arriving token does not carry that claim — a state in which
+        // every tool is hidden and nothing else says why.
+        gateClaim          = '',
+        gateClaimRequired  = false,
         discoveryRetryMs   = 30000,
         httpGet,
         log                = () => {},
@@ -134,14 +116,11 @@ function createMcpAuth(opts) {
     }
 
     let tokenCache = {};
-    // One probe per distinct client whose token arrives, capped. A single probe for the whole
-    // node was too stingy: the first answer can be ambiguous — a provider may return
-    // `active: false` both for a genuinely dead token and for one the asking client is not
-    // allowed to know about (RFC 7662 2.2 permits either) — and one sample cannot tell those
-    // apart. Per client, the pattern across clients does: uniformly false points at an
-    // authorization restriction, mixed points at real token state.
-    const introspectedClients = new Set();
-    const INTROSPECT_PROBE_MAX = 10;
+    // Clients already told that their tokens lack the claim the gate reads. Once each, capped
+    // for the same reason the token cache is: these values come off tokens arriving at an
+    // internet-exposed endpoint.
+    const claimlessClients = new Set();
+    const CLAIM_WARN_MAX = 50;
     // CIMD client ids already announced in the log, so the confirmation is one line per client
     // per restart rather than one per token or per cache miss. Capped for the same reason the
     // token cache is: the values come off tokens arriving at an internet-exposed endpoint. At
@@ -160,7 +139,6 @@ function createMcpAuth(opts) {
             issuer                 : issuerUrl,
             authorization_endpoint : issuerUrl + '/authorize',
             token_endpoint         : issuerUrl + '/api/oidc/token',
-            userinfo_endpoint      : issuerUrl + '/api/oidc/userinfo',
             jwks_uri               : issuerUrl + '/.well-known/jwks.json'
         };
     }
@@ -275,49 +253,29 @@ function createMcpAuth(opts) {
                     log('MCP CIMD client authenticated: ' + cimd);
                 }
             }
-            // Diagnostic, not a decision: ask the provider what it knows about a token this
-            // server has just accepted, and say once what that adds over the token itself.
-            // Deliberately not awaited — a request must not wait on it, and a failure here must
-            // not affect an authentication that has already succeeded.
-            const probeFor = payload.azp || payload.client_id || 'unknown';
-            if (clientId && clientSecret && typeof httpPost === 'function'
-                && !introspectedClients.has(probeFor)
-                && introspectedClients.size < INTROSPECT_PROBE_MAX) {
-                introspectedClients.add(probeFor);   // added before awaiting, so a burst probes once
-                probeIntrospection(token, payload, oidc, probeFor).catch(e =>
-                    warn('MCP introspection probe failed for client=' + probeFor + ': ' + e.message));
+            // A gate configured against a claim the token does not carry denies every tool,
+            // and does it silently: the caller authenticates cleanly and simply sees nothing.
+            // That is the single most expensive failure mode this server has, so it is named.
+            // RFC 9068 2.2.3.1 is where a provider is told to put it; naming the section gives
+            // the reader something to ask for.
+            if (gateClaim && gateClaimRequired && readClaim(payload, gateClaim) === undefined) {
+                const who = payload.azp || payload.client_id || 'unknown';
+                if (!claimlessClients.has(who) && claimlessClients.size < CLAIM_WARN_MAX) {
+                    claimlessClients.add(who);
+                    warn('MCP access claim "' + gateClaim + '" is missing from tokens for client=' +
+                         who + ' — every tool will be hidden. The provider must include it in the ' +
+                         'access token (RFC 9068 2.2.3.1); an ID token or userinfo claim is not ' +
+                         'visible to this server.');
+                }
             }
 
-            // Enrich with userinfo — access tokens are minimal by OIDC convention, rich claims
-            // (email, name, groups) live in the userinfo response. JWT payload wins on collisions
-            // so verified fields stay authoritative.
-            //
-            // A failure here is named, because an anonymous recurring warning cannot be acted on:
-            // one client whose tokens are always refused looks exactly like every client being
-            // refused occasionally, and those call for opposite responses. The first means that
-            // client silently loses whatever claims live in userinfo — including the one the gate
-            // reads — while the others are fine.
-            // Scope is named too, because it is the likeliest reason a provider refuses a token
-            // here: userinfo is an OIDC endpoint and wants an OIDC token, so a client that asks
-            // only for its own API scopes and omits `openid` gets a token userinfo will not
-            // touch. Reading that off the log beats guessing which of a client's requests differ.
-            const who = () => 'client=' + (payload.azp || payload.client_id || '?')
-                            + ' sub=' + (payload.sub || '?')
-                            + ' scope="' + (typeof payload.scope === 'string' ? payload.scope
-                                            : (Array.isArray(payload.scp) ? payload.scp.join(' ') : '?')) + '"';
-            let claims = payload;
-            try {
-                const r = await httpGet(oidc.userinfo_endpoint, { 'Authorization': 'Bearer ' + token });
-                if (r.status === 200 && r.body && typeof r.body === 'object') {
-                    claims = Object.assign({}, r.body, payload);
-                } else {
-                    warn('MCP userinfo returned ' + r.status + ' for ' + who() +
-                         ' — using JWT claims only');
-                }
-            } catch (e) {
-                warn('MCP userinfo fetch failed for ' + who() + ': ' + e.message +
-                     ' — using JWT claims only');
-            }
+            // Claims come from the verified access token alone. No userinfo round-trip: that
+            // endpoint serves a client asking about its own user (OIDC Core 5.3), not a resource
+            // server asking about a token, and a provider that audience-binds the token to this
+            // server may refuse it there outright — which is what happens here, intermittently
+            // and without explanation. A resource server validates and reads; it does not ask
+            // again.
+            const claims = payload;
             const tokenExpMs = (typeof payload.exp === 'number') ? payload.exp * 1000 : Infinity;
             const cacheExp = Math.min(Date.now() + tokenTTL, tokenExpMs);
             cacheToken(cacheKey, { claims, exp: cacheExp });
@@ -332,27 +290,6 @@ function createMcpAuth(opts) {
     const challenge = extra => 'Bearer ' + (extra ? extra + ', ' : '')
         + `resource_metadata="${mcpServerUrl}/.well-known/oauth-protected-resource"`
         + (advertisedScopes ? `, scope="${advertisedScopes}"` : '');
-
-    async function probeIntrospection(token, payload, oidc, probeFor) {
-        const url = oidc.introspection_endpoint;
-        if (!url) {
-            warn('MCP introspection probe: the provider advertises no introspection_endpoint');
-            return;
-        }
-        const auth = 'Basic ' + Buffer.from(clientId + ':' + clientSecret).toString('base64');
-        const r = await httpPost(url, { Authorization: auth }, { token });
-        if (r.status !== 200 || !r.body || typeof r.body !== 'object') {
-            warn('MCP introspection probe for client=' + probeFor + ': ' + r.status + ' — ' +
-                 String(typeof r.body === 'string' ? r.body : JSON.stringify(r.body)).slice(0, 200));
-            return;
-        }
-        // A false `active` is the ambiguous case, so the whole response goes in the log: it is a
-        // negative answer about someone else's token and carries nothing secret, and whatever
-        // hint the provider offers about *why* is the only thing that can settle it.
-        const detail = r.body.active === true ? '' : ' raw=' + JSON.stringify(r.body).slice(0, 300);
-        log('MCP introspection probe for client=' + probeFor + ': ' +
-            describeIntrospection(payload, r.body) + detail);
-    }
 
     async function requireBearer(req, res) {
         const authHeader = req.headers['authorization'] || '';
@@ -382,5 +319,4 @@ function createMcpAuth(opts) {
     };
 }
 
-module.exports = { createMcpAuth, secretEqual, acceptsAudience, cimdClientId,
-                   describeIntrospection };
+module.exports = { createMcpAuth, secretEqual, acceptsAudience, cimdClientId };
