@@ -245,8 +245,14 @@ function createMcpAuth(opts) {
             // refused occasionally, and those call for opposite responses. The first means that
             // client silently loses whatever claims live in userinfo — including the one the gate
             // reads — while the others are fine.
+            // Scope is named too, because it is the likeliest reason a provider refuses a token
+            // here: userinfo is an OIDC endpoint and wants an OIDC token, so a client that asks
+            // only for its own API scopes and omits `openid` gets a token userinfo will not
+            // touch. Reading that off the log beats guessing which of a client's requests differ.
             const who = () => 'client=' + (payload.azp || payload.client_id || '?')
-                            + ' sub=' + (payload.sub || '?');
+                            + ' sub=' + (payload.sub || '?')
+                            + ' scope="' + (typeof payload.scope === 'string' ? payload.scope
+                                            : (Array.isArray(payload.scp) ? payload.scp.join(' ') : '?')) + '"';
             let claims = payload;
             try {
                 const r = await httpGet(oidc.userinfo_endpoint, { 'Authorization': 'Bearer ' + token });
