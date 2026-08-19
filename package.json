@@ -51,6 +51,7 @@
   "devDependencies": {
     "@atproto/api": "^0.20.34",
     "eslint": "^10.8.1",
+    "globals": "^17.11.0",
     "mocha": "^10.7.3"
   },
   "optionalDependencies": {
