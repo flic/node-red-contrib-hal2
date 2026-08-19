@@ -98,7 +98,10 @@
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-httpPathPrefix" style="width:150px"><i class="fa fa-link"></i> HTTP path prefix</label>
-                    <input type="text" id="node-config-input-httpPathPrefix" placeholder="/prefix (optional)" style="width:calc(100% - 185px)">
+                    <input type="text" id="node-config-input-httpPathPrefix" placeholder="(optional, e.g. /home)" style="width:calc(100% - 185px)">
+                </div>
+                <div class="form-tips" style="margin-left:150px; margin-bottom:8px;" id="hal2eh-prefix-hint">
+                    <small></small>
                 </div>
                 <div class="form-row" style="margin-left:150px;">
                     <input type="checkbox" id="node-config-input-mcpFilterHost" style="width:23px; margin:0">
@@ -705,6 +708,19 @@
                     $('#hal2eh-mcp-details').hide();
                 }
             }
+            // The prefix is prepended to every route, so the MCP endpoint is <prefix>/mcp and
+            // never bare /. The field name alone reads as though an empty value meant the root,
+            // which is the one thing it does not mean — so show the resulting path instead of
+            // explaining it.
+            function updatePrefixHint() {
+                var prefix = ($('#node-config-input-httpPathPrefix').val() || '').replace(/\/$/, '');
+                $('#hal2eh-prefix-hint small').text(
+                    'MCP endpoint: POST ' + prefix + '/mcp   ·   discovery: GET ' +
+                    prefix + '/.well-known/oauth-protected-resource');
+            }
+            $('#node-config-input-httpPathPrefix').on('input', updatePrefixHint);
+            updatePrefixHint();
+
             $('#node-config-input-mcpEnabled').on('change', toggleMcp);
             toggleMcp();
 
