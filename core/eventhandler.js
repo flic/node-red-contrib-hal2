@@ -12,7 +12,8 @@ const {
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
-        advertisedScopes } = require('../lib/claim-gate');
+        advertisedScopes, visibleTools } = require('../lib/claim-gate');
+const toolResult = require('../lib/tool-result');
 const groupAggregate = require('../resources/group-aggregate');
 const groupTools = require('../lib/group-tools');
 
@@ -1066,9 +1067,9 @@ module.exports = function(RED) {
         // ── Shared tool dispatcher (used by the /mcp route and the hal2Api node) ──
         // Returns a uniform shape: { ok:true, text } | { ok:true, content } | { ok:false, code, message }
         // Tool-result shims — pure, shared by every dispatcher below.
-        const toolOk  = function (text)   { return { ok: true, text: text }; };
-        const respond = function (result) { return { ok: true, content: result.content }; };
-        const rpcErr  = function (code, message) { return { ok: false, code: code, message: message }; };
+        // See lib/tool-result.js: hal2Api reads this shape, and a standalone hal2MCPServer
+        // produces the same one, so it is defined in one place rather than three.
+        const { toolOk, respond, rpcErr } = toolResult;
 
         // Built-in tool handlers, grouped by concern. Each returns a tool result when it handles
         // the named tool, or undefined to let the next dispatcher try. node.callTool (below) is a
@@ -1974,6 +1975,15 @@ module.exports = function(RED) {
                     }
                     return undefined;
         }
+
+        // What this endpoint offers, in the shape tools/list uses: the built-in catalogue plus
+        // everything registered in embedded mode. The gate allows everything because the flow
+        // path does — listing less than hal2Api can call would be a lie. Admin tools are left
+        // out: reaching them needs the API node's own checkbox and an admin claim, so listing
+        // them unconditionally would advertise a door most callers cannot open.
+        node.listTools = function () {
+            return MCP_TOOLS.concat(visibleTools(node.mcpRegisteredTools, { allows: () => true }));
+        };
 
         node.callTool = async function (toolName, args, claims, opts) {
             args = args || {};

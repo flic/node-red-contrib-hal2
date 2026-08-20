@@ -4,6 +4,16 @@
         <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
     </div>
     <div class="form-row">
+        <label for="node-input-mcpServer" style="width:95px; padding-right:10px;"><i class="fa fa-server"></i> Endpoint</label>
+        <input type="text" id="node-input-mcpServer" style="width:calc(100% - 125px)" placeholder="(the event handler's own tools)">
+    </div>
+    <div class="form-tips" style="margin-bottom:8px;">
+        Which endpoint this node speaks for. Leave it empty for the event handler: the built-in
+        tools plus anything published to it in <b>embedded</b> mode. Pick a <b>standalone</b> MCP
+        server to reach that server's tools instead &mdash; and only those, exactly as an MCP client
+        on its URL sees. Send <code>{ "list": true }</code> to ask what is behind it.
+    </div>
+    <div class="form-row">
         <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
     </div>
@@ -39,6 +49,25 @@
     <code>{ "ok": true, "result": ... }</code> on success, or
     <code>{ "ok": false, "error": { "code", "message" } }</code> on failure.</p>
 
+    <h3>Which tools</h3>
+    <p>This node speaks for one endpoint, chosen with <strong>Endpoint</strong>. Left empty it is
+    the event handler's: the built-in catalogue plus every tool published to it by an
+    <code>mcp-in</code> whose server runs in <b>embedded</b> mode. Pick a <b>standalone</b> MCP
+    server and you get that server's tools and nothing else &mdash; <code>get_state</code> answers
+    <em>Unknown tool</em> there, exactly as it does for an MCP client on that URL. A flow needing
+    both uses two of these nodes.</p>
+
+    <p>Send <code>{ "list": true }</code> (or <code>msg.list = true</code>) instead of a tool name
+    to get the catalogue behind this node: <code>{ name, description, inputSchema }</code> per tool,
+    the same shape an MCP client receives.</p>
+
+    <p><strong>Tool access does not apply here.</strong> The claim and scope gates run on the MCP
+    route, where the token behind them was verified; a flow node is already inside the trust
+    boundary, since editing flows is full control either way. So a tool restricted to certain
+    callers over MCP is still callable from a flow, and the listing above shows it. Admin tools are
+    the exception: they need <strong>Allow admin tools</strong> <em>and</em> an admin claim on
+    <code>msg.claims</code>.</p>
+
     <h3>Tools</h3>
     <p>The available tools and their arguments mirror the MCP catalog and are documented in
     <a href="https://github.com/flic/node-red-contrib-hal2/blob/main/docs/API.md" target="_blank">docs/API.md</a>
@@ -48,6 +77,7 @@
     <code>activate_scene</code>) are always available. Admin tools require <strong>Allow admin tools</strong>.</p>
 
     <li><strong>Event handler</strong>: the hal2EventHandler whose devices this API serves.</li>
+    <li><strong>Endpoint</strong>: optional standalone MCP server whose tools this node exposes instead. Empty = the event handler's own.</li>
     <li><strong>Property</strong>: message property or context key the response envelope is written to (default <code>msg.payload</code>).</li>
     <li><strong>Allow admin tools</strong>: expose <code>get_flow</code> / <code>deploy_flow</code> through this node.</li>
 </script>
@@ -62,6 +92,7 @@
                 type: "hal2EventHandler",
                 required: true
             },
+            mcpServer:       { value: "", type: "hal2MCPServer", required: false },
             name:            {},
             allowAdminTools: { value: false },
             field:           { value: "payload" },

@@ -1,6 +1,8 @@
 const crypto = require('crypto');
 const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
 const { handleRpc } = require('../lib/mcp-rpc');
+const { visibleTools } = require('../lib/claim-gate');
+const { toolOk, respond, unknownTool } = require('../lib/tool-result');
 
 module.exports = function (RED) {
 
@@ -37,6 +39,12 @@ module.exports = function (RED) {
 
             node.resolveMCPCall = (callId, content) =>
                 eventHandler.resolveMCPCall(callId, content);
+
+            // The flow-side surface hal2Api uses. Delegated like the rest, so pointing an API
+            // node at an embedded server is indistinguishable from pointing it at the Event
+            // handler — which it is, since that is where these tools live.
+            node.callTool  = (name, args, claims, opts) => eventHandler.callTool(name, args, claims, opts);
+            node.listTools = () => eventHandler.listTools();
 
             // Proxy mcp_tool_* events to/from the EventHandler so MCPIn listeners work
             const origOn             = node.on.bind(node);
@@ -90,6 +98,45 @@ module.exports = function (RED) {
             pending.resolve(content);
         };
 
+        // One call in flight, resolved by the matching hal2MCPOut or abandoned on timeout.
+        // A node method rather than a closure inside rpcDeps, because hal2Api dispatches
+        // through the same path and two copies of this would drift.
+        node.dispatchMCPCall = function (name, timeoutMs, args, claims) {
+            return new Promise((resolve, reject) => {
+                const callId = crypto.randomBytes(16).toString('hex');
+                const timer  = setTimeout(() => {
+                    delete node.mcpPendingCalls[callId];
+                    reject(new Error('timeout'));
+                }, timeoutMs);
+                node.mcpPendingCalls[callId] = { resolve, reject, timer };
+                node.emit('mcp_tool_' + name, { args, _mcpCallId: callId, _mcpClaims: claims });
+            });
+        };
+
+        // Same signature as the Event handler's callTool, so hal2Api can hold either without
+        // knowing which. No gate is consulted: `opts.gate` is set by the MCP route alone, where
+        // the claims behind it were verified, and a flow node is already inside the trust
+        // boundary. A standalone server has no built-in tools, so an unknown name is unknown —
+        // it does not fall through to the Event handler.
+        node.callTool = async function (toolName, args, claims) {
+            const entry = node.mcpRegisteredTools[toolName];
+            if (!entry) { return unknownTool(toolName); }
+            try {
+                const content = await node.dispatchMCPCall(
+                    toolName, entry.timeoutMs || 30000, args || {}, claims || null);
+                return respond({ content: content });
+            } catch (e) {
+                node.status({ fill: 'red', shape: 'dot', text: 'timeout' });
+                return toolOk(JSON.stringify({
+                    error: e.message === 'timeout' ? 'Tool timed out: ' + toolName : e.message
+                }));
+            }
+        };
+
+        // What this endpoint offers, in the shape tools/list uses. The gate allows everything
+        // because the flow path does: listing less than hal2Api can call would be a lie.
+        node.listTools = () => visibleTools(node.mcpRegisteredTools, { allows: () => true });
+
         const mcpPath     = '/mcp/' + (config.path || 'server').replace(/^\/+/, '');
         const serverName  = config.name || ('hal2-mcp-' + config.path);
         const instructions = config.instructions || '';
@@ -124,15 +171,8 @@ module.exports = function (RED) {
             adminTools: { TOOLS: [], TOOL_NAMES: new Set(), callTool: async () => '' },
             tools: node.mcpRegisteredTools,
             // Hands the call to the flow and waits for the matching hal2MCPOut, or times out.
-            callTool: (name, timeoutMs, args, claims) => new Promise((resolve, reject) => {
-                const callId = crypto.randomBytes(16).toString('hex');
-                const timer  = setTimeout(() => {
-                    delete node.mcpPendingCalls[callId];
-                    reject(new Error('timeout'));
-                }, timeoutMs);
-                node.mcpPendingCalls[callId] = { resolve, reject, timer };
-                node.emit('mcp_tool_' + name, { args, _mcpCallId: callId, _mcpClaims: claims });
-            }),
+            callTool: (name, timeoutMs, args, claims) =>
+                node.dispatchMCPCall(name, timeoutMs, args, claims),
             status: s => node.status(s)
         };
 
