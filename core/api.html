@@ -4,12 +4,12 @@
         <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
     </div>
     <div class="form-row">
-        <label for="node-input-mcpServer" style="width:95px; padding-right:10px;"><i class="fa fa-server"></i> Endpoint</label>
-        <input type="text" id="node-input-mcpServer" style="width:calc(100% - 125px)" placeholder="(the event handler's own tools)">
+        <label for="node-input-mcpServer" style="width:95px; padding-right:10px;"><i class="fa fa-server"></i> Standalone</label>
+        <input type="text" id="node-input-mcpServer" style="width:calc(100% - 125px)">
     </div>
     <div class="form-tips" style="margin-bottom:8px;">
-        Which endpoint this node speaks for. Leave it empty for the event handler: the built-in
-        tools plus anything published to it in <b>embedded</b> mode. Pick a <b>standalone</b> MCP
+        Which endpoint this node speaks for. <b>none</b> is the event handler's own endpoint: the
+        built-in tools plus anything published to it in <i>embedded</i> mode. Pick a standalone MCP
         server to reach that server's tools instead &mdash; and only those, exactly as an MCP client
         on its URL sees. Send <code>{ "list": true }</code> to ask what is behind it.
     </div>
@@ -50,8 +50,8 @@
     <code>{ "ok": false, "error": { "code", "message" } }</code> on failure.</p>
 
     <h3>Which tools</h3>
-    <p>This node speaks for one endpoint, chosen with <strong>Endpoint</strong>. Left empty it is
-    the event handler's: the built-in catalogue plus every tool published to it by an
+    <p>This node speaks for one endpoint, chosen with <strong>Standalone</strong>. Set to
+    <code>none</code> it is the event handler's: the built-in catalogue plus every tool published to it by an
     <code>mcp-in</code> whose server runs in <b>embedded</b> mode. Pick a <b>standalone</b> MCP
     server and you get that server's tools and nothing else &mdash; <code>get_state</code> answers
     <em>Unknown tool</em> there, exactly as it does for an MCP client on that URL. A flow needing
@@ -77,7 +77,7 @@
     <code>activate_scene</code>) are always available. Admin tools require <strong>Allow admin tools</strong>.</p>
 
     <li><strong>Event handler</strong>: the hal2EventHandler whose devices this API serves.</li>
-    <li><strong>Endpoint</strong>: optional standalone MCP server whose tools this node exposes instead. Empty = the event handler's own.</li>
+    <li><strong>Standalone</strong>: an MCP server node whose tools this node exposes instead. <code>none</code> = the event handler's own endpoint.</li>
     <li><strong>Property</strong>: message property or context key the response envelope is written to (default <code>msg.payload</code>).</li>
     <li><strong>Allow admin tools</strong>: expose <code>get_flow</code> / <code>deploy_flow</code> through this node.</li>
 </script>
