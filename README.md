@@ -119,15 +119,22 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 
 ### MCP server
 
-> **Breaking change in 2.17.7 — public client (PKCE) only.** Client secrets and the
-> node-side redirect URI allowlist are gone: the open client-registration endpoint handed
-> any configured secret to every caller, and redirect URIs are validated by the identity
-> provider at `/authorize` anyway. **Migration:** switch the IdP client to **public with
-> PKCE** (a still-confidential client fails token exchange with `invalid_client`), make
-> sure the MCP client callback URLs are whitelisted at the IdP, and if the node warns
-> about a stored secret, open the Event handler's config, click **Done**, and deploy to
-> delete it. MCP clients connected before the upgrade may have cached the old
-> registration — remove and re-add the server in the client if sign-in misbehaves.
+> **Breaking change in 3.0.0 — the server reads the token, and nothing else.** hal2 no
+> longer takes part in OAuth at all: the dynamic client registration shim, the
+> authorization-server metadata routes and the `Client ID`/`Client secret` fields are gone,
+> along with the `/userinfo` call that used to fetch group membership on every request.
+> What remains is verifying the access token and reading its claims.
+>
+> **Migration.** Register each MCP client at your identity provider — or point it at a
+> Client ID Metadata Document, if the provider resolves those — instead of letting it
+> self-register here; a client that self-registered before the upgrade should be removed
+> and re-added. Then make sure the claim the access gates match on (`Access claim`, default
+> `groups`) is in the **access token** and not only in the ID token or userinfo. If your
+> provider cannot put it there — [PocketID currently
+> cannot](https://github.com/pocket-id/pocket-id/issues/1389) — leave *Read tools* and
+> *Write tools* empty and gate on [required scopes](#the-client-axis-required-scopes) plus
+> the provider's own per-client user restrictions instead. A gate whose claim never appears
+> refuses everyone, and says so in the log once per client.
 
 The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental.
 
@@ -219,9 +226,10 @@ labels:
 
 **What hal2 expects of the identity provider:**
 
-- An **OIDC provider with discovery** — hal2 reads `‹issuer›/.well-known/openid-configuration` and uses the advertised `authorization_endpoint`, `token_endpoint`, `userinfo_endpoint` and `jwks_uri`. If discovery is unavailable it falls back to PocketID's path layout, so no extra config is needed for either.
+- An **OIDC provider with discovery** — hal2 reads `‹issuer›/.well-known/openid-configuration`, and needs exactly two things from it: `jwks_uri`, to verify signatures, and `issuer`, to pin them. (It also notes `client_id_metadata_document_supported`, to decide whether a metadata-document URL may appear as a token's audience.) The authorization and token endpoints are the client's business, not hal2's. If discovery is unavailable it falls back to PocketID's path layout, so no extra config is needed for either.
 - It must issue **JWT access tokens** signed with a key published on its **JWKS** (hal2 verifies tokens locally). Providers that issue *opaque* access tokens are not supported (no introspection path yet).
-- A **public client** with **PKCE (S256)**, grant types `authorization_code` + `refresh_token`, and the MCP client's **redirect URI(s)** whitelisted (for Claude.ai: `https://claude.ai/api/mcp/auth_callback`). Redirect URIs are configured and validated at the identity provider only — the node no longer keeps its own allowlist, so IdP wildcard support (e.g. PocketID's) works as-is. Client secrets are no longer supported: the open client-registration endpoint handed any configured secret to every caller, so it could never actually be secret. If a secret is still stored from an earlier version it is ignored with a warning — switch the IdP client to public, then open the event handler's config, click Done, and deploy to delete the stored secret and clear the warning.
+- A **public client** with **PKCE (S256)**, grant types `authorization_code` + `refresh_token`, and the MCP client's **redirect URI(s)** whitelisted (for Claude.ai: `https://claude.ai/api/mcp/auth_callback`) — or CIMD support, which supplies all of that from the client's own metadata document. Clients, redirect URIs and secrets are entirely the provider's business; hal2 has no fields for any of them and never sees a redirect.
+- The **access claim in the access token**, if you use the claim gate — the token is all hal2 reads. See [RFC 9068 §2.2.3.1](https://www.rfc-editor.org/rfc/rfc9068.html).
 
 > Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** and **Hermes** (MCP clients). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
 
@@ -241,7 +249,13 @@ The **hal2Api** node turns the same tool catalog into a simple JSON request/resp
 { "ok": true, "result": { "thing_id": "…", "items": [ … ] } }
 ```
 
-The full list of tools is auto-generated in **[docs/API.md](docs/API.md)** (`npm run docs:api`). Admin tools (`get_flow`, `deploy_flow`) are only exposed when *Allow admin tools* is enabled on the node. See `examples/json-api.json` for a ready-made HTTP endpoint flow.
+**Which endpoint it speaks for** is set by the *Standalone* field. Left empty, the node serves the Event handler's own embedded catalog — the built-in tools plus any `hal2MCPIn` tools registered against it. Point it at a `hal2MCPServer` node instead and it serves that server's tools and nothing else, exactly as an MCP client connecting to that server's URL would see.
+
+Send `{ "list": true }` instead of a tool name to get the catalogue of whichever endpoint the node speaks for — `{ name, description, inputSchema }` per tool, the shape `tools/list` returns. For the built-in tools **[docs/API.md](docs/API.md)** (auto-generated, `npm run docs:api`) is the fuller reference; for your own `hal2MCPIn` tools the listing is usually the only index there is.
+
+**Access control does not apply on this path.** The claim and scope gates run on the MCP server's HTTP route, where the token behind them was verified. A flow node is already inside the trust boundary — whoever can edit flows can edit the tool — so a tool restricted to certain callers over MCP is still callable here, and the listing shows it. Don't use hal2Api to re-expose a gated tool to an outside caller; that gate is yours to reproduce. Admin tools (`get_flow`, `deploy_flow`) are the exception and keep the route's rule: enabled on the server, *Allow admin tools* enabled on this node, **and** an admin claim on `msg.claims`.
+
+See `examples/json-api.json` for a ready-made HTTP endpoint flow.
 
 ## History & pattern analysis
 

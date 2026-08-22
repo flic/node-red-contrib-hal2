@@ -43,9 +43,9 @@ function audienceValues(payload) {
 }
 
 // The CIMD client id a token was issued to, or '' if it was not a CIMD client. Separate from
-// acceptsAudience because the answer is worth logging, not only deciding on: a DCR fallback
-// announces itself by hitting /oauth/register, and without this its opposite — a client that
-// has moved to CIMD — would be the one case that leaves no trace anywhere.
+// acceptsAudience because the answer is worth logging, not only deciding on: with registration
+// gone this server sees nothing of how a client got its id, so a token's audience is the only
+// place a CIMD client leaves a trace at all.
 //
 // The resource identifier and a configured audience are excluded, because either can be an
 // https URL with a path and so is CIMD-shaped too. An IdP that honours RFC 8707 binds the
@@ -134,12 +134,14 @@ function createMcpAuth(opts) {
     // OIDC discovery with PocketID-style fallback paths. Discover the IdP's real endpoints
     // from /.well-known/openid-configuration so any spec-compliant OIDC provider works; fall
     // back to the PocketID path layout when discovery is unavailable.
+    // Only what this server actually consumes: jwks_uri to verify signatures with, issuer to
+    // pin them to. The authorization and token endpoints used to be here too, from when hal2
+    // proxied an authorization-server document; the client discovers those from the provider
+    // itself now, and listing them here only suggested hal2 had a use for them.
     function fallbackEndpoints() {
         return {
-            issuer                 : issuerUrl,
-            authorization_endpoint : issuerUrl + '/authorize',
-            token_endpoint         : issuerUrl + '/api/oidc/token',
-            jwks_uri               : issuerUrl + '/.well-known/jwks.json'
+            issuer   : issuerUrl,
+            jwks_uri : issuerUrl + '/.well-known/jwks.json'
         };
     }
 
@@ -160,13 +162,13 @@ function createMcpAuth(opts) {
                     const r = await httpGet(issuerUrl + '/.well-known/openid-configuration', {});
                     if (r.status === 200 && r.body && typeof r.body === 'object' && r.body.jwks_uri) {
                         oidcConfig = Object.assign(fb, r.body);   // discovered values win, per-field fallback
-                        // Say which registration mechanisms are live. Without it, a client
-                        // that cannot authenticate leaves no way to tell "the IdP has CIMD
-                        // switched off" apart from "the client isn't using it".
+                        // Say whether CIMD is live at the IdP. Without it, a client that
+                        // cannot authenticate leaves no way to tell "the IdP has CIMD switched
+                        // off" apart from "the client isn't using it".
                         log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer +
                             ', CIMD=' + (oidcConfig.client_id_metadata_document_supported === true
                                 ? 'advertised by the IdP — CIMD client ids accepted as audience'
-                                : 'not advertised by the IdP — DCR only'));
+                                : 'not advertised by the IdP — clients need an id registered there'));
                         return oidcConfig;
                     }
                     warn('MCP OIDC discovery returned ' + r.status + ' — using fallback endpoint paths');
@@ -244,8 +246,8 @@ function createMcpAuth(opts) {
                      ' is not this server');
                 return null;
             }
-            // The counterpart to the DCR fallback line: say which clients have moved to CIMD,
-            // so the two logs together account for every client that reaches this server.
+            // Name each CIMD client once, so which clients reach this server — and how they
+            // were identified — is readable from the log rather than inferred.
             if (oidc.client_id_metadata_document_supported === true) {
                 const cimd = cimdClientId(payload, { expected: tokenAudience, resourceUrl });
                 if (cimd && !seenCimdClients.has(cimd) && seenCimdClients.size < CIMD_LOG_MAX) {
