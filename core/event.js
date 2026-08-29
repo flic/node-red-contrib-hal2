@@ -118,9 +118,20 @@ module.exports = function(RED) {
                 if (s.text) { s.text += ' rate limited' } else { s.text = 'rate limited' }
             }
 
-            if (Object.keys(eventDelay).length >0) {
+            // Two independent facts share this line: what the node currently says, and that a
+            // change to it is waiting out its delay. A bare " delayed" appended to the first ran
+            // them together — "true delayed" reads as a delayed *true*, when it means "says true,
+            // and a false is on its way". Name the value the timer will announce instead;
+            // delayPending holds exactly that, per thing.
+            if (Object.keys(eventDelay).length > 0) {
                 s.fill = 'yellow';
-                if (s.text) { s.text += ' delayed' } else { s.text = 'delayed' }
+                // Edge mode queues no target, and several things can be waiting different ways —
+                // neither can name a single value, so say only that something is coming.
+                const targets = new Set(Object.values(delayPending).filter(v => v !== undefined));
+                const pending = targets.size === 1
+                    ? String([...targets][0]) + ' pending'
+                    : 'change pending';
+                s.text = s.text ? s.text + ', ' + pending : pending;
             }
             node.status(s);
         }
