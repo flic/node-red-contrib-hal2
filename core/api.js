@@ -54,7 +54,7 @@ module.exports = function(RED) {
             // that emitted a string rather than an object).
             let payload = msg.payload;
             if (typeof payload === 'string' && payload.trim().startsWith('{')) {
-                try { payload = JSON.parse(payload); } catch (e) { /* handled below */ }
+                try { payload = JSON.parse(payload); } catch { /* handled below */ }
             }
             if (!payload || typeof payload !== 'object') payload = {};
             const tool = msg.tool || payload.tool;
@@ -96,7 +96,7 @@ module.exports = function(RED) {
                 } else {
                     // Tool results are JSON strings; fall back to raw text (e.g. get_flow markdown).
                     try { result = JSON.parse(out.text); }
-                    catch (e) { result = out.text; }
+                    catch { result = out.text; }
                 }
 
                 node.status({ fill: 'green', shape: 'dot', text: 'ready' });

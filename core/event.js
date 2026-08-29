@@ -98,7 +98,6 @@ module.exports = function(RED) {
 
         function showState() {
             var now = Date.now();
-            var status = '';
             var s = {
                 fill: 'gray'
             };

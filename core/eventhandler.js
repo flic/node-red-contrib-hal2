@@ -743,7 +743,7 @@ module.exports = function(RED) {
             if (config.mcpFilterHost) {
                 try {
                     expectedHost = new URL(mcpServerUrl).host;
-                } catch (e) {
+                } catch {
                     node.warn('MCP hostname filtering enabled but MCP server URL "' + mcpServerUrl +
                               '" is not a valid URL — filtering disabled, matching on path only');
                 }
@@ -767,11 +767,6 @@ module.exports = function(RED) {
             // endpoints are auto-discovered (see getOidcConfig below).
             const issuerUrl     = (config.pocketidUrl || '').replace(/\/$/, '');
             const mcpServerName = config.mcpServerName || 'hal2-mcp';
-            // Used when a registering client doesn't request any redirect_uris of its own — the
-            // DCR response must still carry the field for the authorization-code grant. The IdP
-            // validates the actual redirect URI at /authorize, so no allowlist is kept here.
-            const defaultRedirectUris = ['https://claude.ai/api/mcp/auth_callback'];
-
             node.log('MCP init: serverUrl=' + mcpServerUrl + ', issuer=' + issuerUrl);
             const tokenTTL      = Number(config.tokenCacheTTL || 300) * 1000;
             // Audience enforcement. Empty means the resource identifier is required instead —

@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert');
-const { createBayes, logit, sigmoid } = require('../lib/bayes');
+const { createBayes, logit } = require('../lib/bayes');
 const scale = require('../resources/bayes-scale');
 
 const MIN = 60e3;

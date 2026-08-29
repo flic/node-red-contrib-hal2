@@ -47,7 +47,7 @@ module.exports = function(RED) {
             }
             var t;
             try { t = RED.nodes.getNode(spec.thing); }
-            catch (error) { return null; }
+            catch { return null; }
             if (!t || !t.state || !t.state.hasOwnProperty(spec.item)) { return null; }
             return { state: t.state[spec.item], laststate: t.laststate[spec.item],
                      last_update: t.heartbeat[spec.item], last_change: t.last_change[spec.item] };

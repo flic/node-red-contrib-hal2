@@ -42,7 +42,12 @@ module.exports = [
         },
         rules: {
             'no-undef': 'error',
-            'no-unused-vars': ['warn', { args: 'none' }]
+            // hal*-funktionerna är editorns globala API: definierade här, anropade från
+            // <script>-blocken i core/*.html och från ThingType-mallar, som eslint aldrig
+            // ser. Utan undantaget varnar var och en av dem för att vara oanvänd, och den
+            // bruskällan dränker de warnings som betyder något. Priset är att en verkligt
+            // död hal*-hjälpare inte längre syns — sök på namnet innan du litar på tystnaden.
+            'no-unused-vars': ['warn', { args: 'none', varsIgnorePattern: '^hal' }]
         }
     },
     {

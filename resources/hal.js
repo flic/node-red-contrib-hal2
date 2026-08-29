@@ -119,7 +119,7 @@ function halSourceTip(sel, itemSel, fnSel, groups) {
     var out = [];
     if (thing.notes) { out.push(thing.notes); }
     var tt = null;
-    try { tt = RED.nodes.node(thing.thingType); } catch (e) {}
+    try { tt = RED.nodes.node(thing.thingType); } catch {}
     if (tt && Array.isArray(tt.items)) {
         var itemId = itemSel.val();
         tt.items.forEach(function (it) { if (it.id === itemId && it.notes) { out.push(it.notes); } });
@@ -176,7 +176,7 @@ function halFillStatusItems(sel, thingId, keep) {
     sel.children().remove();
     var thing = thingId ? RED.nodes.node(thingId) : null;
     var tt = null;
-    try { tt = thing ? RED.nodes.node(thing.thingType) : null; } catch (e) {}
+    try { tt = thing ? RED.nodes.node(thing.thingType) : null; } catch {}
     if (tt && Array.isArray(tt.items)) {
         tt.items.forEach(function (it) {
             if (halStatusItem(it)) { sel.append($("<option></option>").val(it.id).text(it.name)); }
@@ -286,7 +286,7 @@ function halGetGroups(RED, eventHandlerId, filter) {
             var thing = RED.nodes.node(things[t].id);
             if (!thing || !Array.isArray(thing.groups)) { continue; }
             var tt = null;
-            try { tt = RED.nodes.node(thing.thingType); } catch (err) {}
+            try { tt = RED.nodes.node(thing.thingType); } catch {}
             if (!tt || !Array.isArray(tt.items)) { continue; }
             for (var g in thing.groups) {
                 var m = thing.groups[g];

@@ -26,7 +26,7 @@ function secretEqual(a, b) {
 function isCimdClientId(value) {
     if (typeof value !== 'string') { return false; }
     let u;
-    try { u = new URL(value); } catch (e) { return false; }
+    try { u = new URL(value); } catch { return false; }
     return u.protocol === 'https:' && u.hash === '' && u.username === '' && u.password === ''
         && u.pathname !== '' && u.pathname !== '/';
 }

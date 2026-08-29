@@ -125,7 +125,6 @@ module.exports = function(RED) {
         }
 
         function statusUpdate(msg) {
-            var eventmsg;
             var result;
             var _ingressFn;
             var msgClone;
@@ -395,7 +394,7 @@ module.exports = function(RED) {
                 if (s === '') { obj = null; }
                 else {
                     try { obj = JSON.parse(s); }
-                    catch (e) { node.warn("hal2 metadata: '_meta' string payload is not valid JSON"); return; }
+                    catch { node.warn("hal2 metadata: '_meta' string payload is not valid JSON"); return; }
                 }
             }
 
