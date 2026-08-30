@@ -111,7 +111,3 @@ lib/node_modules
 
 .DS_Store
 .gitignore
-
-# Not part of this project — an unrelated API spec that happens to sit in the working
-# directory. Listed here so a `git add -A` cannot sweep it into the repo again (it did once).
-spectrum-openapi.json
