@@ -1,7 +1,11 @@
 # node-red-contrib-hal2 [![npm version](https://badge.fury.io/js/node-red-contrib-hal2.svg)](https://badge.fury.io/js/node-red-contrib-hal2)
-A set of nodes to help with basic home automation logic.
+A set of nodes to help with basic home automation logic, with an optional MCP server so an AI
+assistant can read device state and control the house.
 
-**Note:** Even more new examples added
+> **Upgrading from 2.x?** 3.0.0 changed how the MCP server authenticates: it no longer takes part
+> in OAuth at all, and an access gate now reads the access token and nothing else. If you run the
+> MCP server, read [the breaking-change note](#mcp-server) before deploying — the gates go quiet
+> and refuse everyone if the claim they match on is missing from the token.
 
 ## Install
 ```bash

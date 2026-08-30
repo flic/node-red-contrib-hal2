@@ -1,7 +1,17 @@
 {
   "name": "node-red-contrib-hal2",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "A set of nodes to help with basic home automation logic, now with MCP server support",
+  "files": [
+    "core/",
+    "lib/",
+    "resources/",
+    "examples/",
+    "docs/",
+    "tools/",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/flic/node-red-contrib-hal2.git"
