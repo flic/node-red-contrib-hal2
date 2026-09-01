@@ -354,22 +354,28 @@ function itemMatchesHaTypeFilter(item, wanted) {
         || wanted.has(String((item && item.device_class) || '').toLowerCase());
 }
 
-// Which of a Thing's items set_light may write to.
-//
-// A Thing that has classified any of its items has said which ones are lights, and the write
-// must not go past that: a dual relay otherwise takes the command on every switch it owns, so
-// turning the ceiling lamp off cuts the socket beside it too. An item with no declaration on a
-// Thing that has some rides along only when its own ha_type already places it in a light —
-// dimmer, colour, colour temperature — never a bare switch, which is the ambiguous case this
-// whole feature exists for. A Thing with nothing declared behaves exactly as it always has.
-function lightTargets(thingItems, candidates) {
-    const classified = (thingItems || []).some(i => i && i.device_class);
+// Which of a Thing's items set_light may touch at all: anything not declared to be something
+// other than a light. A socket declared `appliance` is never a target, however it is reached —
+// that is what stops a set_light aimed at a dual relay cutting the socket beside the lamp.
+// Which of the survivors actually take an on/off command is writesOnOff's question.
+function lightTargets(candidates) {
     return (candidates || []).filter(i => {
         const explicit = String((i && i.device_class) || '').toLowerCase();
-        if (explicit) { return explicit === 'light'; }
-        if (!classified) { return true; }
-        return String((i && i.ha_type) || '').toLowerCase() !== 'switch';
+        return !explicit || explicit === 'light';
     });
+}
+
+// Whether set_light may switch this item on or off.
+//
+// An ha_type of `light` says so on its own. A `switch` says only that something can be turned
+// on and off — the load could be a lamp or a coffee machine, which is the question device_class
+// exists to settle, so an undeclared one is not written. Before device_class there was no way to
+// tell them apart and every switch was treated as a light; that guess is what this replaces.
+// A dimmer is left to the brightness branch, as before.
+function writesOnOff(item) {
+    const ht = String((item && item.ha_type) || '').toLowerCase();
+    if (ht !== 'light' && ht !== 'switch') { return false; }
+    return effectiveDeviceClass(item) === 'light';
 }
 
 function deriveCategories(items) {
@@ -453,5 +459,6 @@ module.exports = {
     expandHaTypeFilter,
     itemMatchesHaTypeFilter,
     lightTargets,
+    writesOnOff,
     deriveCategories
 };

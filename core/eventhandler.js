@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -1321,6 +1321,34 @@ module.exports = function(RED) {
                             results.push({ thing_name: device.thing_name, commands: sent });
                         }
 
+                        // Matching a Thing and writing nothing to it is not a success. The caller
+                        // asked for a light to change and none did, and answering ok leaves them
+                        // believing it happened — the tool has always done this for e.g. a
+                        // brightness aimed at something undimmable. Say what the items actually
+                        // are instead, since that is what makes the answer actionable.
+                        if (!results.some(r => r.commands.length)) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify({
+                                error   : 'nothing_to_command',
+                                message : 'No item on the matched thing(s) takes this command. An '
+                                        + 'on/off command needs an item that is a light: ha_type '
+                                        + '"light", or "switch" with device_class "light" — a switch '
+                                        + 'with no device_class could be driving anything and is not '
+                                        + 'written. Set the device class on the Thing, or use '
+                                        + 'control_device to command the item directly.',
+                                things  : matched.map(({ device }) => ({
+                                    thing_id   : device.thing_id,
+                                    thing_name : device.thing_name,
+                                    items      : (device.items || []).map(i => ({
+                                        item_id      : i.item_id,
+                                        item_name    : i.item_name,
+                                        ha_type      : i.ha_type,
+                                        device_class : i.device_class || null
+                                    }))
+                                }))
+                            }));
+                        }
+
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ success: true, results }));
                     }
@@ -1645,11 +1673,11 @@ module.exports = function(RED) {
 
                         const results = [];
                         for (const { device, items } of matched) {
-                            const targets = lightTargets(device.items, items);
+                            const targets = lightTargets(items);
                             const sent = [];
                             for (const itm of targets) {
                                 const ht = (itm.ha_type || '').toLowerCase();
-                                if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
+                                if (writesOnOff(itm) && args.on !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.on);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.on });
                                 }

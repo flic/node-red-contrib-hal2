@@ -137,7 +137,12 @@ describe('device_class — what an item drives', function () {
         });
     });
 
-    describe('what set_light may write to', function () {
+    describe('what set_light switches on and off', function () {
+        const { writesOnOff } = require('../core/mcp-tools');
+        // What the tool actually does: drop anything declared to be something else, then
+        // command whatever is left that counts as a light.
+        const onOffTargets = items => lightTargets(items).filter(writesOnOff).map(i => i.item_id);
+
         // The dual relay this feature was reported against: On1 drives a socket, On2 the
         // ceiling lamp, and both are plain switches on the same Thing.
         const relay = [
@@ -145,35 +150,44 @@ describe('device_class — what an item drives', function () {
             { item_id: 'on2', ha_type: 'switch', device_class: 'light' }
         ];
 
-        it('writes the lamp and leaves the socket alone', function () {
-            const out = lightTargets(relay, relay);
-            assert.deepStrictEqual(out.map(i => i.item_id), ['on2'],
+        it('switches the declared lamp and leaves the socket alone', function () {
+            assert.deepStrictEqual(onOffTargets(relay), ['on2'],
                 'turning the light off must not cut the socket');
         });
 
-        it('never writes an item declared as something else', function () {
-            const items = [{ item_id: 'relay', ha_type: 'switch', device_class: 'appliance' }];
-            assert.deepStrictEqual(lightTargets(items, items), []);
+        it('will not switch an undeclared switch — it could be driving anything', function () {
+            // A plug on the coffee machine, named directly. Before device_class there was no way
+            // to tell it from a lamp, and set_light wrote to it.
+            assert.deepStrictEqual(onOffTargets([{ item_id: 'plug', ha_type: 'switch' }]), []);
         });
 
-        it('keeps colour and brightness on a Thing that has declarations', function () {
+        it('will not switch one declared as something else', function () {
+            assert.deepStrictEqual(
+                onOffTargets([{ item_id: 'plug', ha_type: 'switch', device_class: 'appliance' }]), []);
+        });
+
+        it('still switches an ha_type light with nothing declared', function () {
+            assert.deepStrictEqual(onOffTargets([{ item_id: 'on', ha_type: 'light' }]), ['on'],
+                'a light needs nobody to say it is one');
+        });
+
+        it('leaves brightness and colour to their own branches', function () {
             const bulb = [
-                { item_id: 'on', ha_type: 'switch', device_class: 'light' },
+                { item_id: 'on', ha_type: 'light' },
                 { item_id: 'bri', ha_type: 'dimmer' },
                 { item_id: 'ct', ha_type: 'color temperature' }
             ];
-            assert.deepStrictEqual(lightTargets(bulb, bulb).map(i => i.item_id),
-                ['on', 'bri', 'ct'], 'an undeclared dimmer/CT item must not be dropped');
+            assert.deepStrictEqual(onOffTargets(bulb), ['on']);
+            // …but they stay available for the brightness and colour commands.
+            assert.deepStrictEqual(lightTargets(bulb).map(i => i.item_id), ['on', 'bri', 'ct']);
         });
 
-        it('leaves a Thing with nothing declared exactly as it was', function () {
-            const items = [
-                { item_id: 'a', ha_type: 'switch' },
-                { item_id: 'b', ha_type: 'light' },
-                { item_id: 'c', ha_type: 'dimmer' }
+        it('keeps an undeclared dimmer reachable on a Thing that has declarations', function () {
+            const bulb = [
+                { item_id: 'on', ha_type: 'switch', device_class: 'light' },
+                { item_id: 'bri', ha_type: 'dimmer' }
             ];
-            assert.deepStrictEqual(lightTargets(items, items), items,
-                'the untouched path must not change');
+            assert.deepStrictEqual(lightTargets(bulb).map(i => i.item_id), ['on', 'bri']);
         });
     });
 });

@@ -276,10 +276,12 @@ any typed group, and a dimmer can no longer join an On/Off group. Both existed o
 was no way to say what an item was for. An existing membership that no longer fits is kept and
 marked in the row rather than dropped, so tightening the rule cannot delete data quietly.
 
-> **It also stops `set_light` writing past the answer.** On a Thing with any class declared,
-> `set_light` writes only to its lights. Without that, a dual relay takes the command on every
-> switch it owns — turning the ceiling lamp off and cutting the socket beside it. A Thing with
-> nothing declared behaves exactly as before.
+> **`set_light` only switches what is a light.** An `ha_type` of `light` says so on its own; a
+> `switch` needs `device_class: light`, because a switch says only that something can be turned on
+> and off and the load could be a coffee machine. An undeclared switch is therefore not written —
+> before device_class every switch was treated as a light, since there was no way to tell them
+> apart. And a Thing that matched but took no command now answers `nothing_to_command`, listing
+> what its items are, rather than reporting success and changing nothing.
 
 ### Custom MCP tools (hal2MCPIn / hal2MCPOut)
 
