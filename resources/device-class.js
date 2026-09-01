@@ -28,10 +28,30 @@
         scene   : ['scene']
     };
 
-    // The categories above, because every consumer already understands them, plus 'appliance'
-    // for "explicitly none of these" — a plug on the coffee machine says so rather than staying
-    // silent, which is the difference between "not classified yet" and "classified, not a light".
-    var DEVICE_CLASSES = Object.keys(HA_TYPE_GROUPS).concat(['appliance']);
+    // What a switch may be declared to drive. Deliberately NOT every category: a class is only
+    // worth offering where something can act on it once declared.
+    //
+    //   light      — set_light switches it, and it answers a query for lights.
+    //   fan        — it reads as a fan and stays out of the lights. control_fan cannot set a
+    //                speed on a relay, so it is turned on and off with control_device.
+    //   appliance  — explicitly none of the above. A plug on the coffee machine says so rather
+    //                than staying silent, which is the difference between "not classified yet"
+    //                and "classified, and not a light".
+    //
+    // climate, spa, cover and scene are left out on purpose. Their tools dispatch on the setpoint,
+    // mode, position and scene ha_types, none of which a switch has, so declaring one would
+    // advertise a capability nothing could honour — a radiator on a relay is an appliance, and
+    // control_device is what commands it. 'outlet' is left out for the opposite reason: nothing
+    // would behave differently from 'appliance', and two values with one behaviour only split the
+    // data arbitrarily.
+    var DEVICE_CLASSES = ['light', 'fan', 'appliance'];
+
+    // Whether an item's ha_type leaves the question open, and so whether it is worth asking.
+    // A `light`, `dimmer`, `cover` or `fan` item says what it is; a `switch` says only that
+    // something can be turned on and off, and the load decides the rest.
+    function needsDeviceClass(haType) {
+        return String(haType || '').toLowerCase() === 'switch';
+    }
 
     // The class an ha_type implies on its own. A `light` or `dimmer` drives a light and needs
     // nobody to say so; a `switch` could be driving anything, which is the whole reason
@@ -70,6 +90,7 @@
         DEVICE_CLASSES: DEVICE_CLASSES,
         deviceClassFromHaType: deviceClassFromHaType,
         effectiveDeviceClass: effectiveDeviceClass,
-        countsAs: countsAs
+        countsAs: countsAs,
+        needsDeviceClass: needsDeviceClass
     };
 }));

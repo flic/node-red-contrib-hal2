@@ -208,6 +208,41 @@ describe('core/thing.html — the Items section', function () {
             [{ item: 'on2', kind: 'device_class', value: 'light' }]);
     });
 
+    describe('the device class control', function () {
+        // It is only worth asking where the ha_type leaves the question open — a switch. Offering
+        // it on every row made the exceptional case look like the norm.
+        it('appears on a switch', function () {
+            const node = { groups: [], itemFacts: [] };
+            const { container } = run({ items: ITEMS, groups: GROUPS, node });
+            const blocks = [];
+            collect(container.el, '.thing-fact-item').each((i, api) => blocks.push(api));
+            const onSwitch = blocks[0].find('.thing-fact-class');   // on1, ha_type switch
+            assert.strictEqual(onSwitch.length, 1);
+        });
+
+        it('is absent on an item whose ha_type already answers it', function () {
+            const node = { groups: [], itemFacts: [] };
+            const { container } = run({ items: ITEMS, groups: GROUPS, node });
+            const blocks = [];
+            collect(container.el, '.thing-fact-item').each((i, api) => blocks.push(api));
+            // ITEMS[3] is 'bri' (dimmer); blocks skip the Alive item, so index 2.
+            assert.strictEqual(blocks[2].find('.thing-fact-class').length, 0);
+        });
+
+        it('still appears where one is stored anyway, so it is not dropped in silence', function () {
+            const node = {
+                groups: [],
+                // A dimmer carrying a declaration — possible from the wider vocabulary this
+                // replaced. Hiding the control would delete it on the next Done.
+                itemFacts: [{ item: 'bri', kind: 'device_class', value: 'light' }]
+            };
+            const { def } = run({ items: ITEMS, groups: GROUPS, node });
+            def.oneditsave.call(node);
+            assert.deepStrictEqual(plain(node.itemFacts),
+                [{ item: 'bri', kind: 'device_class', value: 'light' }]);
+        });
+    });
+
     describe('a membership whose group no longer fits', function () {
         // The rule is about to be tightened, which is exactly what turns a stored pairing
         // incompatible. The row must keep it rather than delete it on the next Done.

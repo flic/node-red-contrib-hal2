@@ -246,10 +246,18 @@ same Thing type with the same `switch` item, so the type cannot answer the quest
 Thing can.
 
 **Device class** is where the Thing answers it, per item, under *Items* in the Thing config —
-which lists **every** item of the type, always, each carrying its own class and its group
-memberships collapsed beneath it. Nothing has to be added before the list tells you something:
-the question it answers is "what does this item present as", and a list you must add a row to
-first cannot answer it. One control per item, so an item cannot be declared twice.
+which lists **every** item of the type, always, with its group memberships collapsed beneath it.
+Nothing has to be added before the list tells you something: the question it answers is "what does
+this item present as", and a list you must add a row to first cannot answer it. One control per
+item, so an item cannot be declared twice.
+
+The control appears only on a **`switch`** item, because that is the only ha_type that leaves the
+question open — a `light`, `dimmer`, `cover` or `fan` item already says what it is. The vocabulary
+is deliberately short: `light`, `fan`, `appliance`. A class is worth offering only where something
+can act on it once declared, and `climate`, `spa`, `cover` and `scene` fail that test — their tools
+dispatch on setpoint, mode, position and scene item types, none of which a relay has, so declaring
+one would advertise a capability nothing could honour. A radiator on a switch is an `appliance`,
+and `control_device` is what commands it.
 The vocabulary is the device categories (`light`, `fan`, `cover`, `climate`, `spa`, `scene`) plus
 `appliance` for "explicitly none of these" — a plug on the coffee machine says so, rather than
 staying silent, and the difference between *unclassified* and *classified as not a light* is one

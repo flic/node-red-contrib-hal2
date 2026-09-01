@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -984,11 +984,10 @@ module.exports = function(RED) {
                     .sort((a2, b2) => String(a2.name || '').localeCompare(String(b2.name || '')));
             }
 
-            function hasAnyHaType(wantedTypes) {
-                const wanted = new Set(wantedTypes.map(s => s.toLowerCase()));
+            function hasAnyHaType(req) {
                 for (const thing of getAllStates()) {
                     for (const item of thing.items) {
-                        if (itemMatchesHaTypeFilter(item, wanted)) return true;
+                        if (itemSatisfies(item, req)) return true;
                     }
                 }
                 return false;
@@ -1020,7 +1019,7 @@ module.exports = function(RED) {
                 return {
                     error             : 'not_configured',
                     tool              : toolName,
-                    required_ha_types : reqs,
+                    required_ha_types : reqs.haTypes,
                     message           : 'No matching hardware is configured at this location (' +
                                         (config.locationName || 'unnamed') + ').'
                 };

@@ -43,6 +43,7 @@
     </div>
     <div class="form-row" id="thing-groups" style="width:100%">
         <label><i class="fa fa-object-group"></i> Items</label>
+        <div id="thing-facts-header" style="width:100%; box-sizing:border-box; padding:0 8px 4px 8px; color:#888; font-size:0.85em; white-space:nowrap;"><span style="display:inline-block; width:14px;"></span><span style="display:inline-block; width:calc(40% - 14px);">Item</span><span style="display:inline-block; width:24%;">Counts as</span><span style="display:inline-block; width:36%;">Device class</span></div>
         <div id="thing-facts-container" style="width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:3px;"></div>
     </div>
     <div class="form-row" id="thing-metadata" style="width:100%" hidden>
@@ -337,7 +338,7 @@
                         class: "thing-fact-toggle",
                         style: "display:inline-block; width:14px; cursor:pointer; color:#888;"
                     }).appendTo(head);
-                    $('<span/>', { style: "display:inline-block; width:calc(42% - 14px); overflow:hidden; text-overflow:ellipsis; vertical-align:middle;" })
+                    $('<span/>', { style: "display:inline-block; width:calc(40% - 14px); overflow:hidden; text-overflow:ellipsis; vertical-align:middle;" })
                         .text(it.name + (haType ? ' (' + haType + ')' : ''))
                         .appendTo(head);
 
@@ -346,26 +347,42 @@
                     // claims — rather than dressing it up as a value someone chose or must
                     // change. Blank where nothing counts, so a switch that still needs an
                     // answer reads as the gap it is.
+                    // box-sizing on both, or the select's own border and padding push it past its
+                    // 36% and over the text to its left.
                     var counts = $('<span/>', {
                         class: "thing-fact-counts",
-                        style: "display:inline-block; width:20%; color:#888; font-size:0.85em; vertical-align:middle;"
+                        style: "display:inline-block; box-sizing:border-box; width:24%; padding-right:8px;"
+                             + " overflow:hidden; text-overflow:ellipsis; color:#888;"
+                             + " font-size:0.85em; vertical-align:middle;"
                     }).appendTo(head);
 
-                    var classSel = $('<select/>', {
-                        class: "thing-fact-class",
-                        style: "width:38%; vertical-align:middle;"
-                    }).appendTo(head);
-                    classSel.append($("<option></option>").val('').text('— none —'));
-                    hal2DeviceClass.DEVICE_CLASSES.forEach(function(c) {
-                        classSel.append($("<option></option>").val(c).text(c));
-                    });
-                    classSel.val(declared);
+                    // The control appears only where the ha_type leaves the question open, which
+                    // in practice means a switch: a light, dimmer, cover or fan item already says
+                    // what it is. Offering it everywhere made the exceptional case look like the
+                    // norm and invited values that do nothing. The read-only column above stays on
+                    // every row regardless — that is what answers "what does this item present as".
+                    // …or where one is already stored. An item whose ha_type answers the question
+                    // has no business carrying a declaration, but hiding one that exists would drop
+                    // it on the next Done, silently — the same failure the group rows were just
+                    // fixed for. Show it, so it can be seen and removed on purpose.
+                    var classSel = null;
+                    if (hal2DeviceClass.needsDeviceClass(haType) || declared) {
+                        classSel = $('<select/>', {
+                            class: "thing-fact-class",
+                            style: "box-sizing:border-box; width:36%; vertical-align:middle;"
+                        }).appendTo(head);
+                        classSel.append($("<option></option>").val('').text('— none —'));
+                        hal2DeviceClass.DEVICE_CLASSES.forEach(function(c) {
+                            classSel.append($("<option></option>").val(c).text(c));
+                        });
+                        classSel.val(declared);
+                    }
 
                     function paintCounts() {
-                        var c = hal2DeviceClass.countsAs(classSel.val(), haType);
+                        var c = hal2DeviceClass.countsAs(classSel ? classSel.val() : declared, haType);
                         counts.text(c ? 'counts as ' + c : '');
                     }
-                    classSel.change(paintCounts);
+                    if (classSel) { classSel.change(paintCounts); }
                     paintCounts();
 
                     var body = $('<div/>', {

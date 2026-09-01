@@ -319,17 +319,33 @@ const {
     HA_TYPE_GROUPS, DEVICE_CLASSES, deviceClassFromHaType, effectiveDeviceClass
 } = require('../resources/device-class');
 
-// Maps tool name → list of ha_types where at least one must be present on this
-// location for the tool to be exposed. Tools not listed here are unconditional.
+// Maps tool name → what must exist at this location for the tool to be exposed. `haTypes` is
+// the item types it writes to; `classes` names the device_class values that also count, which
+// is only ever the ones the tool has been taught to act on.
+//
+// The distinction matters: set_light writes to a switch declared `light` (see writesOnOff), so
+// such an item should expose it. control_fan writes a speed to an `ha_type: fan` item and can do
+// nothing with a relay declared `fan`, so that declaration must NOT advertise it — a tool
+// offered but unable to act is worse than one absent.
 const TOOL_HARDWARE_REQUIREMENTS = {
-    control_fan     : HA_TYPE_GROUPS.fan,
-    control_cover   : HA_TYPE_GROUPS.cover,
-    control_spa     : HA_TYPE_GROUPS.spa,
-    control_climate : HA_TYPE_GROUPS.climate,
-    set_light       : HA_TYPE_GROUPS.light,
-    activate_scene  : HA_TYPE_GROUPS.scene,
-    get_scenes      : HA_TYPE_GROUPS.scene
+    control_fan     : { haTypes: HA_TYPE_GROUPS.fan,     classes: [] },
+    control_cover   : { haTypes: HA_TYPE_GROUPS.cover,   classes: [] },
+    control_spa     : { haTypes: HA_TYPE_GROUPS.spa,     classes: [] },
+    control_climate : { haTypes: HA_TYPE_GROUPS.climate, classes: [] },
+    set_light       : { haTypes: HA_TYPE_GROUPS.light,   classes: ['light'] },
+    activate_scene  : { haTypes: HA_TYPE_GROUPS.scene,   classes: [] },
+    get_scenes      : { haTypes: HA_TYPE_GROUPS.scene,   classes: [] }
 };
+
+// Whether one item satisfies a tool's requirement — its ha_type is one the tool writes to, or
+// its declared class is one the tool knows how to act on.
+function itemSatisfies(item, req) {
+    if (!req) { return true; }
+    const ht = String((item && item.ha_type) || '').toLowerCase();
+    if ((req.haTypes || []).some(t => t.toLowerCase() === ht)) { return true; }
+    const cls = String((item && item.device_class) || '').toLowerCase();
+    return !!cls && (req.classes || []).some(c => c.toLowerCase() === cls);
+}
 
 // What an item may be declared to drive. The category names above, because every
 // consumer already understands them, plus 'appliance' for "explicitly none of these"
@@ -485,5 +501,6 @@ module.exports = {
     lightTargets,
     writesOnOff,
     nothingToCommand,
+    itemSatisfies,
     deriveCategories
 };

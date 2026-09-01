@@ -98,3 +98,35 @@ describe('nothingToCommand', function () {
         assert.deepStrictEqual(nothingToCommand(undefined, 'n').things, []);
     });
 });
+
+describe('tool exposure follows what a tool can act on', function () {
+    const { TOOL_HARDWARE_REQUIREMENTS: REQ, itemSatisfies } = require('../core/mcp-tools');
+
+    it('exposes set_light for a switch declared a light, because it writes to one', function () {
+        assert.ok(itemSatisfies({ ha_type: 'switch', device_class: 'light' }, REQ.set_light));
+    });
+
+    it('does not expose control_fan for a relay declared a fan', function () {
+        // The trap this shape exists to avoid: control_fan sends a speed to an `ha_type: fan`
+        // item and can do nothing with a relay, so the declaration must not advertise it. A tool
+        // offered but unable to act is worse than one absent.
+        assert.ok(!itemSatisfies({ ha_type: 'switch', device_class: 'fan' }, REQ.control_fan));
+        assert.ok(itemSatisfies({ ha_type: 'fan' }, REQ.control_fan), 'a real fan still counts');
+    });
+
+    it('leaves an undeclared switch exposing nothing', function () {
+        for (const tool of Object.keys(REQ)) {
+            assert.ok(!itemSatisfies({ ha_type: 'switch' }, REQ[tool]),
+                `an undeclared switch should not expose ${tool}`);
+        }
+    });
+
+    it('names only device_class values its tool was taught to act on', function () {
+        for (const [tool, req] of Object.entries(REQ)) {
+            for (const c of req.classes || []) {
+                assert.ok(tool === 'set_light' && c === 'light',
+                    `${tool} claims to act on device_class "${c}" — has it been taught to?`);
+            }
+        }
+    });
+});

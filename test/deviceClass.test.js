@@ -32,6 +32,21 @@ describe('resources/device-class', function () {
         assert.deepStrictEqual(tools.DEVICE_CLASSES, dc.DEVICE_CLASSES);
     });
 
+    it('offers only classes something can act on once declared', function () {
+        // climate, spa, cover and scene are deliberately absent: their tools dispatch on setpoint,
+        // mode, position and scene ha_types, none of which a switch has, so declaring one would
+        // advertise a capability nothing could honour. 'outlet' is absent because it would behave
+        // exactly as 'appliance' does, and two values with one behaviour only split the data.
+        assert.deepStrictEqual(dc.DEVICE_CLASSES, ['light', 'fan', 'appliance']);
+    });
+
+    it('asks the question only where the ha_type leaves it open', function () {
+        assert.ok(dc.needsDeviceClass('switch'), 'a switch could be driving anything');
+        for (const t of ['light', 'dimmer', 'fan', 'cover', 'color', 'scene']) {
+            assert.ok(!dc.needsDeviceClass(t), `${t} already says what it is`);
+        }
+    });
+
     describe('countsAs() — what the editor row states', function () {
         it('counts a dimmer toward light, which is what HA_TYPE_GROUPS says', function () {
             assert.strictEqual(dc.countsAs('', 'dimmer'), 'light');
