@@ -312,18 +312,12 @@ const MCP_TOOLS = [
     }
 ];
 
-// Single source of truth for which item ha_types define each device category.
-// Used both for tool exposure (TOOL_HARDWARE_REQUIREMENTS below) and for ha_type
-// filter expansion + categories derivation in get_all_states.
-// Extend freely if a location uses non-standard ha_types for a category.
-const HA_TYPE_GROUPS = {
-    climate : ['target temperature', 'ac mode', 'fan mode', 'swing mode'],
-    spa     : ['heater', 'circulation pump', 'airjets'],
-    light   : ['light', 'dimmer'],
-    fan     : ['fan'],
-    cover   : ['cover'],
-    scene   : ['scene']
-};
+// The vocabulary lives in resources/device-class.js because the editor loads the same file over
+// HTTP — one definition, so the classes a Thing can be given cannot drift from the ones the tools
+// resolve against. See that file for what the two concepts mean.
+const {
+    HA_TYPE_GROUPS, DEVICE_CLASSES, deviceClassFromHaType, effectiveDeviceClass
+} = require('../resources/device-class');
 
 // Maps tool name → list of ha_types where at least one must be present on this
 // location for the tool to be exposed. Tools not listed here are unconditional.
@@ -337,6 +331,13 @@ const TOOL_HARDWARE_REQUIREMENTS = {
     get_scenes      : HA_TYPE_GROUPS.scene
 };
 
+// What an item may be declared to drive. The category names above, because every
+// consumer already understands them, plus 'appliance' for "explicitly none of these"
+// — a plug on the coffee machine says so rather than staying silent, which is the
+// difference between "not classified yet" and "classified, and not a light".
+
+
+
 function expandHaTypeFilter(input) {
     const key = (input || '').toLowerCase();
     if (HA_TYPE_GROUPS[key]) {
@@ -345,13 +346,41 @@ function expandHaTypeFilter(input) {
     return new Set([key]);
 }
 
+// An ha_type filter has to see a declared class too, or a relay-driven lamp stays invisible
+// to `get_all_states(ha_type: "light")` — which is most of what this feature is for. The
+// category name is itself in the expanded set, so matching the class against it is enough.
+function itemMatchesHaTypeFilter(item, wanted) {
+    return wanted.has(String((item && item.ha_type) || '').toLowerCase())
+        || wanted.has(String((item && item.device_class) || '').toLowerCase());
+}
+
+// Which of a Thing's items set_light may write to.
+//
+// A Thing that has classified any of its items has said which ones are lights, and the write
+// must not go past that: a dual relay otherwise takes the command on every switch it owns, so
+// turning the ceiling lamp off cuts the socket beside it too. An item with no declaration on a
+// Thing that has some rides along only when its own ha_type already places it in a light —
+// dimmer, colour, colour temperature — never a bare switch, which is the ambiguous case this
+// whole feature exists for. A Thing with nothing declared behaves exactly as it always has.
+function lightTargets(thingItems, candidates) {
+    const classified = (thingItems || []).some(i => i && i.device_class);
+    return (candidates || []).filter(i => {
+        const explicit = String((i && i.device_class) || '').toLowerCase();
+        if (explicit) { return explicit === 'light'; }
+        if (!classified) { return true; }
+        return String((i && i.ha_type) || '').toLowerCase() !== 'switch';
+    });
+}
+
 function deriveCategories(items) {
-    const itemTypes = new Set(items.map(i => (i.ha_type || '').toLowerCase()));
-    const cats = [];
-    for (const [cat, types] of Object.entries(HA_TYPE_GROUPS)) {
-        if (types.some(t => itemTypes.has(t.toLowerCase()))) cats.push(cat);
+    const present = new Set();
+    for (const i of items) {
+        const cls = effectiveDeviceClass(i);
+        if (cls) { present.add(cls); }
     }
-    return cats;
+    // Iterate the vocabulary, not the items, so category order stays stable regardless of
+    // how the items happen to be ordered — existing consumers compare these lists.
+    return Object.keys(HA_TYPE_GROUPS).filter(c => present.has(c));
 }
 
 const MCP_TOOLS_ADMIN = [
@@ -418,6 +447,11 @@ module.exports = {
     toolClass,
     TOOL_HARDWARE_REQUIREMENTS,
     HA_TYPE_GROUPS,
+    DEVICE_CLASSES,
+    deviceClassFromHaType,
+    effectiveDeviceClass,
     expandHaTypeFilter,
+    itemMatchesHaTypeFilter,
+    lightTargets,
     deriveCategories
 };

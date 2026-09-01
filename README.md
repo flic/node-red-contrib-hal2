@@ -237,6 +237,35 @@ labels:
 
 > Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** and **Hermes** (MCP clients). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
 
+### Device class — what an item drives
+
+`ha_type` says *how to speak to an item*: switch, dimmer, cover. An assistant reads it as *what
+the item is*, and for most devices the two coincide — a bulb is a `light`. They come apart at a
+relay. A Matter Metered Plug driving the coffee machine and one driving the ceiling lamp are the
+same Thing type with the same `switch` item, so the type cannot answer the question; only the
+Thing can.
+
+**Device class** is where the Thing answers it, per item, under *Item facts* in the Thing config.
+The vocabulary is the device categories (`light`, `fan`, `cover`, `climate`, `spa`, `scene`) plus
+`appliance` for "explicitly none of these" — a plug on the coffee machine says so, rather than
+staying silent, and the difference between *unclassified* and *classified as not a light* is one
+an assistant can act on.
+
+Nothing needs declaring where the `ha_type` already settles it: a `light` or `dimmer` item derives
+its class, and the editor row shows what it derived, so you can tell what an item presents as
+without opening the Thing type to find out. There is deliberately no Thing-type default — a
+default there would be a hidden layer you cannot judge from the Thing.
+
+The class is **added to** the `ha_type`, never replacing it: `ha_type` still drives value semantics,
+so a dimmer keeps its brightness. What changes is discovery — `get_all_states` reports the derived
+`categories`, the `ha_type: "light"` filter matches a declared light behind a switch, and
+`set_light` is offered at a location whose only lamps sit behind relays.
+
+> **It also stops `set_light` writing past the answer.** On a Thing with any class declared,
+> `set_light` writes only to its lights. Without that, a dual relay takes the command on every
+> switch it owns — turning the ceiling lamp off and cutting the socket beside it. A Thing with
+> nothing declared behaves exactly as before.
+
 ### Custom MCP tools (hal2MCPIn / hal2MCPOut)
 
 You can define your own MCP tools as Node-RED flows: a **hal2MCPIn** node registers a tool and fires a message when the assistant calls it, and a **hal2MCPOut** node returns the result. Responses can be text or image/media content, so a tool can return e.g. a camera snapshot. For a fully standalone setup there is also a **hal2MCPServer** node. See `examples/jellyfin-mcp.json` for a worked example.

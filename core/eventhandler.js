@@ -9,7 +9,8 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
-    TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories
+    TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
+    itemMatchesHaTypeFilter, lightTargets
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -866,6 +867,20 @@ module.exports = function(RED) {
             }
 
             // Build attribute name→value map for a thing
+            // What each item on THIS Thing was declared to drive. Lives per Thing because the
+            // answer is a fact about the wiring, not about the type: the same Matter Metered
+            // Plug drives a coffee machine here and a ceiling lamp there.
+            function resolveDeviceClasses(thing) {
+                const map = {};
+                if (!Array.isArray(thing.itemFacts)) return map;
+                for (const f of thing.itemFacts) {
+                    if (f && f.kind === 'device_class' && f.item && f.value) {
+                        map[f.item] = String(f.value).toLowerCase();
+                    }
+                }
+                return map;
+            }
+
             function resolveAttributes(thing) {
                 const map = {};
                 if (!Array.isArray(thing.thingType.attributes)) return map;
@@ -895,6 +910,7 @@ module.exports = function(RED) {
                     if (!tt || !tt.items) return;
 
                     const attrMap = resolveAttributes(thing);
+                    const classMap = resolveDeviceClasses(thing);
                     const lastChange = thing.last_change || {};
 
                     const items = [];
@@ -911,6 +927,10 @@ module.exports = function(RED) {
                             last_change : msToIso(lastChange[itm.id])
                         };
                         if (label) entry.label = label;
+                        // Only the declared class is carried. What the ha_type already implies is
+                        // left to effectiveDeviceClass() at the point of use — repeating it here
+                        // would make every light item look as though someone had classified it.
+                        if (classMap[itm.id]) entry.device_class = classMap[itm.id];
                         if (itm.history) entry.history = true;
                         if (itm.notes) entry.notes = itm.notes;
                         if (Array.isArray(itm.tags) && itm.tags.length) entry.tags = itm.tags;
@@ -968,7 +988,7 @@ module.exports = function(RED) {
                 const wanted = new Set(wantedTypes.map(s => s.toLowerCase()));
                 for (const thing of getAllStates()) {
                     for (const item of thing.items) {
-                        if (item.ha_type && wanted.has(item.ha_type.toLowerCase())) return true;
+                        if (itemMatchesHaTypeFilter(item, wanted)) return true;
                     }
                 }
                 return false;
@@ -1076,7 +1096,7 @@ module.exports = function(RED) {
 
                         if (args.ha_type) {
                             const wanted = expandHaTypeFilter(args.ha_type);
-                            devices = devices.filter(d => d.items.some(i => wanted.has(i.ha_type.toLowerCase())));
+                            devices = devices.filter(d => d.items.some(i => itemMatchesHaTypeFilter(i, wanted)));
                         }
 
                         if (args.tag) {
@@ -1625,8 +1645,9 @@ module.exports = function(RED) {
 
                         const results = [];
                         for (const { device, items } of matched) {
+                            const targets = lightTargets(device.items, items);
                             const sent = [];
-                            for (const itm of items) {
+                            for (const itm of targets) {
                                 const ht = (itm.ha_type || '').toLowerCase();
                                 if ((ht === 'light' || ht === 'switch') && args.on !== undefined) {
                                     node.publishCommand(device.thing_id, itm.item_id, args.on);

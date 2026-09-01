@@ -73,3 +73,107 @@ describe('core/mcp-tools catalog', function () {
         assert.ok(out.has('light'));
     });
 });
+
+describe('device_class — what an item drives', function () {
+    const {
+        deviceClassFromHaType, effectiveDeviceClass, deriveCategories,
+        itemMatchesHaTypeFilter, lightTargets, DEVICE_CLASSES
+    } = require('../core/mcp-tools');
+
+    it('derives a class only where the ha_type settles the question', function () {
+        assert.strictEqual(deviceClassFromHaType('dimmer'), 'light');
+        assert.strictEqual(deviceClassFromHaType('cover'), 'cover');
+        // The whole reason the feature exists: a switch could be driving anything.
+        assert.strictEqual(deviceClassFromHaType('switch'), '');
+        assert.strictEqual(deviceClassFromHaType(undefined), '');
+    });
+
+    it('lets a declaration win over the ha_type', function () {
+        assert.strictEqual(effectiveDeviceClass({ ha_type: 'switch', device_class: 'light' }), 'light');
+        assert.strictEqual(effectiveDeviceClass({ ha_type: 'dimmer' }), 'light');
+        assert.strictEqual(effectiveDeviceClass({ ha_type: 'switch' }), '');
+    });
+
+    it('offers appliance so a plug can say it is explicitly not a light', function () {
+        assert.ok(DEVICE_CLASSES.includes('appliance'));
+        assert.deepStrictEqual(deriveCategories([{ ha_type: 'switch', device_class: 'appliance' }]), []);
+    });
+
+    describe('categories', function () {
+        it('gives a relay-driven lamp the light category', function () {
+            assert.deepStrictEqual(
+                deriveCategories([{ ha_type: 'switch', device_class: 'light' }]), ['light']);
+        });
+
+        it('leaves the coffee machine out of the lights', function () {
+            assert.deepStrictEqual(deriveCategories([{ ha_type: 'switch' }]), []);
+        });
+
+        it('still derives from ha_type with nothing declared', function () {
+            assert.deepStrictEqual(deriveCategories([{ ha_type: 'dimmer' }]), ['light']);
+        });
+
+        it('keeps the vocabulary order regardless of item order', function () {
+            const a = deriveCategories([{ ha_type: 'cover' }, { ha_type: 'light' }]);
+            const b = deriveCategories([{ ha_type: 'light' }, { ha_type: 'cover' }]);
+            assert.deepStrictEqual(a, b, 'order must not depend on item order');
+            assert.deepStrictEqual(a, ['light', 'cover']);
+        });
+    });
+
+    describe('the ha_type filter', function () {
+        const wanted = expandHaTypeFilter('light');
+
+        it('matches a declared light behind a switch', function () {
+            assert.ok(itemMatchesHaTypeFilter({ ha_type: 'switch', device_class: 'light' }, wanted));
+        });
+
+        it('does not match an undeclared switch', function () {
+            assert.ok(!itemMatchesHaTypeFilter({ ha_type: 'switch' }, wanted));
+        });
+
+        it('still matches on ha_type alone', function () {
+            assert.ok(itemMatchesHaTypeFilter({ ha_type: 'dimmer' }, wanted));
+        });
+    });
+
+    describe('what set_light may write to', function () {
+        // The dual relay this feature was reported against: On1 drives a socket, On2 the
+        // ceiling lamp, and both are plain switches on the same Thing.
+        const relay = [
+            { item_id: 'on1', ha_type: 'switch' },
+            { item_id: 'on2', ha_type: 'switch', device_class: 'light' }
+        ];
+
+        it('writes the lamp and leaves the socket alone', function () {
+            const out = lightTargets(relay, relay);
+            assert.deepStrictEqual(out.map(i => i.item_id), ['on2'],
+                'turning the light off must not cut the socket');
+        });
+
+        it('never writes an item declared as something else', function () {
+            const items = [{ item_id: 'relay', ha_type: 'switch', device_class: 'appliance' }];
+            assert.deepStrictEqual(lightTargets(items, items), []);
+        });
+
+        it('keeps colour and brightness on a Thing that has declarations', function () {
+            const bulb = [
+                { item_id: 'on', ha_type: 'switch', device_class: 'light' },
+                { item_id: 'bri', ha_type: 'dimmer' },
+                { item_id: 'ct', ha_type: 'color temperature' }
+            ];
+            assert.deepStrictEqual(lightTargets(bulb, bulb).map(i => i.item_id),
+                ['on', 'bri', 'ct'], 'an undeclared dimmer/CT item must not be dropped');
+        });
+
+        it('leaves a Thing with nothing declared exactly as it was', function () {
+            const items = [
+                { item_id: 'a', ha_type: 'switch' },
+                { item_id: 'b', ha_type: 'light' },
+                { item_id: 'c', ha_type: 'dimmer' }
+            ];
+            assert.deepStrictEqual(lightTargets(items, items), items,
+                'the untouched path must not change');
+        });
+    });
+});

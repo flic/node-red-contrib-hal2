@@ -34,6 +34,10 @@ module.exports = function(RED) {
         this.topicPrefix = config.topicPrefix;
         this.attributes = config.attributes;
         this.groups = config.groups || [];   // [{ item, group }] — group membership, resolved by the EventHandler group engine
+        // [{ item, kind, value }] — per-item facts about THIS Thing's wiring, kept apart from
+        // groups so that settled membership data is not migrated for the sake of one structure.
+        // kind 'device_class': what the item drives, which the shared ThingType cannot know.
+        this.itemFacts = config.itemFacts || [];
 
         if (config.topicFilters && config.topicFilters.length > 0) {
             this.topicFilters    = config.topicFilters;
