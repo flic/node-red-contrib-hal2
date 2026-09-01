@@ -363,14 +363,37 @@
                         var row = $('<div/>', { style: "margin-top:2px; white-space:nowrap;" }).appendTo(groupRows);
                         var sel = $('<select/>', { class: "thing-fact-group", style: "width:calc(100% - 30px);" }).appendTo(row);
                         var compatible = groups.filter(function(g) { return halGroupAccepts(g.haType, haType); });
-                        if (compatible.length === 0) {
-                            sel.append($("<option></option>").val('').text('— no compatible group —'));
+
+                        // A stored membership whose group no longer accepts this item has to stay
+                        // in the list, selected and marked. Leave it out and .val() finds nothing
+                        // to select, the row reads back empty, and the membership is deleted on
+                        // Done with nothing said — the failure is invisible precisely when it is
+                        // most likely, since tightening what a group accepts is what makes an
+                        // existing pairing incompatible in the first place.
+                        var stored = selected ? groups.find(function(g) { return g.id === selected; }) : null;
+                        var listed = compatible.slice();
+                        var orphan = stored && !compatible.some(function(g) { return g.id === stored.id; });
+                        if (orphan) { listed.push(stored); }
+
+                        if (listed.length === 0) {
+                            // Nothing this item could join. If it was in a group that has since
+                            // been deleted, say so rather than showing an empty row: the value is
+                            // going to be dropped either way, and silence is what hid it before.
+                            sel.append($("<option></option>").val('')
+                                .text(selected ? '— group removed —' : '— no compatible group —'));
                         } else {
-                            compatible.forEach(function(g) {
-                                sel.append($("<option></option>").val(g.id)
-                                    .text(g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')'));
+                            listed.forEach(function(g) {
+                                var label = g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')';
+                                if (orphan && g.id === stored.id) { label += ' — incompatible'; }
+                                sel.append($("<option></option>").val(g.id).text(label));
                             });
-                            if (selected) { sel.val(selected); }
+                            if (selected && !stored) {
+                                // The group is gone entirely; nothing to preserve, but show it.
+                                sel.append($("<option></option>").val('').text('— group removed —'));
+                                sel.val('');
+                            } else if (selected) {
+                                sel.val(selected);
+                            }
                         }
                         $('<button/>', {
                             type: 'button', class: "red-ui-button red-ui-button-small",
@@ -385,9 +408,10 @@
                         .click(function(e) { e.preventDefault(); addGroupRow(null); })
                         .appendTo(body);
 
-                    // Open where there is something to see, closed where there is not — the
-                    // header already carries the class, which is the fact you scan for.
-                    var open = mine.length > 0;
+                    // Closed to begin with, always. The header carries the class, which is the
+                    // fact you scan for, and a Thing type with a dozen items should open as a
+                    // list you can take in at once rather than a page of expanded group rows.
+                    var open = false;
                     function paint() {
                         toggle.html('<i class="fa fa-angle-' + (open ? 'down' : 'right') + '"></i>');
                         body.toggle(open);

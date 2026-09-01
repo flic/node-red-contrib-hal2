@@ -33,7 +33,15 @@ function makeEl(tag, attrs) {
         append(child) { el.children.push(child.el || child); return api; },
         text(t) { if (t === undefined) { return el._text; } el._text = String(t); return api; },
         html(h) { el._html = h; return api; },
-        val(v) { if (v === undefined) { return el._val; } el._val = v; return api; },
+        // Faithful on the one point the drop hazard turns on: jQuery's .val() against a select
+        // with no matching <option> selects nothing, and .val() then reads back null. A stub that
+        // simply stored the value would make the test agree with itself.
+        val(v) {
+            if (v === undefined) { return el._val; }
+            const opts = el.children.filter(c => c.tag === 'option');
+            el._val = (el.tag === 'select' && opts.length && !opts.some(o => o._val === v)) ? null : v;
+            return api;
+        },
         data(k, v) { if (v === undefined) { return el._data[k]; } el._data[k] = v; return api; },
         click(fn) { el.handlers.click = fn; return api; },
         change(fn) { el.handlers.change = fn; return api; },
@@ -76,7 +84,7 @@ function collect(el, sel) {
     };
 }
 
-function run({ items, groups, node }) {
+function run({ items, groups, node, overrides }) {
     const container = makeEl('div', { id: 'thing-facts-container' });
     const inputs = {
         '#node-input-thingType': makeEl('input').val('tt1'),
@@ -116,7 +124,7 @@ function run({ items, groups, node }) {
     for (const m of helperSrc.matchAll(/^function (hal\w+)/gm)) {
         sandbox[m[1]] = () => [];
     }
-    sandbox.halGroupAccepts = () => true;
+    sandbox.halGroupAccepts = (overrides && overrides.halGroupAccepts) || (() => true);
     sandbox.halParseTags = () => [];
     sandbox.hal2DeviceClass = require('../resources/device-class');
     vm.createContext(sandbox);
@@ -198,6 +206,30 @@ describe('core/thing.html — the Items section', function () {
         assert.deepStrictEqual(plain(node.groups), [{ item: 'on2', group: 'g1' }]);
         assert.deepStrictEqual(plain(node.itemFacts),
             [{ item: 'on2', kind: 'device_class', value: 'light' }]);
+    });
+
+    describe('a membership whose group no longer fits', function () {
+        // The rule is about to be tightened, which is exactly what turns a stored pairing
+        // incompatible. The row must keep it rather than delete it on the next Done.
+        const strict = { halGroupAccepts: (g, i) => g === i };
+
+        it('keeps it, so tightening the rule cannot delete data silently', function () {
+            const node = {
+                groups: [{ item: 'bri', group: 'g1' }],   // dimmer item in a light group
+                itemFacts: []
+            };
+            const { def } = run({ items: ITEMS, groups: GROUPS, node, overrides: strict });
+            def.oneditsave.call(node);
+            assert.deepStrictEqual(plain(node.groups), [{ item: 'bri', group: 'g1' }],
+                'an incompatible membership must survive until someone removes it deliberately');
+        });
+
+        it('drops one whose group is gone, since there is nothing to keep', function () {
+            const node = { groups: [{ item: 'bri', group: 'deleted' }], itemFacts: [] };
+            const { def } = run({ items: ITEMS, groups: GROUPS, node });
+            def.oneditsave.call(node);
+            assert.deepStrictEqual(plain(node.groups), []);
+        });
     });
 
     it('writes nothing for a Thing where nothing was declared', function () {
