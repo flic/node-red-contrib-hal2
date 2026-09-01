@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets, writesOnOff
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -1321,32 +1321,10 @@ module.exports = function(RED) {
                             results.push({ thing_name: device.thing_name, commands: sent });
                         }
 
-                        // Matching a Thing and writing nothing to it is not a success. The caller
-                        // asked for a light to change and none did, and answering ok leaves them
-                        // believing it happened — the tool has always done this for e.g. a
-                        // brightness aimed at something undimmable. Say what the items actually
-                        // are instead, since that is what makes the answer actionable.
                         if (!results.some(r => r.commands.length)) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({
-                                error   : 'nothing_to_command',
-                                message : 'No item on the matched thing(s) takes this command. An '
-                                        + 'on/off command needs an item that is a light: ha_type '
-                                        + '"light", or "switch" with device_class "light" — a switch '
-                                        + 'with no device_class could be driving anything and is not '
-                                        + 'written. Set the device class on the Thing, or use '
-                                        + 'control_device to command the item directly.',
-                                things  : matched.map(({ device }) => ({
-                                    thing_id   : device.thing_id,
-                                    thing_name : device.thing_name,
-                                    items      : (device.items || []).map(i => ({
-                                        item_id      : i.item_id,
-                                        item_name    : i.item_name,
-                                        ha_type      : i.ha_type,
-                                        device_class : i.device_class || null
-                                    }))
-                                }))
-                            }));
+                            return toolOk(JSON.stringify(nothingToCommand(matched,
+                                'A fan speed needs an item with ha_type "fan".')));
                         }
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
@@ -1442,6 +1420,12 @@ module.exports = function(RED) {
                             results.push({ thing_name: device.thing_name, commands: sent });
                         }
 
+                        if (!results.some(r => r.commands.length)) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(nothingToCommand(matched,
+                                'A cover command needs an item with ha_type "cover".')));
+                        }
+
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ success: true, results }));
                     }
@@ -1488,6 +1472,12 @@ module.exports = function(RED) {
                             results.push({ thing_name: device.thing_name, commands: sent });
                         }
 
+                        if (!results.some(r => r.commands.length)) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(nothingToCommand(matched,
+                                'A spa command needs an item with ha_type "heater", "circulation pump" or "airjets".')));
+                        }
+
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
                         return toolOk(JSON.stringify({ success: true, results }));
                     }
@@ -1532,6 +1522,12 @@ module.exports = function(RED) {
                                 }
                             }
                             results.push({ thing_name: device.thing_name, commands: sent });
+                        }
+
+                        if (!results.some(r => r.commands.length)) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(nothingToCommand(matched,
+                                'A climate command needs an item with ha_type "ac mode", "target temperature", "fan mode" or "swing mode" — a heater on a plain switch has none of those, so use control_device.')));
                         }
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
@@ -1700,6 +1696,12 @@ module.exports = function(RED) {
                                 }
                             }
                             results.push({ thing_id: device.thing_id, thing_name: device.thing_name, commands: sent });
+                        }
+
+                        if (!results.some(r => r.commands.length)) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'error' });
+                            return toolOk(JSON.stringify(nothingToCommand(matched.map(m => m.device),
+                                'An on/off command needs an item that is a light: ha_type "light", or "switch" with device_class "light" — a switch with no device_class could be driving anything and is not written. Set the device class on the Thing, or use control_device to command the item directly.')));
                         }
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });

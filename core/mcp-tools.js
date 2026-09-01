@@ -378,6 +378,30 @@ function writesOnOff(item) {
     return effectiveDeviceClass(item) === 'light';
 }
 
+// The answer when a command matched a thing and then wrote to nothing on it.
+//
+// Reporting `success: true` with an empty command list has always been this family's habit, and
+// it leaves the caller believing something changed: a brightness aimed at an undimmable lamp, an
+// on/off aimed at a switch with no device_class, a target temperature aimed at a radiator on a
+// relay. Naming the items instead is what makes the answer actionable — it shows whether the tool
+// was wrong for the device or a declaration is missing.
+function nothingToCommand(devices, need) {
+    return {
+        error   : 'nothing_to_command',
+        message : 'No item on the matched thing(s) takes this command. ' + need,
+        things  : (devices || []).map(d => ({
+            thing_id   : d.thing_id,
+            thing_name : d.thing_name,
+            items      : (d.items || []).map(i => ({
+                item_id      : i.item_id,
+                item_name    : i.item_name,
+                ha_type      : i.ha_type,
+                device_class : i.device_class || null
+            }))
+        }))
+    };
+}
+
 function deriveCategories(items) {
     const present = new Set();
     for (const i of items) {
@@ -460,5 +484,6 @@ module.exports = {
     itemMatchesHaTypeFilter,
     lightTargets,
     writesOnOff,
+    nothingToCommand,
     deriveCategories
 };
