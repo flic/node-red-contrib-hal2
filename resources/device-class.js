@@ -55,13 +55,14 @@
         return deviceClassFromHaType(item && item.ha_type);
     }
 
-    // A label for a dropdown row: the declared value, or what the ha_type already implies shown
-    // as inherited, so the Thing view answers "what does this item present as" without anyone
-    // opening the ThingType to find out.
-    function describe(declared, haType) {
-        if (declared) { return declared; }
-        var derived = deviceClassFromHaType(haType);
-        return derived ? '— derived: ' + derived + ' —' : '— none —';
+    // What an item counts as when the device is categorised — the declaration if there is one,
+    // otherwise what the ha_type implies. Phrased as counting rather than driving, because that
+    // is what HA_TYPE_GROUPS says and no more: `dimmer` does not mean the item drives a light,
+    // it means an item like this is part of what makes the device one. Calling it "derived: the
+    // item drives a light" claimed something the rule never did, and read as a bug on every
+    // brightness row. Returns '' when nothing counts.
+    function countsAs(declared, haType) {
+        return effectiveDeviceClass({ device_class: declared, ha_type: haType });
     }
 
     return {
@@ -69,6 +70,6 @@
         DEVICE_CLASSES: DEVICE_CLASSES,
         deviceClassFromHaType: deviceClassFromHaType,
         effectiveDeviceClass: effectiveDeviceClass,
-        describe: describe
+        countsAs: countsAs
     };
 }));

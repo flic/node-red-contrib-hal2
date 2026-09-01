@@ -32,17 +32,34 @@ describe('resources/device-class', function () {
         assert.deepStrictEqual(tools.DEVICE_CLASSES, dc.DEVICE_CLASSES);
     });
 
-    describe('describe() — what the editor row shows', function () {
-        it('names the class the ha_type already implies, so the ThingType need not be opened', function () {
-            assert.strictEqual(dc.describe('', 'dimmer'), '— derived: light —');
+    describe('countsAs() — what the editor row states', function () {
+        it('counts a dimmer toward light, which is what HA_TYPE_GROUPS says', function () {
+            assert.strictEqual(dc.countsAs('', 'dimmer'), 'light');
         });
 
-        it('says none where the ha_type settles nothing', function () {
-            assert.strictEqual(dc.describe('', 'switch'), '— none —');
+        it('counts nothing for a bare switch — the gap the declaration fills', function () {
+            assert.strictEqual(dc.countsAs('', 'switch'), '');
         });
 
-        it('shows the declaration once there is one', function () {
-            assert.strictEqual(dc.describe('light', 'switch'), 'light');
+        it('counts nothing for colour or colour temperature', function () {
+            // Capabilities of a light, not evidence that something is one; the categories
+            // rule agrees, and the row must not claim otherwise.
+            assert.strictEqual(dc.countsAs('', 'color'), '');
+            assert.strictEqual(dc.countsAs('', 'color temperature'), '');
+        });
+
+        it('takes the declaration once there is one', function () {
+            assert.strictEqual(dc.countsAs('light', 'switch'), 'light');
+        });
+
+        it('agrees with the categories the tools derive', function () {
+            const { deriveCategories } = require('../core/mcp-tools');
+            for (const [declared, haType] of [['', 'dimmer'], ['light', 'switch'], ['', 'color']]) {
+                const viaRow = dc.countsAs(declared, haType);
+                const viaTools = deriveCategories([{ ha_type: haType, device_class: declared }]);
+                assert.deepStrictEqual(viaTools, viaRow ? [viaRow] : [],
+                    `the row and the tools disagree for ${haType}/${declared || 'none'}`);
+            }
         });
     });
 });

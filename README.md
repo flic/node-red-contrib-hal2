@@ -255,10 +255,13 @@ The vocabulary is the device categories (`light`, `fan`, `cover`, `climate`, `sp
 staying silent, and the difference between *unclassified* and *classified as not a light* is one
 an assistant can act on.
 
-Nothing needs declaring where the `ha_type` already settles it: a `light` or `dimmer` item derives
-its class, and its row says so — `— derived: light —` — so the Thing type never has to be opened
-to find out. There is deliberately no Thing-type default either; a default there would be a hidden
-layer you cannot judge from the Thing.
+Nothing needs declaring where the `ha_type` already settles it. Each row states, read-only beside
+the control, what the item **counts as** when the device is categorised — `counts as light` for a
+`light` or a `dimmer` — so the Thing type never has to be opened to find out, and a row that states
+nothing is exactly the gap a declaration fills. It says *counts as* rather than *drives*, because
+that is all the rule claims: a `dimmer` is not itself a lamp, it is part of what makes the device
+one. There is deliberately no Thing-type default either; a default there would be a hidden layer
+you cannot judge from the Thing.
 
 The class is **added to** the `ha_type`, never replacing it: `ha_type` still drives value semantics,
 so a dimmer keeps its brightness. What changes is discovery — `get_all_states` reports the derived
