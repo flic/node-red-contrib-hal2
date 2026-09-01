@@ -245,16 +245,20 @@ relay. A Matter Metered Plug driving the coffee machine and one driving the ceil
 same Thing type with the same `switch` item, so the type cannot answer the question; only the
 Thing can.
 
-**Device class** is where the Thing answers it, per item, under *Item facts* in the Thing config.
+**Device class** is where the Thing answers it, per item, under *Items* in the Thing config —
+which lists **every** item of the type, always, each carrying its own class and its group
+memberships collapsed beneath it. Nothing has to be added before the list tells you something:
+the question it answers is "what does this item present as", and a list you must add a row to
+first cannot answer it. One control per item, so an item cannot be declared twice.
 The vocabulary is the device categories (`light`, `fan`, `cover`, `climate`, `spa`, `scene`) plus
 `appliance` for "explicitly none of these" — a plug on the coffee machine says so, rather than
 staying silent, and the difference between *unclassified* and *classified as not a light* is one
 an assistant can act on.
 
 Nothing needs declaring where the `ha_type` already settles it: a `light` or `dimmer` item derives
-its class, and the editor row shows what it derived, so you can tell what an item presents as
-without opening the Thing type to find out. There is deliberately no Thing-type default — a
-default there would be a hidden layer you cannot judge from the Thing.
+its class, and its row says so — `— derived: light —` — so the Thing type never has to be opened
+to find out. There is deliberately no Thing-type default either; a default there would be a hidden
+layer you cannot judge from the Thing.
 
 The class is **added to** the `ha_type`, never replacing it: `ha_type` still drives value semantics,
 so a dimmer keeps its brightness. What changes is discovery — `get_all_states` reports the derived

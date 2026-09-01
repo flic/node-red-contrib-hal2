@@ -42,9 +42,8 @@
         <ol id="attributes-list"></ol>
     </div>
     <div class="form-row" id="thing-groups" style="width:100%">
-        <label><i class="fa fa-object-group"></i> Item facts</label>
-        <div id="thing-groups-header" style="width:100%; padding-right:28px; box-sizing:border-box; color:#888; font-size:0.85em; margin-bottom:4px; white-space:nowrap;"><span style="display:inline-block; width:calc(38% - 12px); margin-right:4px;">Item</span><span style="display:inline-block; width:16px;"></span><span style="display:inline-block; width:calc(24% - 8px); margin-right:4px;">Fact</span><span style="display:inline-block; width:calc(38% - 12px);">Value</span></div>
-        <ol id="thing-groups-container"></ol>
+        <label><i class="fa fa-object-group"></i> Items</label>
+        <div id="thing-facts-container" style="width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:3px;"></div>
     </div>
     <div class="form-row" id="thing-metadata" style="width:100%" hidden>
         <label style="display:block; width:auto;">
@@ -289,106 +288,121 @@
                 }
             });
 
-            // ── Item facts ────────────────────────────────────────────────────
-            // One list for everything said about an individual item of THIS Thing: which group
-            // it belongs to, and what it drives. Both are facts about the wiring that the shared
-            // ThingType cannot know, so they belong here and read better together than in two
-            // sections that have to be scanned separately.
+            // ── Items ─────────────────────────────────────────────────────────
+            // EVERY item of the Thing type is listed, always, whether or not anything has been
+            // said about it. That is the point: the question this section answers is "what does
+            // this item present as", and a list you have to add a row to before it tells you
+            // anything cannot answer it — you would have to open the Thing type to find out what
+            // the default was, which is exactly the detour to be avoided.
             //
-            // The storage stays split — group membership keeps its own `groups` array, settled
-            // since 2.7.0 and running in production, and only the new kinds go in `itemFacts`.
-            // The split is invisible here: the list merges both on load and separates them on
-            // save, so moving group membership across later changes nothing a user sees.
-            function thingGroupItems() {
+            // Each item is a header row carrying its own device class, with its group memberships
+            // collapsed beneath it. Device class is one control per item rather than a repeatable
+            // row, so an item cannot end up declared twice.
+            function thingFactItems() {
                 var tt = RED.nodes.node($("#node-input-thingType").val());
                 return (tt && Array.isArray(tt.items)) ? tt.items.filter(function(it) { return it.id !== '1'; }) : [];
             }
-            function thingGroupGroups() {
+            function thingFactGroups() {
                 var eh = RED.nodes.node($("#node-input-eventHandler").val());
                 return (eh && Array.isArray(eh.groups)) ? eh.groups : [];
             }
 
-            $("#thing-groups-container").editableList({
-                addItem: function(container, i, opt) {
-                    var fact = opt || {};
-                    var items = thingGroupItems();
-                    var groups = thingGroupGroups();
-                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+            function renderThingFacts() {
+                var container = $("#thing-facts-container").empty();
+                var items = thingFactItems();
+                var groups = thingFactGroups();
+                var classes = (Array.isArray(node.itemFacts) ? node.itemFacts : [])
+                    .filter(function(f) { return f && f.kind === 'device_class'; });
+                var memberships = Array.isArray(node.groups) ? node.groups : [];
 
-                    var row = $('<div/>').appendTo(container);
-                    var itemSel = $('<select/>', { class: "thing-group-item", style: "width:calc(38% - 12px); margin-right:4px;" }).appendTo(row);
-                    $('<i/>', { class: "fa fa-long-arrow-right", style: "width:16px; text-align:center; color:#888; vertical-align:middle;" }).appendTo(row);
-                    var kindSel = $('<select/>', { class: "thing-fact-kind", style: "width:calc(24% - 8px); margin-right:4px;" }).appendTo(row);
-                    var groupSel = $('<select/>', { class: "thing-group-group", style: "width:calc(38% - 12px);" }).appendTo(row);
+                if (items.length === 0) {
+                    container.append($('<div/>', { style: "padding:8px; color:#888;" })
+                        .text('Choose a Thing type to see its items.'));
+                    return;
+                }
 
-                    items.forEach(function(it) {
-                        itemSel.append($("<option></option>").val(it.id)
-                            .text(it.name + (it.haType ? ' (' + it.haType + ')' : '')));
+                items.forEach(function(it, idx) {
+                    var haType = it.haType || '';
+                    var mine = memberships.filter(function(m) { return m.item === it.id; });
+                    var declared = (classes.find(function(c) { return c.item === it.id; }) || {}).value || '';
+
+                    var block = $('<div/>', {
+                        class: "thing-fact-item",
+                        style: "padding:6px 8px;" + (idx ? " border-top:1px solid #eee;" : "")
+                    }).appendTo(container);
+                    block.data('item', it.id);
+
+                    var head = $('<div/>', { style: "white-space:nowrap; overflow:hidden;" }).appendTo(block);
+                    var toggle = $('<span/>', {
+                        class: "thing-fact-toggle",
+                        style: "display:inline-block; width:14px; cursor:pointer; color:#888;"
+                    }).appendTo(head);
+                    $('<span/>', { style: "display:inline-block; width:calc(52% - 14px); overflow:hidden; text-overflow:ellipsis; vertical-align:middle;" })
+                        .text(it.name + (haType ? ' (' + haType + ')' : ''))
+                        .appendTo(head);
+
+                    var classSel = $('<select/>', {
+                        class: "thing-fact-class",
+                        style: "width:48%; vertical-align:middle;"
+                    }).appendTo(head);
+                    // The empty option names what the ha_type already implies, so an item that
+                    // needs nothing said about it still shows what it presents as.
+                    classSel.append($("<option></option>").val('')
+                        .text(hal2DeviceClass.describe('', haType)));
+                    hal2DeviceClass.DEVICE_CLASSES.forEach(function(c) {
+                        classSel.append($("<option></option>").val(c).text(c));
                     });
-                    kindSel.append($("<option></option>").val('group').text('Group'));
-                    kindSel.append($("<option></option>").val('device_class').text('Device class'));
+                    classSel.val(declared);
 
-                    function currentItem() {
-                        return items.find(function(x) { return x.id === itemSel.val(); });
-                    }
+                    var body = $('<div/>', {
+                        class: "thing-fact-groups",
+                        style: "padding:2px 0 2px 14px;"
+                    }).appendTo(block);
 
-                    // Group: only groups whose family accepts this item's ha_type.
-                    function populateGroups(keep) {
-                        var it = currentItem();
-                        var compatible = groups.filter(function(g) {
-                            return halGroupAccepts(g.haType, it ? (it.haType || '') : '');
-                        });
+                    function addGroupRow(selected) {
+                        var row = $('<div/>', { style: "margin-top:2px; white-space:nowrap;" }).appendTo(groupRows);
+                        var sel = $('<select/>', { class: "thing-fact-group", style: "width:calc(100% - 30px);" }).appendTo(row);
+                        var compatible = groups.filter(function(g) { return halGroupAccepts(g.haType, haType); });
                         if (compatible.length === 0) {
-                            groupSel.append($("<option></option>").val('').text('— no compatible group —'));
-                            return;
+                            sel.append($("<option></option>").val('').text('— no compatible group —'));
+                        } else {
+                            compatible.forEach(function(g) {
+                                sel.append($("<option></option>").val(g.id)
+                                    .text(g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')'));
+                            });
+                            if (selected) { sel.val(selected); }
                         }
-                        compatible.forEach(function(g) {
-                            groupSel.append($("<option></option>").val(g.id)
-                                .text(g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')'));
-                        });
-                        if (keep) { groupSel.val(keep); }
+                        $('<button/>', {
+                            type: 'button', class: "red-ui-button red-ui-button-small",
+                            style: "margin-left:4px;", title: "Remove"
+                        }).html('<i class="fa fa-times"></i>').click(function() { row.remove(); }).appendTo(row);
                     }
 
-                    // Device class: the shared vocabulary, with the empty option naming what the
-                    // ha_type already implies. That is the whole point of showing it — you can
-                    // tell what this item presents as without opening the ThingType to find out.
-                    function populateClasses(keep) {
-                        var it = currentItem();
-                        var haType = it ? (it.haType || '') : '';
-                        groupSel.append($("<option></option>").val('')
-                            .text(hal2DeviceClass.describe('', haType)));
-                        hal2DeviceClass.DEVICE_CLASSES.forEach(function(c) {
-                            groupSel.append($("<option></option>").val(c).text(c));
-                        });
-                        if (keep) { groupSel.val(keep); }
+                    var groupRows = $('<div/>').appendTo(body);
+                    mine.forEach(function(m) { addGroupRow(m.group); });
+                    $('<a/>', { href: "#", style: "font-size:0.85em;" })
+                        .text('+ Add group')
+                        .click(function(e) { e.preventDefault(); addGroupRow(null); })
+                        .appendTo(body);
+
+                    // Open where there is something to see, closed where there is not — the
+                    // header already carries the class, which is the fact you scan for.
+                    var open = mine.length > 0;
+                    function paint() {
+                        toggle.html('<i class="fa fa-angle-' + (open ? 'down' : 'right') + '"></i>');
+                        body.toggle(open);
                     }
+                    toggle.click(function() { open = !open; paint(); });
+                    paint();
+                });
+            }
 
-                    function repopulateValues(keep) {
-                        groupSel.children().remove();
-                        if (kindSel.val() === 'device_class') { populateClasses(keep); }
-                        else { populateGroups(keep); }
-                    }
+            renderThingFacts();
 
-                    itemSel.change(function() { repopulateValues(groupSel.val()); });
-                    // Switching kind cannot keep the old value — a group id is not a class.
-                    kindSel.change(function() { repopulateValues(null); });
-
-                    if (fact.item) { itemSel.val(fact.item); }
-                    kindSel.val(fact.kind === 'device_class' ? 'device_class' : 'group');
-                    repopulateValues(fact.kind === 'device_class' ? fact.value : fact.group);
-                },
-                removable: true,
-                sortable: false,
-                addButton: "Add fact"
-            });
-
-            // Both stores merge into the one list; `groups` rows carry no kind of their own.
-            (Array.isArray(node.groups) ? node.groups : []).forEach(function(m) {
-                $("#thing-groups-container").editableList('addItem', { item: m.item, kind: 'group', group: m.group });
-            });
-            (Array.isArray(node.itemFacts) ? node.itemFacts : []).forEach(function(f) {
-                $("#thing-groups-container").editableList('addItem', f);
-            });
+            // The item list comes from the Thing type, so switching type must redraw it —
+            // otherwise the blocks describe items the Thing no longer has.
+            $("#node-input-thingType").change(renderThingFacts);
+            $("#node-input-eventHandler").change(renderThingFacts);
 
             $("#node-input-thingType").trigger('change');
 
@@ -459,21 +473,24 @@
 
             node.tags = halParseTags($("#node-input-tags").val());
 
-            // The one list separates back into its two stores: group membership keeps the shape
-            // the group engine has read since 2.7.0, everything else goes to itemFacts.
+            // The item blocks separate back into two stores: group membership keeps the shape the
+            // group engine has read since 2.7.0, and only the new kinds go to itemFacts. Reading
+            // per block is also what keeps one item from carrying two device classes — there is
+            // one select to read, not a list of rows to reconcile.
             node.groups = [];
             node.itemFacts = [];
-            $("#thing-groups-container").editableList('items').each(function() {
-                var r = $(this);
-                var item  = r.find('.thing-group-item').val();
-                var kind  = r.find('.thing-fact-kind').val();
-                var value = r.find('.thing-group-group').val();
-                if (!item || !value) { return; }
-                if (kind === 'device_class') {
-                    node.itemFacts.push({ item: item, kind: 'device_class', value: value });
-                } else {
-                    node.groups.push({ item: item, group: value });
+            $("#thing-facts-container .thing-fact-item").each(function() {
+                var block = $(this);
+                var item = block.data('item');
+                if (!item) { return; }
+                var cls = block.find('.thing-fact-class').val();
+                if (cls) {
+                    node.itemFacts.push({ item: item, kind: 'device_class', value: cls });
                 }
+                block.find('.thing-fact-group').each(function() {
+                    var g = $(this).val();
+                    if (g) { node.groups.push({ item: item, group: g }); }
+                });
             });
 
             node.topicFilters = [];
