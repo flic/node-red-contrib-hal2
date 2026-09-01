@@ -2,6 +2,14 @@
 A set of nodes to help with basic home automation logic, with an optional MCP server so an AI
 assistant can read device state and control the house.
 
+> **Upgrading to 3.1?** `set_light` no longer switches an undeclared `switch` item. A switch says
+> only that something can be turned on and off — the load could be a lamp or a coffee machine — so
+> a lamp behind a relay now needs `device_class: light` on its item, set under *Items* in the
+> Thing config. Until it has one, `set_light` answers `nothing_to_command` naming what the items
+> are, rather than reporting success and changing nothing. Items whose `ha_type` is already
+> `light`, `dimmer`, `color` or `color temperature` are unaffected, as are `control_device`,
+> `control_group` and every group you have built. See [device class](#device-class--what-an-item-drives).
+>
 > **Upgrading from 2.x?** 3.0.0 changed how the MCP server authenticates: it no longer takes part
 > in OAuth at all, and an access gate now reads the access token and nothing else. If you run the
 > MCP server, read [the breaking-change note](#mcp-server) before deploying — the gates go quiet
