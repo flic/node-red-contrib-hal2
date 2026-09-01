@@ -94,9 +94,24 @@ describe('device_class — what an item drives', function () {
         assert.strictEqual(effectiveDeviceClass({ ha_type: 'switch' }), '');
     });
 
-    it('offers appliance so a plug can say it is explicitly not a light', function () {
+    it('offers appliance and outlet so a plug can say what it is instead of staying silent', function () {
         assert.ok(DEVICE_CLASSES.includes('appliance'));
-        assert.deepStrictEqual(deriveCategories([{ ha_type: 'switch', device_class: 'appliance' }]), []);
+        assert.ok(DEVICE_CLASSES.includes('outlet'));
+        // Both are categories in their own right, with no ha_type implying them, so that the set
+        // is findable — "turn off all the outlets" needs more than each member being classified.
+        assert.deepStrictEqual(
+            deriveCategories([{ ha_type: 'switch', device_class: 'appliance' }]), ['appliance']);
+        assert.deepStrictEqual(
+            deriveCategories([{ ha_type: 'switch', device_class: 'outlet' }]), ['outlet']);
+    });
+
+    it('keeps a declared appliance or outlet out of the lights', function () {
+        const { writesOnOff } = require('../core/mcp-tools');
+        for (const c of ['appliance', 'outlet']) {
+            const item = { ha_type: 'switch', device_class: c };
+            assert.ok(!writesOnOff(item), `set_light must not switch a declared ${c}`);
+            assert.ok(!deriveCategories([item]).includes('light'));
+        }
     });
 
     describe('categories', function () {

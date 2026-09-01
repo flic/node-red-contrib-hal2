@@ -106,12 +106,17 @@ describe('tool exposure follows what a tool can act on', function () {
         assert.ok(itemSatisfies({ ha_type: 'switch', device_class: 'light' }, REQ.set_light));
     });
 
-    it('does not expose control_fan for a relay declared a fan', function () {
-        // The trap this shape exists to avoid: control_fan sends a speed to an `ha_type: fan`
-        // item and can do nothing with a relay, so the declaration must not advertise it. A tool
-        // offered but unable to act is worse than one absent.
-        assert.ok(!itemSatisfies({ ha_type: 'switch', device_class: 'fan' }, REQ.control_fan));
+    it('exposes control_fan for a relay declared a fan, now that it can drive one', function () {
+        assert.ok(itemSatisfies({ ha_type: 'switch', device_class: 'fan' }, REQ.control_fan));
         assert.ok(itemSatisfies({ ha_type: 'fan' }, REQ.control_fan), 'a real fan still counts');
+    });
+
+    it('does not expose a tool for a class it cannot act on', function () {
+        // The shape exists for this: exposure must follow ability, not the mere presence of a
+        // class. control_cover has learned nothing about relays, so a declaration must not
+        // advertise it — a tool offered but unable to act is worse than one absent.
+        assert.ok(!itemSatisfies({ ha_type: 'switch', device_class: 'appliance' }, REQ.control_cover));
+        assert.ok(!itemSatisfies({ ha_type: 'switch', device_class: 'outlet' }, REQ.control_climate));
     });
 
     it('leaves an undeclared switch exposing nothing', function () {
@@ -122,11 +127,36 @@ describe('tool exposure follows what a tool can act on', function () {
     });
 
     it('names only device_class values its tool was taught to act on', function () {
+        // Update this map when a tool learns a class, and only then — the point is that adding a
+        // class here is a claim the tool has a write path for it, as writesOnOff and fanValue are.
+        const taught = { set_light: ['light'], control_fan: ['fan'] };
         for (const [tool, req] of Object.entries(REQ)) {
             for (const c of req.classes || []) {
-                assert.ok(tool === 'set_light' && c === 'light',
+                assert.ok((taught[tool] || []).includes(c),
                     `${tool} claims to act on device_class "${c}" — has it been taught to?`);
             }
         }
+    });
+});
+
+describe('control_fan reaches a fan with one speed', function () {
+    const { fanValue } = require('../core/mcp-tools');
+
+    it('passes the speed straight to a real fan item', function () {
+        assert.strictEqual(fanValue({ ha_type: 'fan' }, 2), 2);
+        assert.strictEqual(fanValue({ ha_type: 'fan' }, 0), 0);
+    });
+
+    it('turns a switch declared a fan on and off — two settings instead of four', function () {
+        const relay = { ha_type: 'switch', device_class: 'fan' };
+        assert.strictEqual(fanValue(relay, 0), false);
+        assert.strictEqual(fanValue(relay, 1), true);
+        assert.strictEqual(fanValue(relay, 3), true);
+    });
+
+    it('leaves alone a switch that is not a fan', function () {
+        assert.strictEqual(fanValue({ ha_type: 'switch' }, 2), undefined);
+        assert.strictEqual(fanValue({ ha_type: 'switch', device_class: 'light' }, 2), undefined);
+        assert.strictEqual(fanValue({ ha_type: 'dimmer' }, 2), undefined);
     });
 });

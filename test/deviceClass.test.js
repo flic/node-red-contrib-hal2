@@ -35,9 +35,18 @@ describe('resources/device-class', function () {
     it('offers only classes something can act on once declared', function () {
         // climate, spa, cover and scene are deliberately absent: their tools dispatch on setpoint,
         // mode, position and scene ha_types, none of which a switch has, so declaring one would
-        // advertise a capability nothing could honour. 'outlet' is absent because it would behave
-        // exactly as 'appliance' does, and two values with one behaviour only split the data.
-        assert.deepStrictEqual(dc.DEVICE_CLASSES, ['light', 'fan', 'appliance']);
+        // advertise a capability nothing could honour.
+        assert.deepStrictEqual(dc.DEVICE_CLASSES, ['light', 'fan', 'outlet', 'appliance']);
+    });
+
+    it('makes a declared class findable as a category', function () {
+        // "Turn off all the outlets" needs the set to be findable, not just each member
+        // classified — so outlet and appliance are categories with no ha_type of their own.
+        const { deriveCategories } = require('../core/mcp-tools');
+        for (const c of dc.DEVICE_CLASSES) {
+            assert.deepStrictEqual(deriveCategories([{ ha_type: 'switch', device_class: c }]), [c],
+                `a switch declared ${c} must report it as a category`);
+        }
     });
 
     it('asks the question only where the ha_type leaves it open', function () {

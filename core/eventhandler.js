@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -1312,10 +1312,10 @@ module.exports = function(RED) {
                         for (const device of matched) {
                             const sent = [];
                             for (const itm of device.items) {
-                                if ((itm.ha_type || '').toLowerCase() === 'fan') {
-                                    node.publishCommand(device.thing_id, itm.item_id, speed);
-                                    sent.push({ item_name: itm.item_name, value: speed });
-                                }
+                                const value = fanValue(itm, speed);
+                                if (value === undefined) { continue; }
+                                node.publishCommand(device.thing_id, itm.item_id, value);
+                                sent.push({ item_name: itm.item_name, value: value });
                             }
                             results.push({ thing_name: device.thing_name, commands: sent });
                         }

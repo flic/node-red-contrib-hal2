@@ -252,12 +252,24 @@ this item present as", and a list you must add a row to first cannot answer it. 
 item, so an item cannot be declared twice.
 
 The control appears only on a **`switch`** item, because that is the only ha_type that leaves the
-question open — a `light`, `dimmer`, `cover` or `fan` item already says what it is. The vocabulary
-is deliberately short: `light`, `fan`, `appliance`. A class is worth offering only where something
-can act on it once declared, and `climate`, `spa`, `cover` and `scene` fail that test — their tools
-dispatch on setpoint, mode, position and scene item types, none of which a relay has, so declaring
-one would advertise a capability nothing could honour. A radiator on a switch is an `appliance`,
-and `control_device` is what commands it.
+question open — a `light`, `dimmer`, `cover` or `fan` item already says what it is.
+
+| class | what it buys |
+|---|---|
+| `light` | `set_light` switches it, and it answers a query for lights |
+| `fan` | `control_fan` drives it — a switch is a fan with two settings instead of four, so speed 0 is off and anything above it is on |
+| `outlet` | a socket whose load changes: a tree in December, a fan in July. Its own class because "turn off all the outlets" needs the set to be findable |
+| `appliance` | a fixed device that is none of the above — the coffee machine says so rather than staying silent |
+
+A class is worth offering only where something can act on it once declared, which is why
+`climate`, `spa`, `cover` and `scene` are absent: their tools dispatch on setpoint, mode, position
+and scene item types, none of which a relay has, so declaring one would advertise a capability
+nothing could honour. A radiator on a switch is an `appliance`, and `control_device` commands it.
+
+`outlet` and `appliance` are categories with no ha_type of their own — nothing about a relay says
+which it is — so a declared one appears in `categories` and answers `get_all_states(ha_type: …)`
+like any other. Tool exposure follows what a tool can actually write, not the mere presence of a
+class, so a declaration never advertises a tool that would then do nothing.
 The vocabulary is the device categories (`light`, `fan`, `cover`, `climate`, `spa`, `scene`) plus
 `appliance` for "explicitly none of these" — a plug on the coffee machine says so, rather than
 staying silent, and the difference between *unclassified* and *classified as not a light* is one

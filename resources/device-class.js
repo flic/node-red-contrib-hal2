@@ -25,26 +25,33 @@
         light   : ['light', 'dimmer'],
         fan     : ['fan'],
         cover   : ['cover'],
-        scene   : ['scene']
+        scene   : ['scene'],
+        // No ha_type implies these — nothing about a relay says which of them it is, which is
+        // the whole reason device_class exists. They are listed so that a declared one becomes a
+        // category and answers a filter like any other: "turn off all the outlets" needs the set
+        // to be findable, not just each member individually classified.
+        outlet    : [],
+        appliance : []
     };
 
     // What a switch may be declared to drive. Deliberately NOT every category: a class is only
     // worth offering where something can act on it once declared.
     //
     //   light      — set_light switches it, and it answers a query for lights.
-    //   fan        — it reads as a fan and stays out of the lights. control_fan cannot set a
-    //                speed on a relay, so it is turned on and off with control_device.
-    //   appliance  — explicitly none of the above. A plug on the coffee machine says so rather
-    //                than staying silent, which is the difference between "not classified yet"
-    //                and "classified, and not a light".
+    //   fan        — control_fan drives it: a switch is a fan with two settings instead of four,
+    //                so speed 0 is off and anything above it is on.
+    //   outlet     — a socket whose load changes: a tree in December, a fan in July. Worth its
+    //                own class rather than folding into appliance, because "turn off all the
+    //                outlets" is a real command and needs the set to be findable.
+    //   appliance  — a fixed device that is none of the above. A plug on the coffee machine says
+    //                so rather than staying silent, which is the difference between "not
+    //                classified yet" and "classified, and not a light".
     //
     // climate, spa, cover and scene are left out on purpose. Their tools dispatch on the setpoint,
     // mode, position and scene ha_types, none of which a switch has, so declaring one would
     // advertise a capability nothing could honour — a radiator on a relay is an appliance, and
-    // control_device is what commands it. 'outlet' is left out for the opposite reason: nothing
-    // would behave differently from 'appliance', and two values with one behaviour only split the
-    // data arbitrarily.
-    var DEVICE_CLASSES = ['light', 'fan', 'appliance'];
+    // control_device is what commands it.
+    var DEVICE_CLASSES = ['light', 'fan', 'outlet', 'appliance'];
 
     // Whether an item's ha_type leaves the question open, and so whether it is worth asking.
     // A `light`, `dimmer`, `cover` or `fan` item says what it is; a `switch` says only that

@@ -328,7 +328,7 @@ const {
 // nothing with a relay declared `fan`, so that declaration must NOT advertise it — a tool
 // offered but unable to act is worse than one absent.
 const TOOL_HARDWARE_REQUIREMENTS = {
-    control_fan     : { haTypes: HA_TYPE_GROUPS.fan,     classes: [] },
+    control_fan     : { haTypes: HA_TYPE_GROUPS.fan,     classes: ['fan'] },
     control_cover   : { haTypes: HA_TYPE_GROUPS.cover,   classes: [] },
     control_spa     : { haTypes: HA_TYPE_GROUPS.spa,     classes: [] },
     control_climate : { haTypes: HA_TYPE_GROUPS.climate, classes: [] },
@@ -418,6 +418,20 @@ function nothingToCommand(devices, need) {
     };
 }
 
+// What a fan item should receive for a requested speed.
+//
+// An `ha_type: fan` item takes the speed as given. A switch declared a fan is a fan with two
+// settings instead of four — 0 is off, anything above it is on — so it gets a boolean. Treating
+// the tool as unable to reach a relay was a gap, not a constraint: the fan is no less a fan for
+// having one speed. Returns undefined when the item is not a fan control at all, which includes
+// a switch declared something else.
+function fanValue(item, speed) {
+    const ht = String((item && item.ha_type) || '').toLowerCase();
+    if (ht === 'fan') { return speed; }
+    if (ht === 'switch' && effectiveDeviceClass(item) === 'fan') { return speed > 0; }
+    return undefined;
+}
+
 function deriveCategories(items) {
     const present = new Set();
     for (const i of items) {
@@ -502,5 +516,6 @@ module.exports = {
     writesOnOff,
     nothingToCommand,
     itemSatisfies,
+    fanValue,
     deriveCategories
 };
