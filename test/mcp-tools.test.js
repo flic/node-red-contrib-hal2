@@ -206,3 +206,68 @@ describe('device_class — what an item drives', function () {
         });
     });
 });
+
+describe('presenceIdentity — telling a phone from its owner', function () {
+    const { presenceIdentity } = require('../core/mcp-tools');
+
+    // The live shapes this was reported against.
+    const PHONE = { notes: 'This is a device, not a person.  ', tags: ['device'] };
+    const PHONE_ITEM = { notes: 'True while any node still hears the phone.', tags: [] };
+    const PERSON = { notes: '', tags: ['person'] };
+    const PERSON_ITEM = { notes: '', tags: [] };
+
+    it('carries the thing tags that distinguish the two', function () {
+        assert.deepStrictEqual(presenceIdentity(PHONE, PHONE_ITEM).tags, ['device']);
+        assert.deepStrictEqual(presenceIdentity(PERSON, PERSON_ITEM).tags, ['person']);
+    });
+
+    it('carries the thing notes, which say what the entry is', function () {
+        assert.strictEqual(presenceIdentity(PHONE, PHONE_ITEM).notes,
+            'This is a device, not a person.');
+    });
+
+    it('keeps the item note apart, since it describes the item and not the entity', function () {
+        // It comes from the shared ThingType, so it is identical for every phone and says nothing
+        // about which entity this is. Forwarding it as the entry's notes — as this did — gave an
+        // assistant a sentence about signal handling and nothing about it being a phone.
+        const out = presenceIdentity(PHONE, PHONE_ITEM);
+        assert.strictEqual(out.presence_item_notes, 'True while any node still hears the phone.');
+        assert.notStrictEqual(out.notes, out.presence_item_notes);
+    });
+
+    it('unions the tags, since both label the same entry', function () {
+        const out = presenceIdentity({ tags: ['person'] }, { tags: ['tracked', 'person'] });
+        assert.deepStrictEqual(out.tags, ['person', 'tracked'], 'thing first, no duplicates');
+    });
+
+    it('omits what is empty rather than reporting blanks', function () {
+        assert.deepStrictEqual(presenceIdentity({ notes: '   ', tags: [] }, { notes: '', tags: [] }), {});
+        assert.deepStrictEqual(presenceIdentity(undefined, undefined), {});
+    });
+});
+
+describe('TOOL_HARDWARE_REQUIREMENTS shape', function () {
+    const { TOOL_HARDWARE_REQUIREMENTS: REQ, HA_TYPE_GROUPS } = require('../core/mcp-tools');
+
+    // scripts/gen-api-docs.js reads these to write the "Requires hardware" line, and it is not
+    // run by `npm test` — so when this table changed from an array of ha_types to
+    // { haTypes, classes }, the generator crashed and nothing said so until someone tried to
+    // rebuild the docs. This pins the shape the generator depends on.
+    it('gives every tool a haTypes array and a classes array', function () {
+        for (const [tool, req] of Object.entries(REQ)) {
+            assert.ok(Array.isArray(req.haTypes), `${tool}.haTypes must be an array`);
+            assert.ok(Array.isArray(req.classes), `${tool}.classes must be an array`);
+            assert.ok(req.haTypes.length, `${tool} requires no ha_type at all`);
+        }
+    });
+
+    it('requires only ha_types that some category actually uses', function () {
+        const known = new Set(Object.values(HA_TYPE_GROUPS).flat().map(t => t.toLowerCase()));
+        for (const [tool, req] of Object.entries(REQ)) {
+            for (const t of req.haTypes) {
+                assert.ok(known.has(t.toLowerCase()),
+                    `${tool} requires "${t}", which belongs to no category`);
+            }
+        }
+    });
+});

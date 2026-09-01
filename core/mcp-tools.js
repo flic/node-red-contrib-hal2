@@ -204,7 +204,9 @@ const MCP_TOOLS = [
                       'home_for_minutes/away_for_minutes (duration in current state). When home, also includes ' +
                       'room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up ' +
                       'tools (get_history, set_light, etc.) can be called without an extra lookup. ' +
-                      'A summary block provides aggregated counts and name lists.',
+                      'Entries carry the notes and tags of the thing they describe — this is how a tracked ' +
+                      'phone is told apart from the person carrying it, so read them before treating an ' +
+                      'entry as a person. A summary block provides aggregated counts and name lists.',
         inputSchema : { type: 'object', properties: {} }
     },
     {
@@ -432,6 +434,30 @@ function fanValue(item, speed) {
     return undefined;
 }
 
+// Who or what a presence entry is about.
+//
+// get_presence flattens a Thing and its presence item into one entry, so it has to choose whose
+// notes and tags those of the entry are. It forwarded the item's, which come from the shared
+// ThingType — identical for every phone, and describing how the item behaves ("true while any
+// node still hears the phone") rather than what the entity is. The Thing's are the ones that tell
+// a phone apart from the person carrying it: tags ['device'] against ['person'].
+//
+// So the Thing's notes identify the entry, tags are the union of both since both are labels on
+// it, and the item's notes stay under a name that says they are about the item.
+function presenceIdentity(device, presenceItem) {
+    const out = {};
+    const thingNotes = ((device && device.notes) || '').trim();
+    if (thingNotes) { out.notes = thingNotes; }
+    const tags = [...new Set([
+        ...((device && device.tags) || []),
+        ...((presenceItem && presenceItem.tags) || [])
+    ])];
+    if (tags.length) { out.tags = tags; }
+    const itemNotes = ((presenceItem && presenceItem.notes) || '').trim();
+    if (itemNotes) { out.presence_item_notes = itemNotes; }
+    return out;
+}
+
 function deriveCategories(items) {
     const present = new Set();
     for (const i of items) {
@@ -517,5 +543,6 @@ module.exports = {
     nothingToCommand,
     itemSatisfies,
     fanValue,
+    presenceIdentity,
     deriveCategories
 };

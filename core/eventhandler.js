@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -1262,8 +1262,7 @@ module.exports = function(RED) {
                                 entry.room_item_id        = roomItem.item_id;
                             }
 
-                            if (presenceItem.notes) entry.notes = presenceItem.notes;
-                            if (Array.isArray(presenceItem.tags) && presenceItem.tags.length) entry.tags = presenceItem.tags;
+                            Object.assign(entry, presenceIdentity(device, presenceItem));
 
                             people.push(entry);
                         }

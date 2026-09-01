@@ -141,7 +141,7 @@ Send a command to a specific device item. Use thing_id and item_id from get_all_
 
 Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensitive). Speed 0 = off, 1 = low, 2 = medium, 3 = high. Current speed is available via get_all_states.
 
-> **Requires hardware:** at least one item of type `fan` at this location.
+> **Requires hardware:** at least one item of type `fan` at this location, or one declared `fan`.
 
 **Parameters**
 
@@ -264,7 +264,7 @@ Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, cas
 
 ### `get_presence` 👁 (read)
 
-Returns presence information for all people/persons tracked in the system. Shows who is home, who is away, and which room each person is in. Use this to answer questions like "is anyone home?", "where is Alice?", "who is home right now?", "when did Bob come home?", "how long has Alice been away?". Each person includes home_since/away_since (ISO timestamp of last change) and home_for_minutes/away_for_minutes (duration in current state). When home, also includes room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up tools (get_history, set_light, etc.) can be called without an extra lookup. A summary block provides aggregated counts and name lists.
+Returns presence information for all people/persons tracked in the system. Shows who is home, who is away, and which room each person is in. Use this to answer questions like "is anyone home?", "where is Alice?", "who is home right now?", "when did Bob come home?", "how long has Alice been away?". Each person includes home_since/away_since (ISO timestamp of last change) and home_for_minutes/away_for_minutes (duration in current state). When home, also includes room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up tools (get_history, set_light, etc.) can be called without an extra lookup. Entries carry the notes and tags of the thing they describe — this is how a tracked phone is told apart from the person carrying it, so read them before treating an entry as a person. A summary block provides aggregated counts and name lists.
 
 **Parameters**
 
@@ -334,7 +334,7 @@ Sends one command to every member of a group that can accept one — one call in
 
 Control a specific light or lamp. Identify the device by thing_id OR thing_name. thing_name supports partial, case-insensitive match against the thing name OR against item labels (the label field in get_all_states items). Labels are friendly names assigned per-device, e.g. a double switch named "Kitchen Double Switch" may have items labelled "Kitchen Ceiling Light" and "Kitchen Counter Light" — searching "counter" will target only that relay. You can turn it on/off and/or set brightness/color_temp/color in one call.
 
-> **Requires hardware:** at least one item of type `light`, `dimmer` at this location.
+> **Requires hardware:** at least one item of type `light`, `dimmer` at this location, or one declared `light`.
 
 **Parameters**
 

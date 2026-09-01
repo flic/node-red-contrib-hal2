@@ -126,6 +126,17 @@ describe('tool exposure follows what a tool can act on', function () {
         }
     });
 
+    it('keeps the shape scripts/gen-api-docs.js reads', function () {
+        // The generator renders the requirement into docs/API.md. Changing this from an array of
+        // ha_types to {haTypes, classes} broke it, and nothing noticed: npm test does not run the
+        // generator, and the run that should have caught it had its stderr redirected away, so an
+        // unchanged API.md read as "in sync" when it was a crash.
+        for (const [tool, req] of Object.entries(REQ)) {
+            assert.ok(Array.isArray(req.haTypes), `${tool}.haTypes must be an array`);
+            assert.ok(Array.isArray(req.classes), `${tool}.classes must be an array`);
+        }
+    });
+
     it('names only device_class values its tool was taught to act on', function () {
         // Update this map when a tool learns a class, and only then — the point is that adding a
         // class here is a claim the tool has a write path for it, as writesOnOff and fanValue are.

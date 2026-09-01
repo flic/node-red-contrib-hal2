@@ -52,7 +52,16 @@ function section(tool, isAdmin) {
     let md = `### \`${tool.name}\` ${badge}\n\n`;
     md += tool.description.trim() + '\n\n';
     const hw = TOOL_HARDWARE_REQUIREMENTS[tool.name];
-    if (hw) md += `> **Requires hardware:** at least one item of type ${hw.map(t => '`' + t + '`').join(', ')} at this location.\n\n`;
+    if (hw) {
+        const quoted = xs => xs.map(t => '`' + t + '`').join(', ');
+        md += `> **Requires hardware:** at least one item of type ${quoted(hw.haTypes)} at this location`;
+        // A tool that reads device_class can also be satisfied by a declaration, which is worth
+        // saying: it is the difference between "you have no lamps" and "your lamps are behind
+        // relays and nobody has said so".
+        md += (hw.classes || []).length
+            ? `, or one declared ${quoted(hw.classes)}.\n\n`
+            : `.\n\n`;
+    }
     if (isAdmin) md += `> Exposed through hal2Api only when **Allow admin tools** is enabled on the node.\n\n`;
     md += '**Parameters**\n\n' + paramsTable(tool.inputSchema) + '\n';
     md += '**Example**\n\n```json\n' + exampleRequest(tool) + '\n```\n\n';
