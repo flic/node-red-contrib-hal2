@@ -243,6 +243,22 @@ describe('core/thing.html — the Items section', function () {
         });
     });
 
+    it('marks a membership that the declared class contradicts, and keeps it', function () {
+        // Vardagsrum Dubbelbrytare: On1 drives the socket and was in "all lights" anyway. Declaring
+        // it an outlet must surface that, not delete it — the row is the only place it shows.
+        const node = {
+            groups: [{ item: 'on1', group: 'g1' }],
+            itemFacts: [{ item: 'on1', kind: 'device_class', value: 'outlet' }]
+        };
+        const { def } = run({
+            items: ITEMS, groups: GROUPS, node,
+            overrides: { halGroupAccepts: (g, i, c) => (c ? c === g : true) }
+        });
+        def.oneditsave.call(node);
+        assert.deepStrictEqual(plain(node.groups), [{ item: 'on1', group: 'g1' }],
+            'the contradiction must be visible, not quietly removed');
+    });
+
     describe('a membership whose group no longer fits', function () {
         // The rule is about to be tightened, which is exactly what turns a stored pairing
         // incompatible. The row must keep it rather than delete it on the next Done.

@@ -590,7 +590,17 @@
                                     var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
                                     if (it) { ht = it.haType || ''; }
                                 }
-                                list.push(ht);
+                                // The member's declared class, where it has one — the group type
+                                // offered has to be one every member can honour, and a declared
+                                // socket cannot honour a light group however its ha_type reads.
+                                var cls = '';
+                                if (Array.isArray(thing.itemFacts)) {
+                                    var fact = thing.itemFacts.find(function(x) {
+                                        return x && x.kind === 'device_class' && x.item === thing.groups[g].item;
+                                    });
+                                    if (fact) { cls = fact.value || ''; }
+                                }
+                                list.push({ haType: ht, deviceClass: cls });
                             }
                         }
                         return list;
@@ -601,7 +611,7 @@
                         var allowed;
                         if (memberHaTypes.length === 0) { allowed = true; }   // empty group: no restriction
                         else if (h.v === 'other') { allowed = true; }         // 'other' accepts anything
-                        else { allowed = memberHaTypes.every(function(ht) { return halGroupAccepts(h.v, ht); }); }
+                        else { allowed = memberHaTypes.every(function(m) { return halGroupAccepts(h.v, m.haType, m.deviceClass); }); }
                         if (allowed || h.v === currentHaType) {
                             haTypeProperty.append($("<option></option>").val(h.v).text(h.t));
                         }

@@ -288,6 +288,13 @@ so a dimmer keeps its brightness. What changes is discovery — `get_all_states`
 `categories`, the `ha_type: "light"` filter matches a declared light behind a switch, and
 `set_light` is offered at a location whose only lamps sit behind relays.
 
+A declared class also decides which groups an item may join: a `switch` driving a socket looks
+identical to one driving a lamp from the protocol side, so before this it sat in "all lights" and
+was cut whenever the lights went out. Once declared, the class is what a group's contract is
+matched against, and an existing membership it contradicts is marked in the row rather than
+removed. The group engine itself still commands whatever is stored — a group is a curated list, and
+the editor is where the contradiction is caught.
+
 A group's type is its command contract, and `device_class` is what let it become one. A `light`
 group takes a boolean and holds On/Off items; a `dimmer` group takes 0–100 and holds brightness
 items. A dimmable lamp belongs to both — through its On item and its brightness item respectively.

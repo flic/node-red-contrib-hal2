@@ -87,6 +87,18 @@ describe('hal.js halGroupAccepts', function () {
         assert.ok(!halGroupAccepts('light', ''), 'an untyped item is not a wildcard any more');
     });
 
+    it('matches a declared class rather than the ha_type it hides behind', function () {
+        // The case this was added for: a switch driving a socket looks identical to one driving a
+        // lamp from the protocol side, so it sat in "all lights" and was cut whenever the lights
+        // went out. Once declared, the class is what the group's contract is matched against.
+        assert.ok(!halGroupAccepts('light', 'switch', 'outlet'), 'a socket is not a light');
+        assert.ok(!halGroupAccepts('light', 'switch', 'appliance'));
+        assert.ok(!halGroupAccepts('light', 'switch', 'fan'));
+        assert.ok(halGroupAccepts('light', 'switch', 'light'), 'a declared lamp still fits');
+        assert.ok(halGroupAccepts('light', 'switch'), 'an undeclared switch is unchanged');
+        assert.ok(halGroupAccepts('other', 'switch', 'outlet'), 'a mixed group still takes it');
+    });
+
     it('refuses unrelated families', function () {
         assert.ok(!halGroupAccepts('light', 'motion'));
         assert.ok(!halGroupAccepts('temperature', 'presence'));

@@ -382,7 +382,15 @@
                         var c = hal2DeviceClass.countsAs(classSel ? classSel.val() : declared, haType);
                         counts.text(c ? 'counts as ' + c : '');
                     }
-                    if (classSel) { classSel.change(paintCounts); }
+                    if (classSel) {
+                        classSel.change(function() {
+                            paintCounts();
+                            // A class change can make a membership contradict its group — declare a
+                            // socket and "all lights" no longer accepts it. Redraw the rows so the
+                            // marking appears now, keeping whatever each row currently holds.
+                            if (typeof repaintGroups === 'function') { repaintGroups(); }
+                        });
+                    }
                     paintCounts();
 
                     var body = $('<div/>', {
@@ -393,7 +401,10 @@
                     function addGroupRow(selected) {
                         var row = $('<div/>', { style: "margin-top:2px; white-space:nowrap;" }).appendTo(groupRows);
                         var sel = $('<select/>', { class: "thing-fact-group", style: "width:calc(100% - 30px);" }).appendTo(row);
-                        var compatible = groups.filter(function(g) { return halGroupAccepts(g.haType, haType); });
+                        // The declared class, live from the control, so changing it re-evaluates
+                        // straight away rather than at the next time the dialog is opened.
+                        var cls = classSel ? classSel.val() : declared;
+                        var compatible = groups.filter(function(g) { return halGroupAccepts(g.haType, haType, cls); });
 
                         // A stored membership whose group no longer accepts this item has to stay
                         // in the list, selected and marked. Leave it out and .val() finds nothing
@@ -433,6 +444,12 @@
                     }
 
                     var groupRows = $('<div/>').appendTo(body);
+                    function repaintGroups() {
+                        var held = [];
+                        groupRows.find('.thing-fact-group').each(function() { held.push($(this).val()); });
+                        groupRows.empty();
+                        held.forEach(function(v) { addGroupRow(v); });
+                    }
                     mine.forEach(function(m) { addGroupRow(m.group); });
                     $('<a/>', { href: "#", style: "font-size:0.85em;" })
                         .text('+ Add group')

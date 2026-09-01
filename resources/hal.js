@@ -364,7 +364,8 @@ function halHaTypeFamily(haType) {
 // Can an item of `itemHaType` be a member of a group whose type is `groupHaType`?
 // A group's type is its command contract, and a member must be able to honour it:
 //   - a mixed group ('other', or none of its own) accepts anything;
-//   - otherwise the families must match — switch ≡ light = On/Off.
+//   - otherwise the families must match — switch ≡ light = On/Off — and where the item carries a
+//     declared device_class, that is what is matched, not its ha_type.
 //
 // Two older allowances are gone. An untyped item was a wildcard that could join any typed
 // group, and a dimmer could join an On/Off group. Both existed because there was no way to
@@ -381,10 +382,16 @@ function halHaTypeFamily(haType) {
 // the type offered to a group. The runtime never rechecks, so tightening this cannot drop a
 // stored membership; it stops offering the combination. An existing pairing that no longer
 // fits is kept and marked in the row rather than silently deleted (see core/thing.html).
-function halGroupAccepts(groupHaType, itemHaType) {
+function halGroupAccepts(groupHaType, itemHaType, deviceClass) {
     // A group with no type of its own is the mixed one, as the editor already treats it.
     if (!groupHaType || groupHaType === 'other') { return true; }
-    return halHaTypeFamily(groupHaType) === halHaTypeFamily(itemHaType);
+    // A declared device_class is what the item IS; its ha_type says only how to speak to it. A
+    // switch driving a socket is not a light however identical it looks from the protocol side,
+    // so once declared the class is what the group's contract is matched against. Without this a
+    // socket sits happily in "all lights" and is cut every time the lights go out — found by
+    // cross-checking the two by hand, which is not a way to find it.
+    var itemFam = halHaTypeFamily(deviceClass || itemHaType);
+    return halHaTypeFamily(groupHaType) === itemFam;
 }
 
 function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {
