@@ -268,6 +268,14 @@ so a dimmer keeps its brightness. What changes is discovery — `get_all_states`
 `categories`, the `ha_type: "light"` filter matches a declared light behind a switch, and
 `set_light` is offered at a location whose only lamps sit behind relays.
 
+A group's type is its command contract, and `device_class` is what let it become one. A `light`
+group takes a boolean and holds On/Off items; a `dimmer` group takes 0–100 and holds brightness
+items. A dimmable lamp belongs to both — through its On item and its brightness item respectively.
+Two older allowances are gone with this: an untyped item is no longer a wildcard that could join
+any typed group, and a dimmer can no longer join an On/Off group. Both existed only because there
+was no way to say what an item was for. An existing membership that no longer fits is kept and
+marked in the row rather than dropped, so tightening the rule cannot delete data quietly.
+
 > **It also stops `set_light` writing past the answer.** On a Thing with any class declared,
 > `set_light` writes only to its lights. Without that, a dual relay takes the command on every
 > switch it owns — turning the ceiling lamp off and cutting the socket beside it. A Thing with

@@ -13,7 +13,7 @@ sandbox.self = sandbox;
 sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'resources', 'hal.js'), 'utf8'), sandbox);
-const { halNumericOperator } = sandbox;
+const { halNumericOperator, halGroupAccepts, halHaTypeFamily } = sandbox;
 
 describe('hal.js halNumericOperator', function () {
     it('claims the comparisons that can only mean a number', function () {
@@ -56,5 +56,45 @@ describe('hal.js halParseTags', function () {
 
     it('accepts an array back unchanged, so a stored value round-trips', function () {
         assert.deepStrictEqual(tags(['a', ' b ', '']), ['a', 'b']);
+    });
+});
+
+describe('hal.js halGroupAccepts', function () {
+    // A group's type is its command contract: a light group is commanded with a boolean, a
+    // dimmer group with 0–100. The rule decides what the editor offers, and it is the only
+    // place that decides it — the runtime fans a command out to whatever is stored.
+    it('takes a member of the same family', function () {
+        assert.ok(halGroupAccepts('light', 'light'));
+        assert.ok(halGroupAccepts('light', 'switch'), 'switch and light are one On/Off family');
+        assert.ok(halGroupAccepts('dimmer', 'dimmer'));
+        assert.ok(halGroupAccepts('motion', 'motion'));
+    });
+
+    it('refuses a dimmer in an On/Off group', function () {
+        // Allowed once, so a dimmable lamp could reach "all lights" through its brightness
+        // item. With device_class the lamp's On item carries that instead, and the group goes
+        // back to taking one kind of value.
+        assert.ok(!halGroupAccepts('light', 'dimmer'));
+    });
+
+    it('still refuses an On/Off item in a dimmer group', function () {
+        assert.ok(!halGroupAccepts('dimmer', 'light'), 'an On/Off device cannot honour a level');
+    });
+
+    it('lets an untyped item into a mixed group only', function () {
+        assert.ok(halGroupAccepts('other', ''));
+        assert.ok(halGroupAccepts('', ''), 'a group with no type of its own is the mixed one');
+        assert.ok(!halGroupAccepts('light', ''), 'an untyped item is not a wildcard any more');
+    });
+
+    it('refuses unrelated families', function () {
+        assert.ok(!halGroupAccepts('light', 'motion'));
+        assert.ok(!halGroupAccepts('temperature', 'presence'));
+    });
+
+    it('folds switch and light into one family and leaves the rest alone', function () {
+        assert.strictEqual(halHaTypeFamily('switch'), 'onoff');
+        assert.strictEqual(halHaTypeFamily('light'), 'onoff');
+        assert.strictEqual(halHaTypeFamily('dimmer'), 'dimmer');
     });
 });

@@ -362,22 +362,29 @@ function halHaTypeFamily(haType) {
 }
 
 // Can an item of `itemHaType` be a member of a group whose type is `groupHaType`?
-// Compatibility is DIRECTIONAL — the member must be able to honour the group's
-// command contract:
-//   - an 'other' (mixed) group accepts anything;
-//   - an untyped item ('') is a wildcard (membership is the user's responsibility);
-//   - otherwise the families must match (switch ≡ light = On/Off), EXCEPT that a
-//     dimmable item (dimmer family) may also join an On/Off group — turning a dimmer
-//     off is well-defined. The reverse does NOT hold: a switch/light cannot join a
-//     Dimmer group, because an On/Off device can't honour a 0–100 level.
+// A group's type is its command contract, and a member must be able to honour it:
+//   - a mixed group ('other', or none of its own) accepts anything;
+//   - otherwise the families must match — switch ≡ light = On/Off.
+//
+// Two older allowances are gone. An untyped item was a wildcard that could join any typed
+// group, and a dimmer could join an On/Off group. Both existed because there was no way to
+// say what an item was for: a dimmable lamp's On item was commonly left untyped, so the lamp
+// could only be joined to "all lights" through its brightness item, which forced On/Off
+// groups to accept dimmers, which forced every dimmer egress to branch on typeof payload.
+// One empty field at the bottom, three workarounds stacked on it.
+//
+// device_class is that missing layer, so the workarounds come out: type the On item, give the
+// light group its On items and the dimmer group its brightness items, and each group takes one
+// kind of value. An untyped item now fits only a mixed group, which is what it always meant.
+//
+// Only the editor asks — thing.html for the groups offered to an item, eventhandler.html for
+// the type offered to a group. The runtime never rechecks, so tightening this cannot drop a
+// stored membership; it stops offering the combination. An existing pairing that no longer
+// fits is kept and marked in the row rather than silently deleted (see core/thing.html).
 function halGroupAccepts(groupHaType, itemHaType) {
-    if (groupHaType === 'other') { return true; }
-    if (!itemHaType) { return true; }
-    var gFam = halHaTypeFamily(groupHaType);
-    var iFam = halHaTypeFamily(itemHaType);
-    if (iFam === gFam) { return true; }
-    if (gFam === 'onoff' && iFam === 'dimmer') { return true; }
-    return false;
+    // A group with no type of its own is the mixed one, as the editor already treats it.
+    if (!groupHaType || groupHaType === 'other') { return true; }
+    return halHaTypeFamily(groupHaType) === halHaTypeFamily(itemHaType);
 }
 
 function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {
