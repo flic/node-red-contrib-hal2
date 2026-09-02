@@ -425,7 +425,8 @@ function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=fa
     return thingTypeList;
 }
 
-// The rooms registry on the Event handler, sorted by name. Mirrors halGetGroups, minus the
+// The rooms registry on the Event handler, in the order it is kept there. Mirrors
+// halGetGroups, minus the
 // legacy fold-in and the filters — rooms are new, so there is no older shape to surface.
 // Returns [{ id, name, notes }].
 function halGetRooms(RED, eventHandlerId) {
@@ -442,11 +443,8 @@ function halGetRooms(RED, eventHandlerId) {
             }
         });
     }
-    rooms.sort(function (a, b) {
-        var A = String((a && a.name) || '').toUpperCase();
-        var B = String((b && b.name) || '').toUpperCase();
-        return (A < B) ? -1 : (A > B) ? 1 : 0;
-    });
+    // Registry order, not alphabetical: the list is sortable in the editor, so the order it is
+    // in IS the answer. Sorting here would quietly throw that away every time it was read.
     return rooms;
 }
 

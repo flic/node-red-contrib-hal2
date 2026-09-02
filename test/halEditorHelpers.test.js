@@ -142,7 +142,9 @@ describe('hal.js halThingLabel', function () {
         assert.deepStrictEqual(thing, { name: 'Taklampa', room: 'r1', eventHandler: 'eh1' });
     });
 
-    it('sorts rooms by name, so a dropdown is scannable', function () {
-        assert.deepStrictEqual(halGetRooms(RED, 'eh1').map(r => r.name), ['Kontor', 'Sovrum']);
+    it('keeps the registry order, because the list is sortable in the editor', function () {
+        // Sorting here would discard the arrangement every time it was read, which is the one
+        // thing a sortable list must not do.
+        assert.deepStrictEqual(halGetRooms(RED, 'eh1').map(r => r.name), ['Sovrum', 'Kontor']);
     });
 });

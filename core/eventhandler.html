@@ -465,13 +465,16 @@
                     $('<input/>', { type: 'text', class: "node-config-eh-room-name-property",
                                     placeholder: "e.g. Kontor", style: "width:calc(45% - 60px);" })
                         .appendTo(row).val(room.name || '');
-                    $('<label/>', { style: "width:60px; margin:0 0 0 10px;" }).text('Notes').appendTo(row);
+                    $('<label/>', { style: "width:60px; margin:0 0 0 10px;" })
+                        .html('<i class="fa fa-file"></i> Notes').appendTo(row);
                     $('<input/>', { type: 'text', class: "node-config-eh-room-notes-property",
                                     style: "width:calc(55% - 80px);" })
                         .appendTo(row).val(room.notes || '');
                 },
                 removable: true,
-                sortable: false,
+                // Sortable, unlike the groups list: rooms are read as a list by a human choosing
+                // one, and the order they appear in the dropdown is this one.
+                sortable: true,
                 addButton: "Add room"
             });
 
