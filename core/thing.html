@@ -123,7 +123,14 @@
             // "[Kontor] Taklampa" where a room is set — the brackets say the string was assembled
             // from two fields rather than typed, which is the whole point of moving the room out
             // of the name. Unroomed Things read exactly as they always have.
-            return halThingLabel(RED, this) || this.name || "thing";
+            // Guarded: node HTML and resources/hal.js are both fetched at page load, so an editor
+            // tab left open across an upgrade can hold one without the other. Unguarded, the
+            // missing helper throws inside label() and the node renders without one at all —
+            // which looks exactly like the room having been ignored.
+            if (typeof halThingLabel === 'function') {
+                return halThingLabel(RED, this) || this.name || "thing";
+            }
+            return this.name || "thing";
         },
         paletteLabel: "thing",
         oneditprepare: function () {
