@@ -268,6 +268,10 @@ rather than typed by someone.
 > it. That is a fallback tried only after the bare name finds nothing, so it can never turn a
 > refusal into a guess.
 
+A Thing's name has to be unique **within its room**, not across the house — two ceiling lamps may
+both be `Golvspot` as long as they are in different rooms, which is the rename rooms exist to make
+possible. Two Things with no room still collide: there the name is all there is.
+
 `get_presence` reports `current_room` — where a person is *now*, which is not the same thing as the
 room a device was installed in, and no longer shares a key with it.
 

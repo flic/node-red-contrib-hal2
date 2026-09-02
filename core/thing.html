@@ -91,14 +91,26 @@
                 type: "hal2ThingType",
                 required: true
             },
-            name:           { 
-                required: true, 
-                validate:function(v) {
-                    //Check for name collisions
-                    const thingsList = RED.nodes.filterNodes({type: "hal2Thing"});
-                    if(thingsList.length===0){ return true; }
-                    for (var d in thingsList) {
-                        if (v == thingsList[d].name && thingsList[d].id !== this.id) { return false; }
+            name:           {
+                required: true,
+                // A name has to be unique within its ROOM, not across the house. Two ceiling
+                // lamps may both be "Golvspot" as long as they are in different rooms — that is
+                // the whole point of moving the room out of the name, and checking the name alone
+                // refused the rename at exactly the moment it was supposed to become possible.
+                // Two Things with no room still collide: there the name is all there is.
+                validate: function (v) {
+                    // The room selected in the open dialog, not the saved one — the room is
+                    // chosen and the name shortened in the same sitting, so reading this.room
+                    // would judge the new name against the old room. The marker attribute pins
+                    // the open form to *this* node: every Thing shares one template, and matching
+                    // on the element id alone would let one Thing's open dialog decide another's
+                    // validity during deploy validation.
+                    var open = $("#node-input-room").attr('data-hal2-node') === this.id;
+                    var room = open ? ($("#node-input-room").val() || '') : (this.room || '');
+                    var things = RED.nodes.filterNodes({ type: "hal2Thing" });
+                    for (var d in things) {
+                        if (things[d].id === this.id) { continue; }
+                        if (v === things[d].name && (things[d].room || '') === room) { return false; }
                     }
                     return true;
                 }
@@ -493,6 +505,8 @@
                     sel.append($("<option></option>").val(r.id).text(r.name));
                 });
                 sel.val(node.room || '');
+                // Pins the open form to this node, so validate knows the selection is ours.
+                sel.attr('data-hal2-node', node.id);
             }
             renderRooms();
             $("#node-input-eventHandler").change(renderRooms);
