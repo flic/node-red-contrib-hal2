@@ -117,7 +117,7 @@ describe('hal2MCPServer callTool (embedded)', function () {
             listTools: () => [{ name: 'get_state', description: 'b', inputSchema: {} }]
         });
         const { node } = loadServer({ id: 's2', mode: 'embedded' }, eh);
-        const out = await node.callTool('get_state', { thing_id: 'x' }, null, {});
+        const out = await node.callTool('get_state', { id: 'x' }, null, {});
         assert.strictEqual(out.text, '"built-in"');
         assert.strictEqual(calls[0][0], 'get_state');
         assert.deepStrictEqual(node.listTools().map(t => t.name), ['get_state']);

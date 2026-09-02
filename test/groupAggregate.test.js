@@ -317,16 +317,16 @@ describe('group-aggregate functionsForHaType', function () {
 
 describe('group-aggregate valueSource', function () {
     // Which member the value came from, for the functions where one member owns it.
-    const m = (state, updatedAt, name) => ({ state, updatedAt, thing_name: name });
+    const m = (state, updatedAt, name) => ({ state, updatedAt, name: name });
     const TEMPS = [m(24.48, 100, 'Laundry'), m(26.87, 300, 'Kitchen'), m(25.44, 200, 'Maja')];
 
     it('names the extreme for min and max', function () {
-        assert.strictEqual(ga.valueSource('min', TEMPS).thing_name, 'Laundry');
-        assert.strictEqual(ga.valueSource('max', TEMPS).thing_name, 'Kitchen');
+        assert.strictEqual(ga.valueSource('min', TEMPS).name, 'Laundry');
+        assert.strictEqual(ga.valueSource('max', TEMPS).name, 'Kitchen');
     });
 
     it('names the most recently updated member for latest', function () {
-        assert.strictEqual(ga.valueSource('latest', TEMPS).thing_name, 'Kitchen');
+        assert.strictEqual(ga.valueSource('latest', TEMPS).name, 'Kitchen');
     });
 
     it('names nobody where no member owns the value', function () {
@@ -350,7 +350,7 @@ describe('group-aggregate valueSource', function () {
 
     it('breaks a tie by member order, so repeated reads agree', function () {
         const tied = [m(5, 1, 'First'), m(5, 2, 'Second')];
-        assert.strictEqual(ga.valueSource('min', tied).thing_name, 'First');
-        assert.strictEqual(ga.valueSource('min', tied).thing_name, 'First');
+        assert.strictEqual(ga.valueSource('min', tied).name, 'First');
+        assert.strictEqual(ga.valueSource('min', tied).name, 'First');
     });
 });

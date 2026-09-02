@@ -75,7 +75,7 @@ describe('group-tools groupEntry', function () {
     });
 
     it('names whose value it is, where one member owns it', function () {
-        const laundry = { thing_id: 't1', thing_name: 'Tvättstuga Sensor', item_id: 'i', item_name: 'Temperature' };
+        const laundry = { id: 't1', name: 'Tvättstuga Sensor', item_id: 'i', item_name: 'Temperature' };
         const e = gt.groupEntry(SENSORS, undefined, msToIso,
             { value: 24.48, live: 9, members: 9, fn: 'min', source: laundry });
         assert.deepStrictEqual(e.source, laundry, '"the coldest room is the laundry"');
@@ -91,8 +91,8 @@ describe('group-tools groupEntry', function () {
     it('names who moved it last, separately from whose value it is', function () {
         // The two answer different questions and only coincide for latest: the member that
         // reported most recently is rarely the one holding the minimum.
-        const laundry = { thing_id: 't1', thing_name: 'Tvättstuga Sensor' };
-        const maja    = { thing_id: 't2', thing_name: 'Maja Sensor' };
+        const laundry = { id: 't1', name: 'Tvättstuga Sensor' };
+        const maja    = { id: 't2', name: 'Maja Sensor' };
         const e = gt.groupEntry(SENSORS, undefined, msToIso,
             { value: 24.48, live: 9, members: 9, fn: 'min', source: laundry, last_changed_by: maja });
         assert.deepStrictEqual(e.source, laundry);
@@ -100,7 +100,7 @@ describe('group-tools groupEntry', function () {
     });
 
     it('takes provenance from the maintained record when no function was asked for', function () {
-        const hall = { thing_id: 't3', thing_name: 'Hall Sensor' };
+        const hall = { id: 't3', name: 'Hall Sensor' };
         const e = gt.groupEntry(SENSORS, state({ state: 21, last_changed_by: hall }), msToIso);
         assert.deepStrictEqual(e.last_changed_by, hall);
     });

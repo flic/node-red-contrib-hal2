@@ -83,7 +83,7 @@ describe('nothingToCommand', function () {
 
     it('reports the items with their class, which is what is usually missing', function () {
         const out = nothingToCommand([{
-            thing_id: 't1', thing_name: 'Kök Taklampa',
+            id: 't1', name: 'Kök Taklampa',
             items: [{ item_id: 'on', item_name: 'On', ha_type: 'switch' }]
         }], 'needs a light.');
         assert.strictEqual(out.error, 'nothing_to_command');
@@ -94,7 +94,7 @@ describe('nothingToCommand', function () {
     });
 
     it('survives a thing with no items rather than throwing mid-answer', function () {
-        assert.deepStrictEqual(nothingToCommand([{ thing_id: 't', thing_name: 'x' }], 'n').things[0].items, []);
+        assert.deepStrictEqual(nothingToCommand([{ id: 't', name: 'x' }], 'n').things[0].items, []);
         assert.deepStrictEqual(nothingToCommand(undefined, 'n').things, []);
     });
 });

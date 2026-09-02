@@ -328,10 +328,10 @@ The **hal2Api** node turns the same tool catalog into a simple JSON request/resp
 
 ```json
 // in:  msg.payload
-{ "tool": "get_state", "args": { "thing_name": "kitchen" } }
+{ "tool": "get_state", "args": { "name": "kitchen" } }
 
 // out: msg.payload
-{ "ok": true, "result": { "thing_id": "…", "items": [ … ] } }
+{ "ok": true, "result": { "id": "…", "items": [ … ] } }
 ```
 
 **Which endpoint it speaks for** is set by the *Standalone* field. Left empty, the node serves the Event handler's own embedded catalog — the built-in tools plus any `hal2MCPIn` tools registered against it. Point it at a `hal2MCPServer` node instead and it serves that server's tools and nothing else, exactly as an MCP client connecting to that server's URL would see.

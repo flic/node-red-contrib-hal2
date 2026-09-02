@@ -210,7 +210,7 @@ module.exports = function(RED) {
         }
 
         // ── Hal2 command correlation ──────────────────────────────────────────
-        // When hal2 issues a command via publishCommand, we mark (thing_id, item_id)
+        // When hal2 issues a command via publishCommand, we mark (id, item_id)
         // for a short window. A subsequent ingress event for the same pair is then
         // attributed to hal2 (source='hal2'), so analyze_patterns can ignore it.
 
@@ -479,7 +479,7 @@ module.exports = function(RED) {
                 samples.push({
                     state: thing.state ? thing.state[m.item] : undefined,
                     updatedAt: (thing.heartbeat && thing.heartbeat[m.item]) || 0,
-                    thing_id: m.thing, thing_name: thing.name,
+                    id: m.thing, name: thing.name,
                     item_id: m.item, item_name: item.name
                 });
             }
@@ -507,7 +507,7 @@ module.exports = function(RED) {
         function recomputeGroup(groupId, def, groupMembers, trigger) {
             const { samples, eligible } = groupSamples(groupMembers);
             const now = Date.now();
-            const who = s => s && { thing_id: s.thing_id, thing_name: s.thing_name,
+            const who = s => s && { id: s.id, name: s.name,
                                     item_id: s.item_id, item_name: s.item_name };
 
             // Every function the group's HAType can serve gets its own record. Deriving
@@ -564,7 +564,7 @@ module.exports = function(RED) {
                 // Which member moved the group. Kept because "the hall light is what turned
                 // the group on" is exactly the context an event flow wants next.
                 member: trigger && {
-                    thing: { id: trigger.thing_id, name: trigger.thing_name },
+                    thing: { id: trigger.id, name: trigger.name },
                     item:  { id: trigger.item_id,  name: trigger.item_name },
                     heartbeat: trigger.heartbeat
                 }
@@ -665,7 +665,7 @@ module.exports = function(RED) {
                     // counting a device for as long as it stayed silent.
                     if (!isMember && itemid !== HEARTBEAT_ITEM) return;
                     const trigger = {
-                        thing_id: thingid, thing_name: (payload && payload.thing && payload.thing.name) || thingid,
+                        id: thingid, name: (payload && payload.thing && payload.thing.name) || thingid,
                         item_id:  itemid,  item_name:  (payload && payload.item  && payload.item.name)  || itemid,
                         heartbeat: !isMember
                     };
@@ -938,8 +938,8 @@ module.exports = function(RED) {
                     }
 
                     const deviceEntry = {
-                        thing_id    : thing.id,
-                        thing_name  : thing.name,
+                        id    : thing.id,
+                        name  : thing.name,
                         type_id     : tt.id,
                         type_name   : tt.name,
                         alive       : common.isThingAlive(thing),
@@ -1061,14 +1061,14 @@ module.exports = function(RED) {
                 const item = (thing.thingType.items || []).find(i => i.id === itemId);
                 if (!item) {
                     return { error: 'No item with id "' + itemId + '" in thing "' + thing.name + '" — pick a controllable item from available_items (item is the control within the device, not the device name).',
-                             thing_id: thingId, thing_name: thing.name, available_items: thingItemsSummary(thing) };
+                             id: thingId, name: thing.name, available_items: thingItemsSummary(thing) };
                 }
                 if (item.type === 'status') {
                     return { error: 'Item "' + item.name + '" is read-only (status) and cannot be controlled.',
-                             thing_id: thingId, thing_name: thing.name, available_items: thingItemsSummary(thing) };
+                             id: thingId, name: thing.name, available_items: thingItemsSummary(thing) };
                 }
                 node.publishCommand(thingId, itemId, value);
-                return { success: true, thing_name: thing.name, item_id: itemId, value };
+                return { success: true, name: thing.name, item_id: itemId, value };
             }
 
             // ── Auth middleware helper ─────────────────────────────────────────
@@ -1115,8 +1115,8 @@ module.exports = function(RED) {
                         if (fields === 'summary') {
                             paged = paged.map(d => {
                                 const o = {
-                                    thing_id    : d.thing_id,
-                                    thing_name  : d.thing_name,
+                                    id    : d.id,
+                                    name  : d.name,
                                     type_name   : d.type_name,
                                     alive       : d.alive,
                                     last_change : d.last_change || null
@@ -1129,8 +1129,8 @@ module.exports = function(RED) {
                         } else if (fields === 'items') {
                             // Compact item index for cheap id lookup — no values, metadata, notes or tags.
                             paged = paged.map(d => ({
-                                thing_id  : d.thing_id,
-                                thing_name: d.thing_name,
+                                id  : d.id,
+                                name: d.name,
                                 type_name : d.type_name,
                                 items     : (d.items || []).map(i => ({
                                     item_id  : i.item_id,
@@ -1156,23 +1156,23 @@ module.exports = function(RED) {
 
                     // get_state
                     if (toolName === 'get_state') {
-                        if (!args.thing_id && !args.thing_name) {
-                            return toolOk(JSON.stringify({ error: 'Provide thing_id or thing_name' }));
+                        if (!args.id && !args.name) {
+                            return toolOk(JSON.stringify({ error: 'Provide id or name' }));
                         }
                         const all = getAllStates();
                         let device;
-                        if (args.thing_id) {
-                            device = all.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            device = all.find(d => d.id === args.id);
                         } else {
-                            const q = args.thing_name.toLowerCase();
+                            const q = args.name.toLowerCase();
                             // Several matches is not a coin toss — same rule as resolveGroup:
                             // say which ones and let the caller pick, rather than silently
                             // answering for whichever device happened to come first.
-                            const hits = all.filter(d => d.thing_name.toLowerCase().includes(q));
+                            const hits = all.filter(d => d.name.toLowerCase().includes(q));
                             if (hits.length > 1) {
                                 return toolOk(JSON.stringify({
-                                    error   : 'Several devices match "' + args.thing_name + '" — use thing_id to pick one',
-                                    matches : hits.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name }))
+                                    error   : 'Several devices match "' + args.name + '" — use id to pick one',
+                                    matches : hits.map(d => ({ id: d.id, name: d.name }))
                                 }));
                             }
                             device = hits[0];
@@ -1183,9 +1183,9 @@ module.exports = function(RED) {
                         if (args.item_id) {
                             const item = device.items.find(i => i.item_id === args.item_id);
                             if (!item) return toolOk(JSON.stringify({
-                                error          : 'No item with id "' + args.item_id + '" in thing "' + device.thing_name + '" — pick from available_items (item is the measurement/control within the device, not the device name).',
-                                thing_id       : device.thing_id,
-                                thing_name     : device.thing_name,
+                                error          : 'No item with id "' + args.item_id + '" in thing "' + device.name + '" — pick from available_items (item is the measurement/control within the device, not the device name).',
+                                id       : device.id,
+                                name     : device.name,
                                 available_items: device.items.map(i => ({
                                     item_id  : i.item_id,
                                     item_name: i.item_name,
@@ -1194,8 +1194,8 @@ module.exports = function(RED) {
                                 }))
                             }));
                             return toolOk(JSON.stringify({
-                                thing_id   : device.thing_id,
-                                thing_name : device.thing_name,
+                                id   : device.id,
+                                name : device.name,
                                 ...item
                             }, null, 2));
                         }
@@ -1239,9 +1239,9 @@ module.exports = function(RED) {
                             const home = presenceItem.value === true || presenceItem.value === 'true';
 
                             const entry = {
-                                name             : device.thing_name,
+                                name             : device.name,
                                 home,
-                                thing_id         : device.thing_id,
+                                id         : device.id,
                                 presence_item_id : presenceItem.item_id
                             };
 
@@ -1289,17 +1289,17 @@ module.exports = function(RED) {
                     if (toolName === 'control_fan') {
                         const allStates = getAllStates();
                         let matched = [];
-                        if (args.thing_id) {
-                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            const device = allStates.find(d => d.id === args.id);
                             if (device) matched = [device];
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
-                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
+                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
                         }
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'No matching fan found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                            return toolOk(JSON.stringify({ error: 'No matching fan found', available: allStates.map(d => ({ id: d.id, name: d.name })) }));
                         }
 
                         if (args.speed === undefined) {
@@ -1313,10 +1313,10 @@ module.exports = function(RED) {
                             for (const itm of device.items) {
                                 const value = fanValue(itm, speed);
                                 if (value === undefined) { continue; }
-                                node.publishCommand(device.thing_id, itm.item_id, value);
+                                node.publishCommand(device.id, itm.item_id, value);
                                 sent.push({ item_name: itm.item_name, value: value });
                             }
-                            results.push({ thing_name: device.thing_name, commands: sent });
+                            results.push({ name: device.name, commands: sent });
                         }
 
                         if (!results.some(r => r.commands.length)) {
@@ -1336,10 +1336,10 @@ module.exports = function(RED) {
                         for (const device of getAllStates()) {
                             const sceneItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'scene');
                             if (!sceneItem) continue;
-                            if (needle && !device.thing_name.toLowerCase().includes(needle)) continue;
+                            if (needle && !device.name.toLowerCase().includes(needle)) continue;
                             scenes.push({
-                                thing_id    : device.thing_id,
-                                thing_name  : device.thing_name,
+                                id    : device.id,
+                                name  : device.name,
                                 active      : sceneItem.value === true || sceneItem.value === 'true',
                                 last_change : sceneItem.last_change || null
                             });
@@ -1352,12 +1352,12 @@ module.exports = function(RED) {
                     if (toolName === 'activate_scene') {
                         const allStates = getAllStates();
                         let matched = [];
-                        if (args.thing_id) {
-                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            const device = allStates.find(d => d.id === args.id);
                             if (device) matched = [device];
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
-                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
+                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
                         }
 
                         if (matched.length === 0) {
@@ -1369,8 +1369,8 @@ module.exports = function(RED) {
                         for (const device of matched) {
                             const sceneItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'scene');
                             if (!sceneItem) continue;
-                            node.publishCommand(device.thing_id, sceneItem.item_id, args.active);
-                            results.push({ thing_name: device.thing_name, active: args.active });
+                            node.publishCommand(device.id, sceneItem.item_id, args.active);
+                            results.push({ name: device.name, active: args.active });
                         }
 
                         node.status({ fill: 'green', shape: 'dot', text: 'ready' });
@@ -1381,17 +1381,17 @@ module.exports = function(RED) {
                     if (toolName === 'control_cover') {
                         const allStates = getAllStates();
                         let matched = [];
-                        if (args.thing_id) {
-                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            const device = allStates.find(d => d.id === args.id);
                             if (device) matched = [device];
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
-                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
+                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
                         }
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'No matching cover found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                            return toolOk(JSON.stringify({ error: 'No matching cover found', available: allStates.map(d => ({ id: d.id, name: d.name })) }));
                         }
 
                         // Resolve target position
@@ -1411,11 +1411,11 @@ module.exports = function(RED) {
                             const sent = [];
                             for (const itm of device.items) {
                                 if ((itm.ha_type || '').toLowerCase() === 'cover') {
-                                    node.publishCommand(device.thing_id, itm.item_id, position);
+                                    node.publishCommand(device.id, itm.item_id, position);
                                     sent.push({ item_name: itm.item_name, value: position });
                                 }
                             }
-                            results.push({ thing_name: device.thing_name, commands: sent });
+                            results.push({ name: device.name, commands: sent });
                         }
 
                         if (!results.some(r => r.commands.length)) {
@@ -1432,17 +1432,17 @@ module.exports = function(RED) {
                     if (toolName === 'control_spa') {
                         const allStates = getAllStates();
                         let matched = [];
-                        if (args.thing_id) {
-                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            const device = allStates.find(d => d.id === args.id);
                             if (device) matched = [device];
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
-                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
+                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
                         }
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'No matching spa found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                            return toolOk(JSON.stringify({ error: 'No matching spa found', available: allStates.map(d => ({ id: d.id, name: d.name })) }));
                         }
 
                         const results = [];
@@ -1451,23 +1451,23 @@ module.exports = function(RED) {
                             for (const itm of device.items) {
                                 const ht = (itm.ha_type || '').toLowerCase();
                                 if (ht === 'target temperature' && args.target_temp !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.target_temp);
+                                    node.publishCommand(device.id, itm.item_id, args.target_temp);
                                     sent.push({ item_name: itm.item_name, value: args.target_temp });
                                 }
                                 if (ht === 'heater' && args.heater !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.heater);
+                                    node.publishCommand(device.id, itm.item_id, args.heater);
                                     sent.push({ item_name: itm.item_name, value: args.heater });
                                 }
                                 if (ht === 'circulation pump' && args.pump !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.pump);
+                                    node.publishCommand(device.id, itm.item_id, args.pump);
                                     sent.push({ item_name: itm.item_name, value: args.pump });
                                 }
                                 if (ht === 'airjets' && args.airjets !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.airjets);
+                                    node.publishCommand(device.id, itm.item_id, args.airjets);
                                     sent.push({ item_name: itm.item_name, value: args.airjets });
                                 }
                             }
-                            results.push({ thing_name: device.thing_name, commands: sent });
+                            results.push({ name: device.name, commands: sent });
                         }
 
                         if (!results.some(r => r.commands.length)) {
@@ -1484,17 +1484,17 @@ module.exports = function(RED) {
                     if (toolName === 'control_climate') {
                         const allStates = getAllStates();
                         let matched = [];
-                        if (args.thing_id) {
-                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            const device = allStates.find(d => d.id === args.id);
                             if (device) matched = [device];
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
-                            matched = allStates.filter(d => d.thing_name && d.thing_name.toLowerCase().includes(needle));
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
+                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
                         }
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
-                            return toolOk(JSON.stringify({ error: 'No matching climate device found', available: allStates.map(d => ({ thing_id: d.thing_id, thing_name: d.thing_name })) }));
+                            return toolOk(JSON.stringify({ error: 'No matching climate device found', available: allStates.map(d => ({ id: d.id, name: d.name })) }));
                         }
 
                         const results = [];
@@ -1503,23 +1503,23 @@ module.exports = function(RED) {
                             for (const itm of device.items) {
                                 const ht = (itm.ha_type || '').toLowerCase();
                                 if (ht === 'ac mode' && args.mode !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.mode);
+                                    node.publishCommand(device.id, itm.item_id, args.mode);
                                     sent.push({ item_name: itm.item_name, value: args.mode });
                                 }
                                 if (ht === 'target temperature' && args.target_temp !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.target_temp);
+                                    node.publishCommand(device.id, itm.item_id, args.target_temp);
                                     sent.push({ item_name: itm.item_name, value: args.target_temp });
                                 }
                                 if (ht === 'fan mode' && args.fan_mode !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.fan_mode);
+                                    node.publishCommand(device.id, itm.item_id, args.fan_mode);
                                     sent.push({ item_name: itm.item_name, value: args.fan_mode });
                                 }
                                 if (ht === 'swing mode' && args.swing_mode !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.swing_mode);
+                                    node.publishCommand(device.id, itm.item_id, args.swing_mode);
                                     sent.push({ item_name: itm.item_name, value: args.swing_mode });
                                 }
                             }
-                            results.push({ thing_name: device.thing_name, commands: sent });
+                            results.push({ name: device.name, commands: sent });
                         }
 
                         if (!results.some(r => r.commands.length)) {
@@ -1542,8 +1542,8 @@ module.exports = function(RED) {
                             if (!device.alive) {
                                 const aliveItem = device.items.find(i => i.item_id === '1');
                                 offline.push({
-                                    thing_id    : device.thing_id,
-                                    thing_name  : device.thing_name,
+                                    id    : device.id,
+                                    name  : device.name,
                                     type_name   : device.type_name,
                                     last_change : (aliveItem && aliveItem.last_change) || null
                                 });
@@ -1551,8 +1551,8 @@ module.exports = function(RED) {
                             const waterItem = device.items.find(i => (i.ha_type || '').toLowerCase() === 'water leak');
                             if (waterItem) {
                                 sensors.push({
-                                    thing_id    : device.thing_id,
-                                    thing_name  : device.thing_name,
+                                    id    : device.id,
+                                    name  : device.name,
                                     wet         : waterItem.value === true || waterItem.value === 'true',
                                     last_change : waterItem.last_change || null
                                 });
@@ -1562,8 +1562,8 @@ module.exports = function(RED) {
                                     const level = Number(itm.value);
                                     if (!isNaN(level) && level < threshold) {
                                         low.push({
-                                            thing_id    : device.thing_id,
-                                            thing_name  : device.thing_name,
+                                            id    : device.id,
+                                            name  : device.name,
                                             item_id     : itm.item_id,
                                             item_name   : itm.item_name,
                                             battery     : level,
@@ -1582,7 +1582,7 @@ module.exports = function(RED) {
 
                     // control_device
                     if (toolName === 'control_device') {
-                        const result = controlDevice(args.thing_id, args.item_id, args.value);
+                        const result = controlDevice(args.id, args.item_id, args.value);
                         node.status({ fill: result.error ? 'red' : 'green', shape: 'dot', text: result.error ? 'error' : 'ready' });
                         return toolOk(JSON.stringify(result));
                     }
@@ -1636,18 +1636,18 @@ module.exports = function(RED) {
 
                         // matched = array of { device, items } where items may be filtered to a subset
                         let matched = [];
-                        if (args.thing_id) {
-                            const device = allStates.find(d => d.thing_id === args.thing_id);
+                        if (args.id) {
+                            const device = allStates.find(d => d.id === args.id);
                             if (device) matched = [{ device, items: device.items }];
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
-                            // First try matching thing_name
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
+                            // First try matching name
                             for (const device of allStates) {
-                                if (device.thing_name && device.thing_name.toLowerCase().includes(needle)) {
+                                if (device.name && device.name.toLowerCase().includes(needle)) {
                                     matched.push({ device, items: device.items });
                                 }
                             }
-                            // If nothing matched thing_name, try matching item labels
+                            // If nothing matched name, try matching item labels
                             if (matched.length === 0) {
                                 for (const device of allStates) {
                                     const labelItems = device.items.filter(itm => itm.label && itm.label.toLowerCase().includes(needle));
@@ -1659,10 +1659,10 @@ module.exports = function(RED) {
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
                             const available = allStates.map(d => ({
-                                thing_id: d.thing_id, thing_name: d.thing_name,
+                                id: d.id, name: d.name,
                                 labels: d.items.filter(i => i.label).map(i => i.label)
                             }));
-                            return toolOk(JSON.stringify({ error: 'No matching thing found', thing_id: args.thing_id, thing_name: args.thing_name, available }));
+                            return toolOk(JSON.stringify({ error: 'No matching thing found', id: args.id, name: args.name, available }));
                         }
 
                         const results = [];
@@ -1672,11 +1672,11 @@ module.exports = function(RED) {
                             for (const itm of targets) {
                                 const ht = (itm.ha_type || '').toLowerCase();
                                 if (writesOnOff(itm) && args.on !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.on);
+                                    node.publishCommand(device.id, itm.item_id, args.on);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.on });
                                 }
                                 if (ht === 'dimmer' && args.brightness !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.brightness);
+                                    node.publishCommand(device.id, itm.item_id, args.brightness);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.brightness });
                                 }
                                 if (ht === 'color temperature' && args.color_temp !== undefined) {
@@ -1685,15 +1685,15 @@ module.exports = function(RED) {
                                     const ctPct = Math.round(Math.max(0, Math.min(100,
                                         (CT_MAX - args.color_temp) / (CT_MAX - CT_MIN) * 100
                                     )));
-                                    node.publishCommand(device.thing_id, itm.item_id, ctPct);
+                                    node.publishCommand(device.id, itm.item_id, ctPct);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: ctPct, kelvin: args.color_temp });
                                 }
                                 if (ht === 'color' && args.color !== undefined) {
-                                    node.publishCommand(device.thing_id, itm.item_id, args.color);
+                                    node.publishCommand(device.id, itm.item_id, args.color);
                                     sent.push({ item_id: itm.item_id, item_name: itm.item_name, label: itm.label, value: args.color });
                                 }
                             }
-                            results.push({ thing_id: device.thing_id, thing_name: device.thing_name, commands: sent });
+                            results.push({ id: device.id, name: device.name, commands: sent });
                         }
 
                         if (!results.some(r => r.commands.length)) {
@@ -1780,13 +1780,13 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'History is not enabled on this event handler' }));
                         }
                         let targetThing = null;
-                        if (args.thing_id) {
-                            targetThing = RED.nodes.getNode(args.thing_id);
+                        if (args.id) {
+                            targetThing = RED.nodes.getNode(args.id);
                             if (!targetThing || targetThing.type !== 'hal2Thing') {
-                                return toolOk(JSON.stringify({ error: 'Thing not found: ' + args.thing_id }));
+                                return toolOk(JSON.stringify({ error: 'Thing not found: ' + args.id }));
                             }
-                        } else if (args.thing_name) {
-                            const needle = args.thing_name.toLowerCase();
+                        } else if (args.name) {
+                            const needle = args.name.toLowerCase();
                             RED.nodes.eachNode(cfg => {
                                 if (targetThing || cfg.type !== 'hal2Thing') return;
                                 const t = RED.nodes.getNode(cfg.id);
@@ -1794,17 +1794,17 @@ module.exports = function(RED) {
                                     targetThing = t;
                                 }
                             });
-                            if (!targetThing) return toolOk(JSON.stringify({ error: 'No thing matching: ' + args.thing_name }));
+                            if (!targetThing) return toolOk(JSON.stringify({ error: 'No thing matching: ' + args.name }));
                         } else {
-                            return toolOk(JSON.stringify({ error: 'Provide thing_id or thing_name' }));
+                            return toolOk(JSON.stringify({ error: 'Provide id or name' }));
                         }
 
                         // itemFail returns the thing's items (shared thingItemsSummary helper), so a
                         // failed item lookup is self-describing — no full get_all_states dump needed.
                         const itemFail = (msg) => toolOk(JSON.stringify({
                             error          : msg,
-                            thing_id       : targetThing.id,
-                            thing_name     : targetThing.name,
+                            id       : targetThing.id,
+                            name     : targetThing.name,
                             available_items: thingItemsSummary(targetThing)
                         }));
 
@@ -1812,7 +1812,7 @@ module.exports = function(RED) {
                         let itemId = args.item_id;
 
                         // Resolve by ha_type and/or tag when the device is known but the exact item
-                        // isn't (e.g. thing_name="Lake Water" + ha_type="temperature", or a sauna
+                        // isn't (e.g. name="Lake Water" + ha_type="temperature", or a sauna
                         // sensor with two temperatures → ha_type="temperature" + tag="outdoor").
                         if (!itemId && !args.item_name && (args.ha_type || args.tag)) {
                             let matches = ttItems;
@@ -1889,8 +1889,8 @@ module.exports = function(RED) {
                             if (atMs !== null) {
                                 const record = docs.length ? docs[docs.length - 1] : null;
                                 return toolOk(JSON.stringify({
-                                    thing_id  : targetThing.id,
-                                    thing_name: targetThing.name,
+                                    id  : targetThing.id,
+                                    name: targetThing.name,
                                     item_id   : itemId,
                                     at        : new Date(atMs).toISOString(),
                                     record    : record ? { timestamp: msToIso(record.ts), state: record.state } : null
@@ -1949,8 +1949,8 @@ module.exports = function(RED) {
                                     max  : round(b.max)
                                 }));
                                 return toolOk(JSON.stringify({
-                                    thing_id     : targetThing.id,
-                                    thing_name   : targetThing.name,
+                                    id     : targetThing.id,
+                                    name   : targetThing.name,
                                     item_id      : itemId,
                                     from         : new Date(fromMs).toISOString(),
                                     to           : new Date(toMs).toISOString(),
@@ -1965,8 +1965,8 @@ module.exports = function(RED) {
                             const limit  = parseInt(args.limit)  || 500;
                             const page   = docs.slice(offset, offset + limit);
                             return toolOk(JSON.stringify({
-                                thing_id  : targetThing.id,
-                                thing_name: targetThing.name,
+                                id  : targetThing.id,
+                                name: targetThing.name,
                                 item_id   : itemId,
                                 from      : new Date(fromMs).toISOString(),
                                 to        : new Date(toMs).toISOString(),
@@ -1998,7 +1998,7 @@ module.exports = function(RED) {
                             for (const itm of d.items) {
                                 itemMap.set(itm.item_id, { item_name: itm.item_name, ha_type: itm.ha_type });
                             }
-                            thingNameMap.set(d.thing_id, { thing_name: d.thing_name, items: itemMap });
+                            thingNameMap.set(d.id, { name: d.name, items: itemMap });
                         }
 
                         try {

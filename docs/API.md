@@ -53,13 +53,13 @@ Each tool below is tagged 👁 **read**, ✏️ **write** or 🔒 **admin**. Tho
 
 ### `get_all_states` 👁 (read)
 
-Returns the current state of all devices/things connected to this event handler. The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. Use fields="items" for a compact per-device item index (thing_id, thing_name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. Use fields="full" to include all items with item_id, item_name, ha_type and current value. Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. Each device has an alive field (true/false) — if false the device is offline. Only items with a ha_type are included in full mode. Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Pool Sensor" notes: "pool water temperature"). Each device also includes a categories field listing which control categories it falls into (climate, spa, light, fan, cover, scene), derived from its items — use this to identify what kind of device it is at a glance. ha_type accepts both literal item types (e.g. "light", "temperature") and category aliases that expand to their underlying types — e.g. "climate" matches devices with target temperature / ac mode / fan mode / swing mode. Supported aliases: climate, spa, light, fan, cover, scene. Use tag to limit results to devices/items tagged with a specific keyword. Supports optional pagination via offset and limit. The response includes total.
+Returns the current state of all devices/things connected to this event handler. The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. Use fields="summary" (default) for a lightweight list with id, name, type_name and alive — ideal for orientation and ID lookup. Use fields="items" for a compact per-device item index (id, name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. Use fields="full" to include all items with item_id, item_name, ha_type and current value. Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. Each device has an alive field (true/false) — if false the device is offline. Only items with a ha_type are included in full mode. Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Pool Sensor" notes: "pool water temperature"). Each device also includes a categories field listing which control categories it falls into (climate, spa, light, fan, cover, scene), derived from its items — use this to identify what kind of device it is at a glance. ha_type accepts both literal item types (e.g. "light", "temperature") and category aliases that expand to their underlying types — e.g. "climate" matches devices with target temperature / ac mode / fan mode / swing mode. Supported aliases: climate, spa, light, fan, cover, scene. Use tag to limit results to devices/items tagged with a specific keyword. Supports optional pagination via offset and limit. The response includes total.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `fields` | `summary` \| `items` \| `full` | no | Level of detail — "summary" (default): thing_id, thing_name, type_name, alive; "items": compact item index (item_id, item_name, ha_type, history) for cheap id lookup; "full": includes all items with values + metadata |
+| `fields` | `summary` \| `items` \| `full` | no | Level of detail — "summary" (default): id, name, type_name, alive; "items": compact item index (item_id, item_name, ha_type, history) for cheap id lookup; "full": includes all items with values + metadata |
 | `ha_type` | `string` | no | Filter to devices that have at least one item with this ha_type (e.g. "light", "scene", "cover") |
 | `tag` | `string` | no | Filter to devices/items tagged with this value (case-insensitive, exact match) |
 | `offset` | `integer` | no | Number of devices to skip (default: 0) |
@@ -73,20 +73,20 @@ Returns the current state of all devices/things connected to this event handler.
 
 ### `get_state` 👁 (read)
 
-Returns the complete state for a specific device. Use this to fetch full details for one device by its thing_id. Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. Response includes notes and tags on both Thing and Item level when configured. Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. Optionally provide item_id to return only a single item value — the item is a measurement/control within the device, not the device name. If item_id is wrong, the error response lists available_items for that thing so you can pick the right one.
+Returns the complete state for a specific device. Use this to fetch full details for one device by its id. Provide id for an exact lookup or name for a partial, case-insensitive match. Response includes notes and tags on both Thing and Item level when configured. Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. Optionally provide item_id to return only a single item value — the item is a measurement/control within the device, not the device name. If item_id is wrong, the error response lists available_items for that thing so you can pick the right one.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID |
-| `thing_name` | `string` | no | Partial, case-insensitive name match (alternative to thing_id) |
+| `id` | `string` | no | Exact thing node ID |
+| `name` | `string` | no | Partial, case-insensitive name match (alternative to id) |
 | `item_id` | `string` | no | If provided, returns only this item within the device |
 
 **Example**
 
 ```json
-{ "tool": "get_state", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "get_state", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `get_history` 👁 (read)
@@ -97,8 +97,8 @@ Returns logged historical values for a specific device item — temperature and 
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_all_states) |
-| `thing_name` | `string` | no | Partial, case-insensitive name match (alternative to thing_id) |
+| `id` | `string` | no | Exact thing node ID (from get_all_states) |
+| `name` | `string` | no | Partial, case-insensitive name match (alternative to id) |
 | `item_id` | `string` | no | Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name. |
 | `item_name` | `string` | no | Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name. |
 | `ha_type` | `string` | no | Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand. |
@@ -116,30 +116,30 @@ Returns logged historical values for a specific device item — temperature and 
 **Example**
 
 ```json
-{ "tool": "get_history", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "get_history", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `control_device` ✏️ (write)
 
-Send a command to a specific device item. Use thing_id and item_id from get_all_states. The item is the control WITHIN the device (e.g. an "On" item), not the device name. If the item_id is wrong or read-only, the error response lists available_items (item_id, item_name, ha_type, read_only) for that thing — pick a controllable one from it.
+Send a command to a specific device item. Use id and item_id from get_all_states. The item is the control WITHIN the device (e.g. an "On" item), not the device name. If the item_id is wrong or read-only, the error response lists available_items (item_id, item_name, ha_type, read_only) for that thing — pick a controllable one from it.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | yes | Thing node ID (from get_all_states) |
+| `id` | `string` | yes | Thing node ID (from get_all_states) |
 | `item_id` | `string` | yes | Item ID within the thing type (from get_all_states) |
 | `value` | `any` | yes | Value to set (e.g. "on", "off", brightness number, temperature, etc.) |
 
 **Example**
 
 ```json
-{ "tool": "control_device", "args": { "thing_id": "…", "item_id": "…", "value": "…" } }
+{ "tool": "control_device", "args": { "id": "…", "item_id": "…", "value": "…" } }
 ```
 
 ### `control_fan` ✏️ (write)
 
-Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensitive). Speed 0 = off, 1 = low, 2 = medium, 3 = high. Current speed is available via get_all_states.
+Control a ceiling fan. Identify by id or name (partial, case-insensitive). Speed 0 = off, 1 = low, 2 = medium, 3 = high. Current speed is available via get_all_states.
 
 > **Requires hardware:** at least one item of type `fan` at this location, or one declared `fan`.
 
@@ -147,14 +147,14 @@ Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensi
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_all_states) |
-| `thing_name` | `string` | no | Partial, case-insensitive name match |
+| `id` | `string` | no | Exact thing node ID (from get_all_states) |
+| `name` | `string` | no | Partial, case-insensitive name match |
 | `speed` | `number` | no | 0 = off, 1 = low, 2 = medium, 3 = high |
 
 **Example**
 
 ```json
-{ "tool": "control_fan", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "control_fan", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `get_scenes` 👁 (read)
@@ -185,19 +185,19 @@ Activate or deactivate a scene by name or ID. Use get_scenes to find available s
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_scenes) |
-| `thing_name` | `string` | no | Partial, case-insensitive name match |
+| `id` | `string` | no | Exact thing node ID (from get_scenes) |
+| `name` | `string` | no | Partial, case-insensitive name match |
 | `active` | `boolean` | no | true = activate, false = deactivate |
 
 **Example**
 
 ```json
-{ "tool": "activate_scene", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "activate_scene", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `control_cover` ✏️ (write)
 
-Control curtains, blinds or shutters. Identify by thing_id or thing_name (partial, case-insensitive). Use position to set an exact opening level, or open/close as a shortcut. Current position is available via get_all_states.
+Control curtains, blinds or shutters. Identify by id or name (partial, case-insensitive). Use position to set an exact opening level, or open/close as a shortcut. Current position is available via get_all_states.
 
 > **Requires hardware:** at least one item of type `cover` at this location.
 
@@ -205,20 +205,20 @@ Control curtains, blinds or shutters. Identify by thing_id or thing_name (partia
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_all_states) |
-| `thing_name` | `string` | no | Partial, case-insensitive name match |
+| `id` | `string` | no | Exact thing node ID (from get_all_states) |
+| `name` | `string` | no | Partial, case-insensitive name match |
 | `position` | `number` | no | Position 0–100 where 0 = fully closed, 100 = fully open |
 | `open` | `boolean` | no | true = fully open (100), false = fully closed (0). Overridden by position if both are given. |
 
 **Example**
 
 ```json
-{ "tool": "control_cover", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "control_cover", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `control_spa` ✏️ (write)
 
-Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-insensitive). Current status (water temperature, heater state etc.) is available via get_all_states. All control parameters are optional — only provided ones are sent.
+Control a spa or hot tub. Identify by id or name (partial, case-insensitive). Current status (water temperature, heater state etc.) is available via get_all_states. All control parameters are optional — only provided ones are sent.
 
 > **Requires hardware:** at least one item of type `heater`, `circulation pump`, `airjets` at this location.
 
@@ -226,8 +226,8 @@ Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-inse
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_all_states) |
-| `thing_name` | `string` | no | Partial, case-insensitive name match |
+| `id` | `string` | no | Exact thing node ID (from get_all_states) |
+| `name` | `string` | no | Partial, case-insensitive name match |
 | `target_temp` | `number` | no | Desired water temperature in °C |
 | `heater` | `boolean` | no | true = turn heater on, false = turn off |
 | `pump` | `boolean` | no | true = turn circulation pump on, false = turn off |
@@ -236,12 +236,12 @@ Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-inse
 **Example**
 
 ```json
-{ "tool": "control_spa", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "control_spa", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `control_climate` ✏️ (write)
 
-Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, case-insensitive). Current status is available via get_all_states. All parameters are optional — only provided ones are sent.
+Control a heat pump or AC unit. Identify by id or name (partial, case-insensitive). Current status is available via get_all_states. All parameters are optional — only provided ones are sent.
 
 > **Requires hardware:** at least one item of type `target temperature`, `ac mode`, `fan mode`, `swing mode` at this location.
 
@@ -249,8 +249,8 @@ Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, cas
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_all_states) |
-| `thing_name` | `string` | no | Partial, case-insensitive name match |
+| `id` | `string` | no | Exact thing node ID (from get_all_states) |
+| `name` | `string` | no | Partial, case-insensitive name match |
 | `mode` | `off` \| `cool` \| `heat` \| `fan_only` \| `dry` \| `heat_cool` | no | HVAC mode |
 | `target_temp` | `number` | no | Target temperature in °C |
 | `fan_mode` | `auto` \| `diffuse` \| `low` \| `medium` \| `middle` \| `high` | no | Fan speed/mode |
@@ -259,12 +259,12 @@ Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, cas
 **Example**
 
 ```json
-{ "tool": "control_climate", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "control_climate", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `get_presence` 👁 (read)
 
-Returns presence information for all people/persons tracked in the system. Shows who is home, who is away, and which room each person is in. Use this to answer questions like "is anyone home?", "where is Alice?", "who is home right now?", "when did Bob come home?", "how long has Alice been away?". Each person includes home_since/away_since (ISO timestamp of last change) and home_for_minutes/away_for_minutes (duration in current state). When home, also includes room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up tools (get_history, set_light, etc.) can be called without an extra lookup. Entries carry the notes and tags of the thing they describe — this is how a tracked phone is told apart from the person carrying it, so read them before treating an entry as a person. A summary block provides aggregated counts and name lists.
+Returns presence information for all people/persons tracked in the system. Shows who is home, who is away, and which room each person is in. Use this to answer questions like "is anyone home?", "where is Alice?", "who is home right now?", "when did Bob come home?", "how long has Alice been away?". Each person includes home_since/away_since (ISO timestamp of last change) and home_for_minutes/away_for_minutes (duration in current state). When home, also includes room, room_since and in_room_for_minutes. id and item ids are included so follow-up tools (get_history, set_light, etc.) can be called without an extra lookup. Entries carry the notes and tags of the thing they describe — this is how a tracked phone is told apart from the person carrying it, so read them before treating an entry as a person. A summary block provides aggregated counts and name lists.
 
 **Parameters**
 
@@ -332,7 +332,7 @@ Sends one command to every member of a group that can accept one — one call in
 
 ### `set_light` ✏️ (write)
 
-Control a specific light or lamp. Identify the device by thing_id OR thing_name. thing_name supports partial, case-insensitive match against the thing name OR against item labels (the label field in get_all_states items). Labels are friendly names assigned per-device, e.g. a double switch named "Kitchen Double Switch" may have items labelled "Kitchen Ceiling Light" and "Kitchen Counter Light" — searching "counter" will target only that relay. You can turn it on/off and/or set brightness/color_temp/color in one call.
+Control a specific light or lamp. Identify the device by id OR name. name supports partial, case-insensitive match against the thing name OR against item labels (the label field in get_all_states items). Labels are friendly names assigned per-device, e.g. a double switch named "Kitchen Double Switch" may have items labelled "Kitchen Ceiling Light" and "Kitchen Counter Light" — searching "counter" will target only that relay. You can turn it on/off and/or set brightness/color_temp/color in one call.
 
 > **Requires hardware:** at least one item of type `light`, `dimmer` at this location, or one declared `light`.
 
@@ -340,8 +340,8 @@ Control a specific light or lamp. Identify the device by thing_id OR thing_name.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `thing_id` | `string` | no | Exact thing node ID (from get_all_states). Takes priority over thing_name. |
-| `thing_name` | `string` | no | Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights"). |
+| `id` | `string` | no | Exact thing node ID (from get_all_states). Takes priority over name. |
+| `name` | `string` | no | Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights"). |
 | `on` | `boolean` | no | true = turn on, false = turn off |
 | `brightness` | `number` | no | Brightness 0–100 (percent) |
 | `color_temp` | `number` | no | Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide) |
@@ -350,7 +350,7 @@ Control a specific light or lamp. Identify the device by thing_id OR thing_name.
 **Example**
 
 ```json
-{ "tool": "set_light", "args": { "thing_id": "…", "thing_name": "…" } }
+{ "tool": "set_light", "args": { "id": "…", "name": "…" } }
 ```
 
 ### `analyze_patterns` 👁 (read)

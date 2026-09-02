@@ -72,7 +72,7 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
 
         const key = doc.thing_id + '::' + doc.item_id;
         if (!seriesMap.has(key)) {
-            seriesMap.set(key, { thingInfo, itemInfo, thing_id: doc.thing_id, item_id: doc.item_id, ha_type: itemInfo.ha_type, records: [] });
+            seriesMap.set(key, { thingInfo, itemInfo, id: doc.thing_id, item_id: doc.item_id, ha_type: itemInfo.ha_type, records: [] });
         }
         seriesMap.get(key).records.push({ ts: doc.ts, state: doc.state });
     }
@@ -83,14 +83,14 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
     const nowMs       = Date.now();
 
     for (const series of seriesMap.values()) {
-        const { records, thing_id, item_id, ha_type, thingInfo, itemInfo } = series;
+        const { records, id, item_id, ha_type, thingInfo, itemInfo } = series;
         if (!records.length) continue;
 
         const lastTs = records[records.length - 1].ts;
         if (lastTs < nowMs - STALE_MS) {
             staleItems.push({
-                thing_id,
-                thing_name        : thingInfo.thing_name,
+                id,
+                name        : thingInfo.name,
                 item_id,
                 item_name         : itemInfo.item_name,
                 last_seen_days_ago: Math.floor((nowMs - lastTs) / 86400000)
@@ -105,10 +105,10 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
             if (state === prevState && rec.ts - prevTs < DEBOUNCE_MS) continue;
             if (state !== prevState) {
                 transitions.push({
-                    thing_id,
+                    id,
                     item_id,
                     ha_type,
-                    thing_name: thingInfo.thing_name,
+                    name: thingInfo.name,
                     item_name : itemInfo.item_name,
                     state,
                     ts        : rec.ts
@@ -125,7 +125,7 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
         const d = new Date(t.ts);
         const minutesSinceMidnight = d.getHours() * 60 + d.getMinutes();
         const bucketIdx = Math.floor(minutesSinceMidnight / windowMinutes);
-        const bkey = t.thing_id + '::' + t.item_id + '::' + String(t.state) + '::' + bucketIdx;
+        const bkey = t.id + '::' + t.item_id + '::' + String(t.state) + '::' + bucketIdx;
         if (!bucketMap.has(bkey)) {
             bucketMap.set(bkey, { meta: t, bucketIdx, count: 0 });
         }
@@ -136,7 +136,7 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
     const totalMap = new Map();
     for (const [, bucket] of bucketMap) {
         const { meta, bucketIdx, count } = bucket;
-        const tkey = meta.thing_id + '::' + meta.item_id + '::' + String(meta.state);
+        const tkey = meta.id + '::' + meta.item_id + '::' + String(meta.state);
         if (!totalMap.has(tkey)) {
             totalMap.set(tkey, { meta, total: 0, peakBucket: null, peakCount: 0 });
         }
@@ -155,8 +155,8 @@ module.exports = function analyzePatterns(docs, thingNameMap, opts) {
         if (consistency < threshold)      continue;
         if (group.total < minOccurrences) continue;
         suggestions.push({
-            thing_id       : group.meta.thing_id,
-            thing_name     : group.meta.thing_name,
+            id       : group.meta.id,
+            name     : group.meta.name,
             item_id        : group.meta.item_id,
             item_name      : group.meta.item_name,
             ha_type        : group.meta.ha_type,

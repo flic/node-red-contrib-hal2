@@ -10,8 +10,8 @@ const MCP_TOOLS = [
         name        : 'get_all_states',
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
                       'The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. ' +
-                      'Use fields="summary" (default) for a lightweight list with thing_id, thing_name, type_name and alive — ideal for orientation and ID lookup. ' +
-                      'Use fields="items" for a compact per-device item index (thing_id, thing_name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. ' +
+                      'Use fields="summary" (default) for a lightweight list with id, name, type_name and alive — ideal for orientation and ID lookup. ' +
+                      'Use fields="items" for a compact per-device item index (id, name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. ' +
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
                       'Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
@@ -24,7 +24,7 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
-                fields  : { type: 'string', enum: ['summary', 'items', 'full'], description: 'Level of detail — "summary" (default): thing_id, thing_name, type_name, alive; "items": compact item index (item_id, item_name, ha_type, history) for cheap id lookup; "full": includes all items with values + metadata' },
+                fields  : { type: 'string', enum: ['summary', 'items', 'full'], description: 'Level of detail — "summary" (default): id, name, type_name, alive; "items": compact item index (item_id, item_name, ha_type, history) for cheap id lookup; "full": includes all items with values + metadata' },
                 ha_type : { type: 'string', description: 'Filter to devices that have at least one item with this ha_type (e.g. "light", "scene", "cover")' },
                 tag     : { type: 'string', description: 'Filter to devices/items tagged with this value (case-insensitive, exact match)' },
                 offset  : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
@@ -35,8 +35,8 @@ const MCP_TOOLS = [
     {
         name        : 'get_state',
         description : 'Returns the complete state for a specific device. ' +
-                      'Use this to fetch full details for one device by its thing_id. ' +
-                      'Provide thing_id for an exact lookup or thing_name for a partial, case-insensitive match. ' +
+                      'Use this to fetch full details for one device by its id. ' +
+                      'Provide id for an exact lookup or name for a partial, case-insensitive match. ' +
                       'Response includes notes and tags on both Thing and Item level when configured. ' +
                       'Each item and the device itself include last_change (ISO 8601 UTC) — when the value last actually changed. ' +
                       'Optionally provide item_id to return only a single item value — the item is a measurement/control within the device, not the device name. ' +
@@ -44,8 +44,8 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string', description: 'Exact thing node ID' },
-                thing_name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to thing_id)' },
+                id   : { type: 'string', description: 'Exact thing node ID' },
+                name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to id)' },
                 item_id    : { type: 'string', description: 'If provided, returns only this item within the device' }
             }
         }
@@ -76,8 +76,8 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to thing_id)' },
+                id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to id)' },
                 item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
                 item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name.' },
                 ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
@@ -96,14 +96,14 @@ const MCP_TOOLS = [
     },
     {
         name        : 'control_device',
-        description : 'Send a command to a specific device item. Use thing_id and item_id from get_all_states. ' +
+        description : 'Send a command to a specific device item. Use id and item_id from get_all_states. ' +
                       'The item is the control WITHIN the device (e.g. an "On" item), not the device name. ' +
                       'If the item_id is wrong or read-only, the error response lists available_items (item_id, item_name, ha_type, read_only) for that thing — pick a controllable one from it.',
         inputSchema : {
             type       : 'object',
-            required   : ['thing_id', 'item_id', 'value'],
+            required   : ['id', 'item_id', 'value'],
             properties : {
-                thing_id  : { type: 'string', description: 'Thing node ID (from get_all_states)' },
+                id  : { type: 'string', description: 'Thing node ID (from get_all_states)' },
                 item_id   : { type: 'string', description: 'Item ID within the thing type (from get_all_states)' },
                 value     : { description: 'Value to set (e.g. "on", "off", brightness number, temperature, etc.)' }
             }
@@ -111,13 +111,13 @@ const MCP_TOOLS = [
     },
     {
         name        : 'control_fan',
-        description : 'Control a ceiling fan. Identify by thing_id or thing_name (partial, case-insensitive). ' +
+        description : 'Control a ceiling fan. Identify by id or name (partial, case-insensitive). ' +
                       'Speed 0 = off, 1 = low, 2 = medium, 3 = high. Current speed is available via get_all_states.',
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                name : { type: 'string',  description: 'Partial, case-insensitive name match' },
                 speed      : { type: 'number',  description: '0 = off, 1 = low, 2 = medium, 3 = high', minimum: 0, maximum: 3 }
             }
         }
@@ -140,22 +140,22 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_scenes)' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                id   : { type: 'string',  description: 'Exact thing node ID (from get_scenes)' },
+                name : { type: 'string',  description: 'Partial, case-insensitive name match' },
                 active     : { type: 'boolean', description: 'true = activate, false = deactivate' }
             }
         }
     },
     {
         name        : 'control_cover',
-        description : 'Control curtains, blinds or shutters. Identify by thing_id or thing_name ' +
+        description : 'Control curtains, blinds or shutters. Identify by id or name ' +
                       '(partial, case-insensitive). Use position to set an exact opening level, ' +
                       'or open/close as a shortcut. Current position is available via get_all_states.',
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                name : { type: 'string',  description: 'Partial, case-insensitive name match' },
                 position   : { type: 'number',  description: 'Position 0–100 where 0 = fully closed, 100 = fully open', minimum: 0, maximum: 100 },
                 open       : { type: 'boolean', description: 'true = fully open (100), false = fully closed (0). Overridden by position if both are given.' }
             }
@@ -163,14 +163,14 @@ const MCP_TOOLS = [
     },
     {
         name        : 'control_spa',
-        description : 'Control a spa or hot tub. Identify by thing_id or thing_name (partial, case-insensitive). ' +
+        description : 'Control a spa or hot tub. Identify by id or name (partial, case-insensitive). ' +
                       'Current status (water temperature, heater state etc.) is available via get_all_states. ' +
                       'All control parameters are optional — only provided ones are sent.',
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id    : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
-                thing_name  : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                id    : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
+                name  : { type: 'string',  description: 'Partial, case-insensitive name match' },
                 target_temp : { type: 'number',  description: 'Desired water temperature in °C' },
                 heater      : { type: 'boolean', description: 'true = turn heater on, false = turn off' },
                 pump        : { type: 'boolean', description: 'true = turn circulation pump on, false = turn off' },
@@ -180,13 +180,13 @@ const MCP_TOOLS = [
     },
     {
         name        : 'control_climate',
-        description : 'Control a heat pump or AC unit. Identify by thing_id or thing_name (partial, case-insensitive). ' +
+        description : 'Control a heat pump or AC unit. Identify by id or name (partial, case-insensitive). ' +
                       'Current status is available via get_all_states. All parameters are optional — only provided ones are sent.',
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
-                thing_name : { type: 'string', description: 'Partial, case-insensitive name match' },
+                id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
+                name : { type: 'string', description: 'Partial, case-insensitive name match' },
                 mode       : { type: 'string', enum: ['off','cool','heat','fan_only','dry','heat_cool'], description: 'HVAC mode' },
                 target_temp: { type: 'number', description: 'Target temperature in °C' },
                 fan_mode   : { type: 'string', enum: ['auto','diffuse','low','medium','middle','high'], description: 'Fan speed/mode' },
@@ -202,7 +202,7 @@ const MCP_TOOLS = [
                       '"who is home right now?", "when did Bob come home?", "how long has Alice been away?". ' +
                       'Each person includes home_since/away_since (ISO timestamp of last change) and ' +
                       'home_for_minutes/away_for_minutes (duration in current state). When home, also includes ' +
-                      'room, room_since and in_room_for_minutes. thing_id and item ids are included so follow-up ' +
+                      'room, room_since and in_room_for_minutes. id and item ids are included so follow-up ' +
                       'tools (get_history, set_light, etc.) can be called without an extra lookup. ' +
                       'Entries carry the notes and tags of the thing they describe — this is how a tracked ' +
                       'phone is told apart from the person carrying it, so read them before treating an ' +
@@ -271,8 +271,8 @@ const MCP_TOOLS = [
     },
     {
         name        : 'set_light',
-        description : 'Control a specific light or lamp. Identify the device by thing_id OR thing_name. ' +
-                      'thing_name supports partial, case-insensitive match against the thing name OR against ' +
+        description : 'Control a specific light or lamp. Identify the device by id OR name. ' +
+                      'name supports partial, case-insensitive match against the thing name OR against ' +
                       'item labels (the label field in get_all_states items). Labels are friendly names assigned ' +
                       'per-device, e.g. a double switch named "Kitchen Double Switch" may have items labelled ' +
                       '"Kitchen Ceiling Light" and "Kitchen Counter Light" — searching "counter" will target only that relay. ' +
@@ -280,8 +280,8 @@ const MCP_TOOLS = [
         inputSchema : {
             type       : 'object',
             properties : {
-                thing_id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over thing_name.' },
-                thing_name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights").' },
+                id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over name.' },
+                name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights").' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
                 color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' },
@@ -408,8 +408,8 @@ function nothingToCommand(devices, need) {
         error   : 'nothing_to_command',
         message : 'No item on the matched thing(s) takes this command. ' + need,
         things  : (devices || []).map(d => ({
-            thing_id   : d.thing_id,
-            thing_name : d.thing_name,
+            id   : d.id,
+            name : d.name,
             items      : (d.items || []).map(i => ({
                 item_id      : i.item_id,
                 item_name    : i.item_name,
