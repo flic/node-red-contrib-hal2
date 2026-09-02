@@ -263,7 +263,10 @@ rather than typed by someone.
 > used to command every ceiling lamp in the house — five devices from one substring match. It now
 > answers `ambiguous_name` listing the candidates with their rooms, so adding `room` picks one.
 > That refusal is what makes a short name safe, and it applies to `get_state`, `get_history` and
-> every `control_*` tool.
+> every `control_*` tool. A name spanning both — `"Tvättstuga Golvspot"`, or the bracketed form the
+> editor shows — resolves on its own, so nobody has to take the displayed name apart before using
+> it. That is a fallback tried only after the bare name finds nothing, so it can never turn a
+> refusal into a guess.
 
 `get_presence` reports `current_room` — where a person is *now*, which is not the same thing as the
 room a device was installed in, and no longer shares a key with it.

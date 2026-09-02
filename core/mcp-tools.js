@@ -47,7 +47,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string', description: 'Exact thing node ID' },
                 name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to id)' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 item_id    : { type: 'string', description: 'If provided, returns only this item within the device' }
             }
         }
@@ -80,7 +80,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to id)' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
                 item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name.' },
                 ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
@@ -121,7 +121,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 speed      : { type: 'number',  description: '0 = off, 1 = low, 2 = medium, 3 = high', minimum: 0, maximum: 3 }
             }
         }
@@ -146,7 +146,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_scenes)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 active     : { type: 'boolean', description: 'true = activate, false = deactivate' }
             }
         }
@@ -161,7 +161,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 position   : { type: 'number',  description: 'Position 0–100 where 0 = fully closed, 100 = fully open', minimum: 0, maximum: 100 },
                 open       : { type: 'boolean', description: 'true = fully open (100), false = fully closed (0). Overridden by position if both are given.' }
             }
@@ -177,7 +177,7 @@ const MCP_TOOLS = [
             properties : {
                 id    : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name  : { type: 'string',  description: 'Partial, case-insensitive name match' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 target_temp : { type: 'number',  description: 'Desired water temperature in °C' },
                 heater      : { type: 'boolean', description: 'true = turn heater on, false = turn off' },
                 pump        : { type: 'boolean', description: 'true = turn circulation pump on, false = turn off' },
@@ -194,7 +194,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string', description: 'Partial, case-insensitive name match' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 mode       : { type: 'string', enum: ['off','cool','heat','fan_only','dry','heat_cool'], description: 'HVAC mode' },
                 target_temp: { type: 'number', description: 'Target temperature in °C' },
                 fan_mode   : { type: 'string', enum: ['auto','diffuse','low','medium','middle','high'], description: 'Fan speed/mode' },
@@ -292,7 +292,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over name.' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights").' },
-                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own.' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
                 color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' },
@@ -479,7 +479,7 @@ function ambiguousThing(matches, what) {
     return {
         error   : 'ambiguous_name',
         message : 'The name "' + what + '" matches ' + matches.length + ' things. Add room to pick '
-                + 'one, or pass its id.',
+                + 'one, pass its id, or give the name as "Room Name".',
         matches : matches.map(d => ({ id: d.id, name: d.name, room: d.room || null }))
     };
 }
@@ -497,6 +497,18 @@ function resolveByName(devices, args) {
     if (!args.name) { return { devices: [] }; }
     const needle = String(args.name).toLowerCase();
     let hits = (devices || []).filter(d => d.name && d.name.toLowerCase().includes(needle));
+
+    // Nothing answered to the bare name. The editor writes a Thing as "[Kontor] Taklampa", and an
+    // assistant that has read `name` and `room` separately may well put them back together — so a
+    // needle spanning both is retried against the composed form, brackets and all. Strictly a
+    // fallback: the bare name is tried first, so a name that resolves on its own still resolves
+    // the same way, and an ambiguous one is still refused rather than quietly widened.
+    if (!hits.length) {
+        const spanning = needle.replace(/[[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+        hits = (devices || []).filter(d => d.room && d.name &&
+            (String(d.room) + ' ' + String(d.name)).toLowerCase().includes(spanning));
+    }
+
     if (args.room) {
         const room = String(args.room).toLowerCase();
         hits = hits.filter(d => String(d.room || '').toLowerCase() === room);

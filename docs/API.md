@@ -82,7 +82,7 @@ Returns the complete state for a specific device. Use this to fetch full details
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID |
 | `name` | `string` | no | Partial, case-insensitive name match (alternative to id) |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `item_id` | `string` | no | If provided, returns only this item within the device |
 
 **Example**
@@ -101,7 +101,7 @@ Returns logged historical values for a specific device item — temperature and 
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_all_states) |
 | `name` | `string` | no | Partial, case-insensitive name match (alternative to id) |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `item_id` | `string` | no | Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name. |
 | `item_name` | `string` | no | Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name. |
 | `ha_type` | `string` | no | Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand. |
@@ -152,7 +152,7 @@ Control a ceiling fan. Identify by id or name (partial, case-insensitive). Speed
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_all_states) |
 | `name` | `string` | no | Partial, case-insensitive name match |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `speed` | `number` | no | 0 = off, 1 = low, 2 = medium, 3 = high |
 
 **Example**
@@ -191,7 +191,7 @@ Activate or deactivate a scene by name or ID. Use get_scenes to find available s
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_scenes) |
 | `name` | `string` | no | Partial, case-insensitive name match |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `active` | `boolean` | no | true = activate, false = deactivate |
 
 **Example**
@@ -212,7 +212,7 @@ Control curtains, blinds or shutters. Identify by id or name (partial, case-inse
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_all_states) |
 | `name` | `string` | no | Partial, case-insensitive name match |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `position` | `number` | no | Position 0–100 where 0 = fully closed, 100 = fully open |
 | `open` | `boolean` | no | true = fully open (100), false = fully closed (0). Overridden by position if both are given. |
 
@@ -234,7 +234,7 @@ Control a spa or hot tub. Identify by id or name (partial, case-insensitive). Cu
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_all_states) |
 | `name` | `string` | no | Partial, case-insensitive name match |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `target_temp` | `number` | no | Desired water temperature in °C |
 | `heater` | `boolean` | no | true = turn heater on, false = turn off |
 | `pump` | `boolean` | no | true = turn circulation pump on, false = turn off |
@@ -258,7 +258,7 @@ Control a heat pump or AC unit. Identify by id or name (partial, case-insensitiv
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_all_states) |
 | `name` | `string` | no | Partial, case-insensitive name match |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `mode` | `off` \| `cool` \| `heat` \| `fan_only` \| `dry` \| `heat_cool` | no | HVAC mode |
 | `target_temp` | `number` | no | Target temperature in °C |
 | `fan_mode` | `auto` \| `diffuse` \| `low` \| `medium` \| `middle` \| `high` | no | Fan speed/mode |
@@ -350,7 +350,7 @@ Control a specific light or lamp. Identify the device by id OR name. name suppor
 |---|---|---|---|
 | `id` | `string` | no | Exact thing node ID (from get_all_states). Takes priority over name. |
 | `name` | `string` | no | Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights"). |
-| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states) |
+| `room` | `string` | no | Room name, to pick between things that share a name (from get_all_states). A name spanning both — "Kontor Taklampa" — is also accepted on its own. |
 | `on` | `boolean` | no | true = turn on, false = turn off |
 | `brightness` | `number` | no | Brightness 0–100 (percent) |
 | `color_temp` | `number` | no | Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide) |

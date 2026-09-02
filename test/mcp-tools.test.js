@@ -323,3 +323,37 @@ describe('resolving a thing by name', function () {
         assert.strictEqual(out.matches[1].room, null);
     });
 });
+
+describe('a name spanning room and thing', function () {
+    const { resolveByName } = require('../core/mcp-tools');
+    // What the editor shows is "[Tvättstuga] Golvspot", so that is what a person reads as the
+    // thing's name — and an assistant that read `name` and `room` separately may put them back
+    // together. Before this, both answered with nothing at all, which is worse than a refusal.
+    const DEVICES = [
+        { id: 'a', name: 'Golvspot', room: 'Tvättstuga' },
+        { id: 'b', name: 'Golvspot', room: 'Kontor' },
+        { id: 'c', name: 'Scen Natt' }
+    ];
+
+    it('resolves "Room Name" written as one string', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'Tvättstuga Golvspot' }).devices.map(d => d.id), ['a']);
+    });
+
+    it('accepts the bracketed form the editor displays', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: '[Kontor] Golvspot' }).devices.map(d => d.id), ['b']);
+    });
+
+    it('still refuses the bare ambiguous name rather than widening it', function () {
+        // The fallback runs only when the bare name found nothing, so it can never turn a
+        // refusal into a guess.
+        assert.strictEqual(resolveByName(DEVICES, { name: 'Golvspot' }).error.error, 'ambiguous_name');
+    });
+
+    it('leaves a thing without a room reachable by its own name', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'Scen Natt' }).devices.map(d => d.id), ['c']);
+    });
+
+    it('still finds nothing when nothing matches either way', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'Vardagsrum Golvspot' }).devices, []);
+    });
+});
