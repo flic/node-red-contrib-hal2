@@ -31,6 +31,9 @@ module.exports = function(RED) {
         this.name = config.name;
         this.notes = config.notes;
         this.tags = config.tags || [];
+        // Room id, resolved to a name by the Event handler's registry. '' means no room, which is
+        // a complete answer rather than a gap — a scene is nowhere.
+        this.room = config.room || '';
         this.topicPrefix = config.topicPrefix;
         this.attributes = config.attributes;
         this.groups = config.groups || [];   // [{ item, group }] — group membership, resolved by the EventHandler group engine

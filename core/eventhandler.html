@@ -53,6 +53,20 @@
             </div>
         </div>
 
+        <!-- Rooms tab -->
+        <div id="hal2eh-tab-rooms" style="display:none">
+            <div class="form-row">
+                <p>Rooms name the places Things are in, so the room stops being a prefix someone
+                remembers to type. A Thing picks one here; the tools then report it as a field and
+                accept it as a filter, and the editor writes a Thing as <b>[Room] Name</b> wherever
+                it has to be told apart from another of the same name. Having no room is a complete
+                answer — a scene is nowhere, and so is a person.</p>
+            </div>
+            <div class="form-row">
+                <ol id="node-config-eh-rooms-list-items"></ol>
+            </div>
+        </div>
+
         <!-- History tab -->
         <div id="hal2eh-tab-history" style="display:none">
             <div class="form-row">
@@ -373,6 +387,7 @@
             checkHeartbeat:    { value: false },
             heartbeat:         { value: 3600 },
             groups:            { value: [], required: false },
+            rooms:             { value: [], required: false },
             // History
             historyEnabled:        { value: false },
             historyDbPath:         { value: '' },
@@ -421,6 +436,7 @@
             });
             tabs.addTab({ id: 'hal2eh-tab-general',   label: 'General' });
             tabs.addTab({ id: 'hal2eh-tab-groups',    label: 'Groups' });
+            tabs.addTab({ id: 'hal2eh-tab-rooms',     label: 'Rooms' });
             tabs.addTab({ id: 'hal2eh-tab-history',   label: 'History' });
             tabs.addTab({ id: 'hal2eh-tab-mcp',       label: 'MCP' });
             tabs.addTab({ id: 'hal2eh-tab-libraries', label: 'Shared Functions' });
@@ -436,6 +452,29 @@
             }
 
             // ── Groups editableList ───────────────────────────────────────────
+            // Rooms: a flat registry of names. No haType, no rate limit, nothing to aggregate —
+            // a room is a place, and the only thing that can be wrong about one is its spelling.
+            $("#node-config-eh-rooms-list-items").editableList({
+                addItem: function(container, i, opt) {
+                    var room = opt || {};
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+                    var row = $('<div/>').appendTo(container);
+                    $('<input/>', { type: 'hidden', class: "node-config-eh-room-id-property" })
+                        .appendTo(row).val(room.id || halCreateId());
+                    $('<label/>', { style: "width:60px; margin:0;" }).text('Name').appendTo(row);
+                    $('<input/>', { type: 'text', class: "node-config-eh-room-name-property",
+                                    placeholder: "e.g. Kontor", style: "width:calc(45% - 60px);" })
+                        .appendTo(row).val(room.name || '');
+                    $('<label/>', { style: "width:60px; margin:0 0 0 10px;" }).text('Notes').appendTo(row);
+                    $('<input/>', { type: 'text', class: "node-config-eh-room-notes-property",
+                                    style: "width:calc(55% - 80px);" })
+                        .appendTo(row).val(room.notes || '');
+                },
+                removable: true,
+                sortable: false,
+                addButton: "Add room"
+            });
+
             $("#node-config-eh-groups-list-items").editableList({
                 addItem: function(container, i, opt) {
                     var group = opt || {};
@@ -698,6 +737,9 @@
             (node.groups || []).forEach(function(g) {
                 $("#node-config-eh-groups-list-items").editableList('addItem', g);
             });
+            (node.rooms || []).forEach(function(r) {
+                $("#node-config-eh-rooms-list-items").editableList('addItem', r);
+            });
 
             // ── History toggle ────────────────────────────────────────────────
             function toggleHistory() {
@@ -872,6 +914,20 @@
                         tags:      halParseTags(item.find(".node-config-eh-group-tags-property").val()),
                         ratelimit: Number(item.find(".node-config-eh-group-ratelimit-property").val()) || 0,
                         notes:     item.find(".node-config-eh-group-notes-property").val() || ''
+                    });
+                });
+
+            node.rooms = [];
+            $("#node-config-eh-rooms-list-items")
+                .editableList('items')
+                .each(function () {
+                    var item = $(this);
+                    var name = (item.find(".node-config-eh-room-name-property").val() || '').trim();
+                    if (!name) { return; }   // an unnamed room is nothing; drop the row
+                    node.rooms.push({
+                        id:    item.find(".node-config-eh-room-id-property").val(),
+                        name:  name,
+                        notes: item.find(".node-config-eh-room-notes-property").val() || ''
                     });
                 });
 

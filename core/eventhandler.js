@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity, resolveByName
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -358,6 +358,20 @@ module.exports = function(RED) {
         // fills this in once; liveness is read per call from the state record, which tracks it.
         node.groupInfo = [];
         node.getGroups = function () { return node.groupInfo; };
+
+        // Rooms are a flat registry on this handler: id → name. The tools report and filter on the
+        // name, never the id — an id is an editor concern, and an assistant asked about "Kontor"
+        // should not have to learn one.
+        const roomNames = () => {
+            const map = new Map();
+            for (const r of (Array.isArray(config.rooms) ? config.rooms : [])) {
+                if (r && r.id && r.name) { map.set(r.id, r.name); }
+            }
+            return map;
+        };
+        node.getRooms = function () {
+            return (Array.isArray(config.rooms) ? config.rooms : []).map(r => ({ id: r.id, name: r.name, notes: r.notes || '' }));
+        };
         // groupId → send(payload) → { queued, skipped }. Rebuilt by wireGroups on every deploy.
         node.groupCommanders = {};
         // groupId → read(fn) → { value, live, members }. The configured function is only a
@@ -902,6 +916,7 @@ module.exports = function(RED) {
 
             function getAllStates() {
                 const devices = [];
+                const rooms = roomNames();
                 RED.nodes.eachNode(function (cfg) {
                     if (cfg.type !== 'hal2Thing') return;
                     const thing = RED.nodes.getNode(cfg.id);
@@ -950,6 +965,10 @@ module.exports = function(RED) {
                     if (Array.isArray(thing.tags) && thing.tags.length) deviceEntry.tags = thing.tags;
                     // Always present (empty object when the device has no metadata) so consumers
                     // can rely on the key existing.
+                    // Only when the Thing has one. No room is a complete answer — a scene is
+                    // nowhere — so an absent key says that rather than a null pretending to.
+                    const roomName = thing.room ? rooms.get(thing.room) : '';
+                    if (roomName) { deviceEntry.room = roomName; }
                     deviceEntry.metadata = (typeof thing.getMetadata === 'function') ? thing.getMetadata() : (thing.metadata || {});
                     const categories = deriveCategories(items);
                     if (categories.length) deviceEntry.categories = categories;
@@ -1098,6 +1117,13 @@ module.exports = function(RED) {
                             devices = devices.filter(d => d.items.some(i => itemMatchesHaTypeFilter(i, wanted)));
                         }
 
+                        if (args.room) {
+                            // Exact, unlike the ha_type and tag filters: a room name comes from a
+                            // list the caller can read, so there is nothing to guess at.
+                            const want = String(args.room).toLowerCase();
+                            devices = devices.filter(d => String(d.room || '').toLowerCase() === want);
+                        }
+
                         if (args.tag) {
                             const wanted = args.tag.toLowerCase();
                             devices = devices.filter(d =>
@@ -1160,23 +1186,11 @@ module.exports = function(RED) {
                             return toolOk(JSON.stringify({ error: 'Provide id or name' }));
                         }
                         const all = getAllStates();
-                        let device;
-                        if (args.id) {
-                            device = all.find(d => d.id === args.id);
-                        } else {
-                            const q = args.name.toLowerCase();
-                            // Several matches is not a coin toss — same rule as resolveGroup:
-                            // say which ones and let the caller pick, rather than silently
-                            // answering for whichever device happened to come first.
-                            const hits = all.filter(d => d.name.toLowerCase().includes(q));
-                            if (hits.length > 1) {
-                                return toolOk(JSON.stringify({
-                                    error   : 'Several devices match "' + args.name + '" — use id to pick one',
-                                    matches : hits.map(d => ({ id: d.id, name: d.name }))
-                                }));
-                            }
-                            device = hits[0];
-                        }
+                        // Several matches is not a coin toss: say which ones, with their rooms, and
+                        // let the caller pick — the same refusal every name-addressed tool gives.
+                        const hit = resolveByName(all, args);
+                        if (hit.error) { return toolOk(JSON.stringify(hit.error)); }
+                        const device = hit.devices[0];
                         if (!device) {
                             return toolOk(JSON.stringify({ error: 'Device not found' }));
                         }
@@ -1254,12 +1268,16 @@ module.exports = function(RED) {
                                 entry.away_for_minutes = minutesSinceIso(presenceChange);
                             }
 
-                            entry.room = (home && roomItem) ? roomItem.value : null;
+                            // current_room, not room: this is a reading of where someone is right
+                            // now, while `room` everywhere else is where a device was installed.
+                            // One word for two meanings is the kind of thing an assistant gets
+                            // wrong in exactly the situations that matter.
+                            entry.current_room = (home && roomItem) ? roomItem.value : null;
                             if (home && roomItem) {
                                 const roomChange = roomItem.last_change || null;
-                                entry.room_since          = roomChange;
+                                entry.current_room_since  = roomChange;
                                 entry.in_room_for_minutes = minutesSinceIso(roomChange);
-                                entry.room_item_id        = roomItem.item_id;
+                                entry.current_room_item_id = roomItem.item_id;
                             }
 
                             Object.assign(entry, presenceIdentity(device, presenceItem));
@@ -1288,14 +1306,15 @@ module.exports = function(RED) {
                     // control_fan
                     if (toolName === 'control_fan') {
                         const allStates = getAllStates();
-                        let matched = [];
-                        if (args.id) {
-                            const device = allStates.find(d => d.id === args.id);
-                            if (device) matched = [device];
-                        } else if (args.name) {
-                            const needle = args.name.toLowerCase();
-                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
+                        // One resolver for every tool that takes a name: an id, or a name narrowed
+                        // by room, and a refusal when several match and nothing settles it. Fanning
+                        // the command out to all of them is what made a short name unsafe.
+                        const found = resolveByName(allStates, args);
+                        if (found.error) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'ambiguous' });
+                            return toolOk(JSON.stringify(found.error));
                         }
+                        let matched = found.devices;
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
@@ -1351,14 +1370,15 @@ module.exports = function(RED) {
                     // activate_scene
                     if (toolName === 'activate_scene') {
                         const allStates = getAllStates();
-                        let matched = [];
-                        if (args.id) {
-                            const device = allStates.find(d => d.id === args.id);
-                            if (device) matched = [device];
-                        } else if (args.name) {
-                            const needle = args.name.toLowerCase();
-                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
+                        // One resolver for every tool that takes a name: an id, or a name narrowed
+                        // by room, and a refusal when several match and nothing settles it. Fanning
+                        // the command out to all of them is what made a short name unsafe.
+                        const found = resolveByName(allStates, args);
+                        if (found.error) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'ambiguous' });
+                            return toolOk(JSON.stringify(found.error));
                         }
+                        let matched = found.devices;
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
@@ -1380,14 +1400,15 @@ module.exports = function(RED) {
                     // control_cover
                     if (toolName === 'control_cover') {
                         const allStates = getAllStates();
-                        let matched = [];
-                        if (args.id) {
-                            const device = allStates.find(d => d.id === args.id);
-                            if (device) matched = [device];
-                        } else if (args.name) {
-                            const needle = args.name.toLowerCase();
-                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
+                        // One resolver for every tool that takes a name: an id, or a name narrowed
+                        // by room, and a refusal when several match and nothing settles it. Fanning
+                        // the command out to all of them is what made a short name unsafe.
+                        const found = resolveByName(allStates, args);
+                        if (found.error) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'ambiguous' });
+                            return toolOk(JSON.stringify(found.error));
                         }
+                        let matched = found.devices;
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
@@ -1431,14 +1452,15 @@ module.exports = function(RED) {
                     // control_spa
                     if (toolName === 'control_spa') {
                         const allStates = getAllStates();
-                        let matched = [];
-                        if (args.id) {
-                            const device = allStates.find(d => d.id === args.id);
-                            if (device) matched = [device];
-                        } else if (args.name) {
-                            const needle = args.name.toLowerCase();
-                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
+                        // One resolver for every tool that takes a name: an id, or a name narrowed
+                        // by room, and a refusal when several match and nothing settles it. Fanning
+                        // the command out to all of them is what made a short name unsafe.
+                        const found = resolveByName(allStates, args);
+                        if (found.error) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'ambiguous' });
+                            return toolOk(JSON.stringify(found.error));
                         }
+                        let matched = found.devices;
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
@@ -1483,14 +1505,15 @@ module.exports = function(RED) {
                     // control_climate
                     if (toolName === 'control_climate') {
                         const allStates = getAllStates();
-                        let matched = [];
-                        if (args.id) {
-                            const device = allStates.find(d => d.id === args.id);
-                            if (device) matched = [device];
-                        } else if (args.name) {
-                            const needle = args.name.toLowerCase();
-                            matched = allStates.filter(d => d.name && d.name.toLowerCase().includes(needle));
+                        // One resolver for every tool that takes a name: an id, or a name narrowed
+                        // by room, and a refusal when several match and nothing settles it. Fanning
+                        // the command out to all of them is what made a short name unsafe.
+                        const found = resolveByName(allStates, args);
+                        if (found.error) {
+                            node.status({ fill: 'red', shape: 'dot', text: 'ambiguous' });
+                            return toolOk(JSON.stringify(found.error));
                         }
+                        let matched = found.devices;
 
                         if (matched.length === 0) {
                             node.status({ fill: 'red', shape: 'dot', text: 'error' });
@@ -1786,15 +1809,15 @@ module.exports = function(RED) {
                                 return toolOk(JSON.stringify({ error: 'Thing not found: ' + args.id }));
                             }
                         } else if (args.name) {
-                            const needle = args.name.toLowerCase();
-                            RED.nodes.eachNode(cfg => {
-                                if (targetThing || cfg.type !== 'hal2Thing') return;
-                                const t = RED.nodes.getNode(cfg.id);
-                                if (t && t.eventHandler && t.eventHandler.id === node.id && t.name.toLowerCase().includes(needle)) {
-                                    targetThing = t;
-                                }
-                            });
-                            if (!targetThing) return toolOk(JSON.stringify({ error: 'No thing matching: ' + args.name }));
+                            // Resolve through getAllStates rather than walking the flow and taking
+                            // whichever node came first — that silently answered for one of several
+                            // and could never see a room. The state entry carries the id, which is
+                            // what turns it back into the node.
+                            const hit = resolveByName(getAllStates(), args);
+                            if (hit.error) { return toolOk(JSON.stringify(hit.error)); }
+                            if (!hit.devices.length) { return toolOk(JSON.stringify({ error: 'No thing matching: ' + args.name })); }
+                            targetThing = RED.nodes.getNode(hit.devices[0].id);
+                            if (!targetThing) { return toolOk(JSON.stringify({ error: 'No thing matching: ' + args.name })); }
                         } else {
                             return toolOk(JSON.stringify({ error: 'Provide id or name' }));
                         }

@@ -360,7 +360,7 @@
                     sel.empty();
                     sel.append($("<option></option>").val('').text('select…'));
                     for (var t in thingsList) {
-                        sel.append($("<option></option>").val(thingsList[t].id).text(thingsList[t].name));
+                        sel.append($("<option></option>").val(thingsList[t].id).text(halThingLabel(RED, thingsList[t])));
                     }
                     if (current) { sel.val(current); }
                 }

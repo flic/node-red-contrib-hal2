@@ -424,3 +424,46 @@ function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=fa
     });            
     return thingTypeList;
 }
+
+// The rooms registry on the Event handler, sorted by name. Mirrors halGetGroups, minus the
+// legacy fold-in and the filters — rooms are new, so there is no older shape to surface.
+// Returns [{ id, name, notes }].
+function halGetRooms(RED, eventHandlerId) {
+    var eh = eventHandlerId ? RED.nodes.node(eventHandlerId) : null;
+    var rooms = [];
+    if (eh && Array.isArray(eh.rooms)) {
+        rooms = eh.rooms.slice();
+    } else if (typeof RED.nodes.eachConfig === 'function') {
+        // eachConfig, not filterNodes: an Event handler is a config node, and filterNodes
+        // only walks flow nodes — it would find nothing at all.
+        RED.nodes.eachConfig(function (cfg) {
+            if (cfg && cfg.type === 'hal2EventHandler' && Array.isArray(cfg.rooms)) {
+                rooms = rooms.concat(cfg.rooms);
+            }
+        });
+    }
+    rooms.sort(function (a, b) {
+        var A = String((a && a.name) || '').toUpperCase();
+        var B = String((b && b.name) || '').toUpperCase();
+        return (A < B) ? -1 : (A > B) ? 1 : 0;
+    });
+    return rooms;
+}
+
+// How a Thing is written wherever a human has to pick it out of a list: "[Kontor] Taklampa"
+// when it has a room, the bare name when it does not.
+//
+// The brackets are load-bearing. They say the string was assembled from two fields rather than
+// typed by someone, which is the whole point of moving the room out of the name — a reader who
+// sees "Kontor Taklampa" cannot tell whether "Kontor" is data or part of what someone called it.
+//
+// Built at display time and never stored: halGetThings returns LIVE editor node objects, so
+// composing into .name would write the label onto the actual node.
+function halThingLabel(RED, thing) {
+    var name = (thing && thing.name) || '';
+    var roomId = thing && thing.room;
+    if (!roomId) { return name; }
+    var rooms = halGetRooms(RED, thing.eventHandler);
+    var room = rooms.find(function (r) { return r && r.id === roomId; });
+    return room && room.name ? '[' + room.name + '] ' + name : name;
+}

@@ -110,3 +110,39 @@ describe('hal.js halGroupAccepts', function () {
         assert.strictEqual(halHaTypeFamily('dimmer'), 'dimmer');
     });
 });
+
+describe('hal.js halThingLabel', function () {
+    const { halThingLabel, halGetRooms } = sandbox;
+    const RED = {
+        nodes: {
+            node: id => (id === 'eh1' ? { rooms: [{ id: 'r2', name: 'Sovrum' }, { id: 'r1', name: 'Kontor' }] } : null),
+            eachConfig: () => {}, filterNodes: () => []
+        }
+    };
+
+    it('writes [Room] Name, so the string reads as assembled rather than typed', function () {
+        assert.strictEqual(
+            halThingLabel(RED, { name: 'Taklampa', room: 'r1', eventHandler: 'eh1' }),
+            '[Kontor] Taklampa');
+    });
+
+    it('leaves a thing with no room exactly as it was', function () {
+        // A scene is nowhere, and nothing about it should look unfinished.
+        assert.strictEqual(halThingLabel(RED, { name: 'Scen Natt', eventHandler: 'eh1' }), 'Scen Natt');
+    });
+
+    it('falls back to the bare name when the room id no longer resolves', function () {
+        assert.strictEqual(halThingLabel(RED, { name: 'X', room: 'deleted', eventHandler: 'eh1' }), 'X');
+    });
+
+    it('does not write the label onto the node it was given', function () {
+        // halGetThings hands out live editor nodes; composing into .name would rename the device.
+        const thing = { name: 'Taklampa', room: 'r1', eventHandler: 'eh1' };
+        halThingLabel(RED, thing);
+        assert.deepStrictEqual(thing, { name: 'Taklampa', room: 'r1', eventHandler: 'eh1' });
+    });
+
+    it('sorts rooms by name, so a dropdown is scannable', function () {
+        assert.deepStrictEqual(halGetRooms(RED, 'eh1').map(r => r.name), ['Kontor', 'Sovrum']);
+    });
+});

@@ -11,6 +11,10 @@
         <input type="text" id="node-input-thingType" style="width:calc(100% - 125px)" placeholder="Type">
     </div>
     <div class="form-row">
+        <label for="node-input-room" style="width:95px; padding-right:10px;"><i class="fa fa-map-marker"></i> Room</label>
+        <select id="node-input-room" style="width:calc(100% - 125px)"></select>
+    </div>
+    <div class="form-row">
         <label for="node-input-topicFilterMode" style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filters</label>
         <select id="node-input-topicFilterMode" style="width:70px; vertical-align:top; margin-top:3px;">
             <option value="and">AND</option>
@@ -107,6 +111,7 @@
             topicPrefix:        { value: "" },
             notes:              {},
             tags:               { value: '' },
+            room:               { value: '' },   // room id, '' = no room, which is a complete answer
             groups:             { value: [] }, //[{ item, group }] group membership
             itemFacts:          { value: [] }, //[{ item, kind, value }] per-item facts about this Thing's wiring
             outputs:            { value: 0 } //Store if outputs are enabled
@@ -115,7 +120,10 @@
         outputs: 1,
         icon: "thing.png",
         label: function () {
-            return this.name || "thing";
+            // "[Kontor] Taklampa" where a room is set — the brackets say the string was assembled
+            // from two fields rather than typed, which is the whole point of moving the room out
+            // of the name. Unroomed Things read exactly as they always have.
+            return halThingLabel(RED, this) || this.name || "thing";
         },
         paletteLabel: "thing",
         oneditprepare: function () {
@@ -468,6 +476,19 @@
                     paint();
                 });
             }
+
+            // The room list belongs to the Event handler, so it is repopulated when that changes.
+            function renderRooms() {
+                var sel = $("#node-input-room").empty();
+                // No room first and selected by default: a scene is nowhere, and so is a person.
+                sel.append($("<option></option>").val('').text('— no room —'));
+                halGetRooms(RED, $("#node-input-eventHandler").val()).forEach(function(r) {
+                    sel.append($("<option></option>").val(r.id).text(r.name));
+                });
+                sel.val(node.room || '');
+            }
+            renderRooms();
+            $("#node-input-eventHandler").change(renderRooms);
 
             renderThingFacts();
 

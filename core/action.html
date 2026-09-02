@@ -215,7 +215,7 @@
                         thingsField.children().remove();
                         for (var d in thingsList) {
                             if ((filterField.val() == 0) || (thingsList[d].thingType == filterField.val())) {
-                                thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                                thingsField.append($("<option></option>").val(thingsList[d].id).text(halThingLabel(RED, thingsList[d])));
                             }
                         }
                         thingsField.trigger('change');
@@ -275,7 +275,7 @@
                                 labelThing.attr('class','fa fa-microchip')
                                 thingsField.children().remove();
                                 for (var t in thingsList) {
-                                    thingsField.append($("<option></option>").val(thingsList[t].id).text(thingsList[t].name))
+                                    thingsField.append($("<option></option>").val(thingsList[t].id).text(halThingLabel(RED, thingsList[t])))
                                 }
                                 if (savedTypeSel == 'hal2Thing') {
                                     thingsField.val(savedThing);

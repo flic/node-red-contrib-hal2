@@ -27,6 +27,7 @@ const MCP_TOOLS = [
                 fields  : { type: 'string', enum: ['summary', 'items', 'full'], description: 'Level of detail — "summary" (default): id, name, type_name, alive; "items": compact item index (item_id, item_name, ha_type, history) for cheap id lookup; "full": includes all items with values + metadata' },
                 ha_type : { type: 'string', description: 'Filter to devices that have at least one item with this ha_type (e.g. "light", "scene", "cover")' },
                 tag     : { type: 'string', description: 'Filter to devices/items tagged with this value (case-insensitive, exact match)' },
+                room    : { type: 'string', description: 'Filter to devices in this room (exact, case-insensitive). Rooms are configured on the event handler; a device may have none, which is normal for scenes and people.' },
                 offset  : { type: 'integer', description: 'Number of devices to skip (default: 0)' },
                 limit   : { type: 'integer', description: 'Max devices to return (default: all)' }
             }
@@ -46,6 +47,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string', description: 'Exact thing node ID' },
                 name : { type: 'string', description: 'Partial, case-insensitive name match (alternative to id)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 item_id    : { type: 'string', description: 'If provided, returns only this item within the device' }
             }
         }
@@ -78,6 +80,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match (alternative to id)' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 item_id    : { type: 'string',  description: 'Item ID (from get_all_states). The item is the measurement within the thing — NOT the thing/device name.' },
                 item_name  : { type: 'string',  description: 'Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name.' },
                 ha_type    : { type: 'string',  description: 'Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand.' },
@@ -118,6 +121,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 speed      : { type: 'number',  description: '0 = off, 1 = low, 2 = medium, 3 = high', minimum: 0, maximum: 3 }
             }
         }
@@ -142,6 +146,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_scenes)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 active     : { type: 'boolean', description: 'true = activate, false = deactivate' }
             }
         }
@@ -156,6 +161,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 position   : { type: 'number',  description: 'Position 0–100 where 0 = fully closed, 100 = fully open', minimum: 0, maximum: 100 },
                 open       : { type: 'boolean', description: 'true = fully open (100), false = fully closed (0). Overridden by position if both are given.' }
             }
@@ -171,6 +177,7 @@ const MCP_TOOLS = [
             properties : {
                 id    : { type: 'string',  description: 'Exact thing node ID (from get_all_states)' },
                 name  : { type: 'string',  description: 'Partial, case-insensitive name match' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 target_temp : { type: 'number',  description: 'Desired water temperature in °C' },
                 heater      : { type: 'boolean', description: 'true = turn heater on, false = turn off' },
                 pump        : { type: 'boolean', description: 'true = turn circulation pump on, false = turn off' },
@@ -187,6 +194,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string', description: 'Exact thing node ID (from get_all_states)' },
                 name : { type: 'string', description: 'Partial, case-insensitive name match' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 mode       : { type: 'string', enum: ['off','cool','heat','fan_only','dry','heat_cool'], description: 'HVAC mode' },
                 target_temp: { type: 'number', description: 'Target temperature in °C' },
                 fan_mode   : { type: 'string', enum: ['auto','diffuse','low','medium','middle','high'], description: 'Fan speed/mode' },
@@ -202,7 +210,9 @@ const MCP_TOOLS = [
                       '"who is home right now?", "when did Bob come home?", "how long has Alice been away?". ' +
                       'Each person includes home_since/away_since (ISO timestamp of last change) and ' +
                       'home_for_minutes/away_for_minutes (duration in current state). When home, also includes ' +
-                      'room, room_since and in_room_for_minutes. id and item ids are included so follow-up ' +
+                      'current_room, current_room_since and in_room_for_minutes. current_room is where the ' +
+                      'person is now, which is not the same thing as the room a device was installed in. ' +
+                      'id and item ids are included so follow-up ' +
                       'tools (get_history, set_light, etc.) can be called without an extra lookup. ' +
                       'Entries carry the notes and tags of the thing they describe — this is how a tracked ' +
                       'phone is told apart from the person carrying it, so read them before treating an ' +
@@ -282,6 +292,7 @@ const MCP_TOOLS = [
             properties : {
                 id   : { type: 'string',  description: 'Exact thing node ID (from get_all_states). Takes priority over name.' },
                 name : { type: 'string',  description: 'Partial, case-insensitive name match (e.g. "office" matches "Office Spotlights").' },
+                room       : { type: 'string', description: 'Room name, to pick between things that share a name (from get_all_states)' },
                 on         : { type: 'boolean', description: 'true = turn on, false = turn off' },
                 brightness : { type: 'number',  description: 'Brightness 0–100 (percent)', minimum: 0, maximum: 100 },
                 color_temp : { type: 'number',  description: 'Color temperature in Kelvin (e.g. 2700 = warm white, 4000 = neutral, 6500 = cool wide)' },
@@ -458,6 +469,42 @@ function presenceIdentity(device, presenceItem) {
     return out;
 }
 
+// The answer when a name matches more than one thing and nothing narrows it.
+//
+// Fanning the command out to every match is what the tools did, so "turn off Taklampa" reached
+// every ceiling lamp in the house. That was survivable only because the room lived in the name;
+// the moment a name is allowed to repeat it becomes the difference between one lamp and five.
+// Refusing with the candidates and their rooms is what lets a name be short.
+function ambiguousThing(matches, what) {
+    return {
+        error   : 'ambiguous_name',
+        message : 'The name "' + what + '" matches ' + matches.length + ' things. Add room to pick '
+                + 'one, or pass its id.',
+        matches : matches.map(d => ({ id: d.id, name: d.name, room: d.room || null }))
+    };
+}
+
+// Resolve the thing(s) a command is aimed at: an exact id, or a name narrowed by room.
+//
+// Returns { devices } on success and { error } when a name matches several and no room settles it.
+// Name matching stays a case-insensitive substring, which is what makes "taklampa" work at all;
+// room is exact, because it comes from a list the caller can read.
+function resolveByName(devices, args) {
+    if (args.id) {
+        const one = (devices || []).find(d => d.id === args.id);
+        return { devices: one ? [one] : [] };
+    }
+    if (!args.name) { return { devices: [] }; }
+    const needle = String(args.name).toLowerCase();
+    let hits = (devices || []).filter(d => d.name && d.name.toLowerCase().includes(needle));
+    if (args.room) {
+        const room = String(args.room).toLowerCase();
+        hits = hits.filter(d => String(d.room || '').toLowerCase() === room);
+    }
+    if (hits.length > 1) { return { error: ambiguousThing(hits, args.name) }; }
+    return { devices: hits };
+}
+
 function deriveCategories(items) {
     const present = new Set();
     for (const i of items) {
@@ -541,6 +588,8 @@ module.exports = {
     lightTargets,
     writesOnOff,
     nothingToCommand,
+    ambiguousThing,
+    resolveByName,
     itemSatisfies,
     fanValue,
     presenceIdentity,

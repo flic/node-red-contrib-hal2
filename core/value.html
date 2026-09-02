@@ -292,7 +292,7 @@
                 }
                 for (var d in thingsList) {
                     if (($("#thing-filter").val() == 0) || (thingsList[d].thingType == $("#thing-filter").val())) {
-                        $("#node-input-thing").append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                        $("#node-input-thing").append($("<option></option>").val(thingsList[d].id).text(halThingLabel(RED, thingsList[d])));
                     }
                 }
                 if ($("#thing-filter").val() == 0) {

@@ -311,7 +311,7 @@
                         thingsField.children().remove();
                         for (var d in thingsList) {
                             if ((filterField.val() == 0) || (thingsList[d].thingType == filterField.val())) {
-                                thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                                thingsField.append($("<option></option>").val(thingsList[d].id).text(halThingLabel(RED, thingsList[d])));
                             }
                         }
                         thingsField.trigger('change');
@@ -354,7 +354,7 @@
                         thingsField.append($("<option></option>").val(groupsList[d].id).text('Group - ' + groupsList[d].name));
                     }
                     for (var d in thingsList) {
-                        thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                        thingsField.append($("<option></option>").val(thingsList[d].id).text(halThingLabel(RED, thingsList[d])));
                     }
                     thingsField.val(thingsList.length ? thingsList[0].id : 'dynamic');
                     

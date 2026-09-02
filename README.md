@@ -245,6 +245,29 @@ labels:
 
 > Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** and **Hermes** (MCP clients). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
 
+### Rooms
+
+Which room a device is in was carried by a naming convention — "Vardagsrum Taklampa" — that nothing
+enforced and nothing could read. **Rooms** are a registry on the Event handler (its own tab); a
+Thing picks one, and `get_all_states` then reports `room` as a field and accepts it as an exact
+filter. Having no room is a complete answer, not a gap: a scene is nowhere, and so is a person.
+
+The room is a **separate parameter everywhere it is addressed**, and composed only where it is
+displayed. `set_light(name: "Taklampa", room: "Kontor")` — not a composed string that has to be
+parsed back, which would only be the naming convention again, generated instead of typed. In the
+editor, where a human has to pick one Thing out of a flat list, the canvas label and every Thing
+dropdown read **`[Kontor] Taklampa`**; the brackets say the string was assembled from two fields
+rather than typed by someone.
+
+> **A name that matches several things is refused, not fanned out.** `set_light(name: "Taklampa")`
+> used to command every ceiling lamp in the house — five devices from one substring match. It now
+> answers `ambiguous_name` listing the candidates with their rooms, so adding `room` picks one.
+> That refusal is what makes a short name safe, and it applies to `get_state`, `get_history` and
+> every `control_*` tool.
+
+`get_presence` reports `current_room` — where a person is *now*, which is not the same thing as the
+room a device was installed in, and no longer shares a key with it.
+
 ### Device class — what an item drives
 
 `ha_type` says *how to speak to an item*: switch, dimmer, cover. An assistant reads it as *what

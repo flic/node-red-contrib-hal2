@@ -271,3 +271,55 @@ describe('TOOL_HARDWARE_REQUIREMENTS shape', function () {
         }
     });
 });
+
+describe('resolving a thing by name', function () {
+    const { resolveByName, ambiguousThing } = require('../core/mcp-tools');
+
+    // Two ceiling lamps that only their room tells apart — the case that makes a short name
+    // possible at all, and the one the old resolvers answered by commanding both.
+    const DEVICES = [
+        { id: 'a', name: 'Taklampa', room: 'Kontor' },
+        { id: 'b', name: 'Taklampa', room: 'Sovrum' },
+        { id: 'c', name: 'Golvspot', room: 'Kontor' },
+        { id: 'd', name: 'Scen Natt' }                     // no room, which is complete
+    ];
+
+    it('takes an id over anything else', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { id: 'b', name: 'Golvspot' }).devices.map(d => d.id), ['b']);
+    });
+
+    it('resolves a name that only one thing answers to', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'golvspot' }).devices.map(d => d.id), ['c']);
+    });
+
+    it('refuses a name several things answer to, rather than commanding them all', function () {
+        const out = resolveByName(DEVICES, { name: 'taklampa' });
+        assert.strictEqual(out.devices, undefined);
+        assert.strictEqual(out.error.error, 'ambiguous_name');
+        assert.deepStrictEqual(out.error.matches.map(m => m.room), ['Kontor', 'Sovrum'],
+            'the refusal must say which rooms, or the caller cannot pick');
+    });
+
+    it('lets the room settle it', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'taklampa', room: 'Sovrum' }).devices.map(d => d.id), ['b']);
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'taklampa', room: 'sovrum' }).devices.map(d => d.id), ['b'],
+            'room matching is case-insensitive');
+    });
+
+    it('matches a room exactly, unlike the name', function () {
+        // The name is a substring because "taklampa" has to find "Kök Taklampa"; the room comes
+        // from a list the caller can read, so there is nothing to guess at.
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'taklampa', room: 'Kont' }).devices, []);
+    });
+
+    it('finds nothing rather than throwing when nothing matches', function () {
+        assert.deepStrictEqual(resolveByName(DEVICES, { name: 'finns inte' }).devices, []);
+        assert.deepStrictEqual(resolveByName([], { name: 'x' }).devices, []);
+        assert.deepStrictEqual(resolveByName(undefined, { id: 'a' }).devices, []);
+    });
+
+    it('reports a thing with no room as having none, not as a blank room', function () {
+        const out = ambiguousThing([DEVICES[0], DEVICES[3]], 'x');
+        assert.strictEqual(out.matches[1].room, null);
+    });
+});

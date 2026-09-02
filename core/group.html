@@ -167,7 +167,7 @@
                         thingsField.children().remove();
                         for (var d in thingsList) {
                             if ((filterField.val() == 0) || (thingsList[d].thingType == filterField.val())) {
-                                thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                                thingsField.append($("<option></option>").val(thingsList[d].id).text(halThingLabel(RED, thingsList[d])));
                             }
                         }
                         thingsField.trigger('change');
@@ -203,7 +203,7 @@
 
                     //Add things
                     for (let d in thingsList) {
-                        thingsField.append($("<option></option>").val(thingsList[d].id).text(thingsList[d].name));
+                        thingsField.append($("<option></option>").val(thingsList[d].id).text(halThingLabel(RED, thingsList[d])));
                     }
                     //Add filter types
                     filterField.append($("<option></option>").val(0).text("<All types>"));
