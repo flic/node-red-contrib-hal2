@@ -2,6 +2,14 @@
 A set of nodes to help with basic home automation logic, with an optional MCP server so an AI
 assistant can read device state and control the house.
 
+> **Upgrading to 3.2?** The MCP tools renamed `thing_id` and `thing_name` to `id` and `name`,
+> in the parameters and in the responses. The thing is these tools' subject, so it takes the
+> unprefixed words; items keep `item_id` and `item_name`, where the prefix is what says which
+> namespace a value belongs to. A client holding an older answer in its context will call with the
+> old names and get nothing — start a fresh conversation rather than debugging the miss. Rooms
+> arrive in the same release: see [rooms](#rooms), and note that a `name` matching several things
+> is now refused instead of commanding all of them.
+>
 > **Upgrading to 3.1?** `set_light` no longer switches an undeclared `switch` item. A switch says
 > only that something can be turned on and off — the load could be a lamp or a coffee machine — so
 > a lamp behind a relay now needs `device_class: light` on its item, set under *Items* in the
