@@ -13,7 +13,8 @@ sandbox.self = sandbox;
 sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'resources', 'hal.js'), 'utf8'), sandbox);
-const { halNumericOperator, halGroupAccepts, halHaTypeFamily } = sandbox;
+const { halNumericOperator, halGroupAccepts, halHaTypeFamily,
+        halGroupPolicy, halGroupCapabilityRefusal } = sandbox;
 
 describe('hal.js halNumericOperator', function () {
     it('claims the comparisons that can only mean a number', function () {
@@ -146,5 +147,123 @@ describe('hal.js halThingLabel', function () {
         // Sorting here would discard the arrangement every time it was read, which is the one
         // thing a sortable list must not do.
         assert.deepStrictEqual(halGetRooms(RED, 'eh1').map(r => r.name), ['Sovrum', 'Kontor']);
+    });
+});
+
+describe('hal.js halGroupPolicy', function () {
+    // The no-migration guarantee, and the only thing standing between this feature and every
+    // group in an existing flow quietly starting to refuse members. `undefined` must read the
+    // same as `true`, so a group saved before the field existed keeps accepting what it did.
+    const p = g => ({ ...halGroupPolicy(g) });
+
+    it('reads an absent flag as ticked, so an older group accepts what it always did', function () {
+        assert.deepStrictEqual(p({ id: 'g1', name: 'Alla lampor' }), { state: true, command: true });
+    });
+
+    it('is indistinguishable from an explicit true', function () {
+        assert.deepStrictEqual(p({ acceptsState: true, acceptsCommand: true }),
+                               p({}));
+    });
+
+    it('takes something away only for an explicit false', function () {
+        assert.deepStrictEqual(p({ acceptsState: false, acceptsCommand: true }), { state: false, command: true });
+        assert.deepStrictEqual(p({ acceptsState: true, acceptsCommand: false }), { state: true, command: false });
+        assert.deepStrictEqual(p({ acceptsState: false, acceptsCommand: false }), { state: false, command: false });
+    });
+
+    it('treats a missing group as permissive rather than throwing', function () {
+        // The picker reaches here with whatever the registry holds, including nothing.
+        assert.deepStrictEqual(p(undefined), { state: true, command: true });
+        assert.deepStrictEqual(p(null), { state: true, command: true });
+    });
+});
+
+describe('hal.js halGroupCapabilityRefusal', function () {
+    // The full cross-product, because the interesting cases are the asymmetric ones and there is
+    // no reading of the table that makes them obvious. Each item.type the ThingType editor can
+    // produce, against each of the four policies.
+    const ITEM = {
+        both:             { id: 'i', type: 'both' },
+        status:           { id: 'i', type: 'status' },
+        command:          { id: 'i', type: 'command' },
+        loopback_both:    { id: 'i', type: 'loopback_both' },
+        loopback_command: { id: 'i', type: 'loopback_command' },
+        heartbeat:        { id: '1', type: 'status' }
+    };
+    const POLICY = {
+        open:       {},                                                   // both ticked: today
+        stateOnly:  { acceptsCommand: false },
+        commandOnly:{ acceptsState: false },
+        closed:     { acceptsState: false, acceptsCommand: false }
+    };
+    const admits = (pol, item) => halGroupCapabilityRefusal(POLICY[pol], ITEM[item]) === '';
+
+    it('admits everything while both flags are ticked — the default is today', function () {
+        for (const item of Object.keys(ITEM)) {
+            assert.ok(admits('open', item), item + ' should be admitted by an open group');
+        }
+    });
+
+    it('lets a state-only group take reporters and refuse a pure command item', function () {
+        assert.ok(admits('stateOnly', 'status'));
+        assert.ok(admits('stateOnly', 'both'));
+        assert.ok(!admits('stateOnly', 'command'));
+        assert.ok(!admits('stateOnly', 'loopback_command'));
+    });
+
+    it('lets a command-only group refuse the item that caused all this', function () {
+        // A Color Light's On item reports and takes no commands. A group declared for commands
+        // is exactly where it must not silently land.
+        assert.ok(!admits('commandOnly', 'status'));
+        assert.ok(admits('commandOnly', 'command'));
+        assert.ok(admits('commandOnly', 'loopback_command'));
+    });
+
+    it('admits an item that does both under either flag alone', function () {
+        // It can serve as the group's reading or as its target, so a group wanting one of those
+        // still has a use for it. Refusing it would make a command group unable to hold an
+        // ordinary switch.
+        for (const pol of ['stateOnly', 'commandOnly']) {
+            assert.ok(admits(pol, 'both'), 'both under ' + pol);
+            assert.ok(admits(pol, 'loopback_both'), 'loopback_both under ' + pol);
+        }
+    });
+
+    it('counts a loopback command as a command', function () {
+        assert.ok(admits('commandOnly', 'loopback_command'));
+        assert.strictEqual(halGroupCapabilityRefusal(POLICY.stateOnly, ITEM.loopback_command),
+                           'command only');
+    });
+
+    it('counts the heartbeat item as reporting whatever its type says', function () {
+        // Item '1' carries state by definition. It cannot be added from the editor any more, but
+        // memberships predating that rule are still out there and must not be misreported.
+        assert.ok(admits('stateOnly', 'heartbeat'));
+        assert.ok(!admits('commandOnly', 'heartbeat'));
+    });
+
+    it('refuses everything when neither flag is ticked, and says that is the group', function () {
+        for (const item of Object.keys(ITEM)) {
+            assert.strictEqual(halGroupCapabilityRefusal(POLICY.closed, ITEM[item]),
+                               'group accepts nothing', item);
+        }
+    });
+
+    it('names the item, not the group, when the group still accepts something', function () {
+        // The reason is shown on the Thing's row, where the actionable half is why this item
+        // does not fit — the group's own flags are visible in its own row.
+        assert.strictEqual(halGroupCapabilityRefusal(POLICY.commandOnly, ITEM.status), 'state only');
+        assert.strictEqual(halGroupCapabilityRefusal(POLICY.stateOnly, ITEM.command), 'command only');
+    });
+
+    it('does not throw on a missing item, which is what the old predicates did', function () {
+        // halStatusItem dereferences item.type without a guard; the picker can reach here with a
+        // membership whose ThingType item has been deleted.
+        assert.strictEqual(halGroupCapabilityRefusal(POLICY.open, undefined), 'neither state nor command');
+    });
+
+    it('admits an unrecognised type nowhere but an open group', function () {
+        const odd = { id: 'i', type: 'something-new' };
+        assert.strictEqual(halGroupCapabilityRefusal(POLICY.open, odd), 'neither state nor command');
     });
 });

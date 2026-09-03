@@ -394,6 +394,43 @@ function halGroupAccepts(groupHaType, itemHaType, deviceClass) {
     return halHaTypeFamily(groupHaType) === itemFam;
 }
 
+// Which kinds of member a group admits. Two independent flags, not one three-way choice: the
+// pair reads as a union — the group takes state items and takes command items — where a single
+// "state+command" value could equally be read as a requirement that each member be both, which
+// would outlaw the ordinary mixed group where some members only report.
+//
+// An absent flag means admitted. Every group written before this field accepted anything, and
+// must keep doing so untouched — this is the whole of the migration. Same shape as hbCheck in
+// lib/common.js, where `=== false` is likewise the only value that takes something away.
+function halGroupPolicy(group) {
+    return {
+        state:   !group || group.acceptsState   !== false,
+        command: !group || group.acceptsCommand !== false
+    };
+}
+
+// Why this item may not join this group, in the words the row will show, or '' when it may.
+//
+// A reason rather than a boolean: the picker has two ways to refuse now — the ha_type contract
+// above and this one — and a membership marked only "incompatible" leaves the reader to work out
+// which, on a row that has room to just say it.
+//
+// An item that both reports and accepts commands qualifies under either flag on its own: it can
+// serve as the group's reading or as its target, so a group that wants only one of those still
+// has a use for it.
+function halGroupCapabilityRefusal(group, item) {
+    var policy = halGroupPolicy(group);
+    if (!policy.state && !policy.command) { return 'group accepts nothing'; }
+    var state   = item ? halStatusItem(item)  : false;
+    var command = item ? halCommandItem(item) : false;
+    if ((state && policy.state) || (command && policy.command)) { return ''; }
+    // What the item is, said from the item's side: the group's flags are visible in its own row,
+    // and on the Thing the useful half is why this particular item does not qualify.
+    if (state && !command)  { return 'state only'; }
+    if (command && !state)  { return 'command only'; }
+    return 'neither state nor command';
+}
+
 function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=false) {
     //get all Thingtypes and sort them alphabetically
     var thingTypeId = [];

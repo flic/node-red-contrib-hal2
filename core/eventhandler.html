@@ -486,6 +486,8 @@
                     var rowName    = $('<div/>').appendTo(container);
                     var rowDetails = $('<div/>', { style: "margin-top:8px;" }).appendTo(container).hide();
                     var rowType    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
+                    // Above the summary, because the summary reports what these two decide.
+                    var rowAccepts = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowSummary = $('<div/>', { style: "margin-top:4px; margin-left:115px; margin-right:10px; color:#888; font-size:12px; white-space:normal; line-height:1.4;" }).appendTo(rowDetails);
                     var rowRate    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
                     var rowTags    = $('<div/>', { style: "margin-top:8px;" }).appendTo(rowDetails);
@@ -512,6 +514,8 @@
                         .appendTo(rowName).append(' Group');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-bookmark" })
                         .appendTo(rowType).append(' HAType');
+                    $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-filter" })
+                        .appendTo(rowAccepts).append(' Accepts');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-clock-o" })
                         .appendTo(rowRate).append(' Rate limit');
                     $('<div/>', { style: "display:inline-block;text-align:left;width:115px;padding-right:10px;box-sizing:border-box;", class: "fa fa-tags" })
@@ -542,12 +546,22 @@
                             for (var g in thing.groups) {
                                 if (thing.groups[g].group !== groupId) { continue; }
                                 var itemName = thing.groups[g].item;
+                                // What each member can do, spelled out per row. The summary line
+                                // gives the totals; this is what turns "25 of 31 commandable" into
+                                // the six rows to go and look at, without opening every Thing.
+                                var itemCap = '';
                                 if (tt && Array.isArray(tt.items)) {
                                     var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
-                                    if (it) { itemName = it.name; }
+                                    if (it) {
+                                        itemName = it.name;
+                                        var cs = halStatusItem(it), cc = halCommandItem(it);
+                                        itemCap = cs && cc ? 'state + command'
+                                                : cs ? 'state only'
+                                                : cc ? 'command only' : 'neither';
+                                    }
                                 }
                                 var mws = RED.nodes.workspace(thing.z);
-                                memberRows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + (mws ? mws.label : '') + '</td></tr>';
+                                memberRows += '<tr><td>' + thing.name + '</td><td>' + itemName + '</td><td>' + itemCap + '</td><td>' + (mws ? mws.label : '') + '</td></tr>';
                             }
                         }
 
@@ -580,7 +594,7 @@
 
                         message += '<br><b>Members</b>';
                         if (memberRows) {
-                            message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Workspace</th></tr>' + memberRows + '</table>';
+                            message += '<table style="' + tableStyle + '"><tr><th style="text-align:left;">Thing</th><th style="text-align:left;">Item</th><th style="text-align:left;">Can</th><th style="text-align:left;">Workspace</th></tr>' + memberRows + '</table>';
                         } else {
                             message += '<br>No things are members of this group.<br>';
                         }
@@ -665,8 +679,12 @@
                     // The two counts are separate sets and either can be empty — a sensor group
                     // reads and takes no commands, a scene group is the reverse — which is the
                     // one thing about groups that surprises people.
+                    // Membership is edited on the Things, never here, so it cannot change while
+                    // this dialog is open and counting once is right. The items are kept, not
+                    // just the totals: the Accepts flags below can change while the dialog is
+                    // open, and how many members they disqualify has to be recounted when they do.
                     var memberCounts = (function() {
-                        var gid = idProperty.val(), state = 0, command = 0, total = 0;
+                        var gid = idProperty.val(), state = 0, command = 0, total = 0, items = [];
                         var things = RED.nodes.filterNodes({ type: "hal2Thing" });
                         for (var t in things) {
                             var thing = RED.nodes.node(things[t].id);
@@ -679,25 +697,79 @@
                                 if (!tt || !Array.isArray(tt.items)) { continue; }
                                 var it = tt.items.find(function(x) { return x.id === thing.groups[g].item; });
                                 if (!it) { continue; }
+                                items.push(it);
                                 // Item 1 is the heartbeat: it decides whether a member counts,
                                 // it is never a value of its own.
                                 if (thing.groups[g].item !== '1' && halStatusItem(it)) { state += 1; }
                                 if (halCommandItem(it)) { command += 1; }
                             }
                         }
-                        return { state: state, command: command, total: total };
+                        return { state: state, command: command, total: total, items: items };
                     })();
+
+                    // Which kinds of member this group admits. Two flags rather than one choice,
+                    // so that the pair reads as "takes state items, takes command items" and both
+                    // ticked — the default, and what every group written before this field gets —
+                    // means exactly today's behaviour: anything may join.
+                    //
+                    // This is an admission rule for the editor, not a claim about the group. What
+                    // it reads and what it commands stays derived from the members it actually
+                    // has, and the runtime never consults these flags, so unticking one cannot
+                    // change what an existing flow commands. It stops the combination being
+                    // offered; a membership that no longer qualifies is kept, counted below, and
+                    // marked on the Thing.
+                    var acceptsPolicy = halGroupPolicy(group);
+                    var acceptsStateProperty = $('<input/>', { type: "checkbox",
+                        style: "width:auto; margin:0; vertical-align:baseline;",
+                        class: "node-config-eh-group-acceptsstate-property" })
+                        .appendTo(rowAccepts).prop('checked', acceptsPolicy.state);
+                    $('<span/>', { style: "margin:0 12px 0 5px;" }).text('State').appendTo(rowAccepts);
+                    var acceptsCommandProperty = $('<input/>', { type: "checkbox",
+                        style: "width:auto; margin:0; vertical-align:baseline;",
+                        class: "node-config-eh-group-acceptscommand-property" })
+                        .appendTo(rowAccepts).prop('checked', acceptsPolicy.command);
+                    $('<span/>', { style: "margin-left:5px;" }).text('Command').appendTo(rowAccepts);
+
+                    // Read from the controls, not from `group`: these decide what the sentence
+                    // below says, and they are live.
+                    var currentPolicy = function() {
+                        return { acceptsState:   acceptsStateProperty.prop('checked'),
+                                 acceptsCommand: acceptsCommandProperty.prop('checked') };
+                    };
 
                     var syncSummary = function() {
                         var c = memberCounts;
+                        var pol = currentPolicy();
+                        // Said before the counts when nothing may join: it makes every other
+                        // sentence beside the point.
+                        var admits = [];
+                        if (!pol.acceptsState && !pol.acceptsCommand) {
+                            admits.push('Accepts no members — tick State or Command.');
+                        } else if (!pol.acceptsState) {
+                            admits.push('Only items that accept commands may join.');
+                        } else if (!pol.acceptsCommand) {
+                            admits.push('Only items that report a state may join.');
+                        }
+                        // Members admitted under an older policy. The count is the only place an
+                        // existing mistake shows up as a number, and the only warning when a
+                        // ThingType item changes type under a group that was already built.
+                        var stale = c.items.filter(function(it) {
+                            return !!halGroupCapabilityRefusal(pol, it);
+                        }).length;
+                        if (stale) {
+                            admits.push(stale + ' existing member' + (stale === 1 ? '' : 's') +
+                                        ' no longer qualif' + (stale === 1 ? 'ies' : 'y') +
+                                        ' — still live, and marked on the Thing.');
+                        }
                         if (c.total === 0) {
-                            rowSummary.text('No members yet — add them from the Groups section of a Thing.');
+                            admits.push('No members yet — add them from the Items section of a Thing.');
+                            rowSummary.text(admits.join(' '));
                             return;
                         }
                         var ga = window.hal2GroupAggregate;
                         var deflt = ga.defaultFunction(haTypeProperty.val());
-                        var parts = [c.total + ' member' + (c.total === 1 ? '' : 's') + ': ' +
-                                     c.state + ' readable, ' + c.command + ' commandable.'];
+                        var parts = admits.concat([c.total + ' member' + (c.total === 1 ? '' : 's') + ': ' +
+                                     c.state + ' readable, ' + c.command + ' commandable.']);
                         if (c.state === 0) {
                             parts.push('Nothing to read — this group can only be commanded.');
                         } else {
@@ -714,6 +786,8 @@
                     // it above its assignment threw and took the whole group row with it.
                     // The default follows the HAType, so the line has to follow the select.
                     haTypeProperty.change(syncSummary);
+                    acceptsStateProperty.change(syncSummary);
+                    acceptsCommandProperty.change(syncSummary);
                     syncSummary();
 
                     var rateProperty = $('<input/>', { style: "width:80px", type: "number", min: "0", class: "node-config-eh-group-ratelimit-property" })
@@ -914,6 +988,11 @@
                         id:        item.find(".node-config-eh-group-id-property").val(),
                         name:      name,
                         haType:    item.find(".node-config-eh-group-hatype-property").val(),
+                        // Written out both ways round rather than only when false. The reader
+                        // treats absent as ticked so old groups keep working, but a group saved
+                        // from this dialog should say what it holds instead of relying on that.
+                        acceptsState:   item.find(".node-config-eh-group-acceptsstate-property").is(':checked'),
+                        acceptsCommand: item.find(".node-config-eh-group-acceptscommand-property").is(':checked'),
                         tags:      halParseTags(item.find(".node-config-eh-group-tags-property").val()),
                         ratelimit: Number(item.find(".node-config-eh-group-ratelimit-property").val()) || 0,
                         notes:     item.find(".node-config-eh-group-notes-property").val() || ''

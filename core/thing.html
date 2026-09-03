@@ -365,9 +365,27 @@
                         class: "thing-fact-toggle",
                         style: "display:inline-block; width:14px; cursor:pointer; color:#888;"
                     }).appendTo(head);
-                    $('<span/>', { style: "display:inline-block; width:calc(40% - 14px); overflow:hidden; text-overflow:ellipsis; vertical-align:middle;" })
-                        .text(it.name + (haType ? ' (' + haType + ')' : ''))
+                    var nameCell = $('<span/>', { style: "display:inline-block; width:calc(40% - 14px); overflow:hidden; text-overflow:ellipsis; vertical-align:middle;" })
                         .appendTo(head);
+                    $('<span/>').text(it.name + (haType ? ' (' + haType + ')' : '')).appendTo(nameCell);
+
+                    // Whether the item reports, accepts commands, or both — said here because
+                    // this row is where it is decided which groups the item joins, and a group
+                    // is commonly meant for one of the two. A Color Light's On item reports and
+                    // takes no commands; nothing said so, and it went into a group built to
+                    // command, where it silently made up part of the member count and none of
+                    // the reach.
+                    //
+                    // Only the deviation is printed. Doing both is the ordinary case and saying
+                    // so on every row would bury the two rows that matter — the same reasoning
+                    // the device class control below follows.
+                    var itemState   = halStatusItem(it);
+                    var itemCommand = halCommandItem(it);
+                    if (itemState !== itemCommand) {
+                        $('<span/>', { class: "thing-fact-capability", style: "color:#888; font-size:0.85em;" })
+                            .text(' · ' + (itemState ? 'state only' : 'command only'))
+                            .appendTo(nameCell);
+                    }
 
                     // Read-only, and separate from the control on purpose. It states what the
                     // item counts as when the device is categorised — which is all the rule
@@ -431,7 +449,15 @@
                         // The declared class, live from the control, so changing it re-evaluates
                         // straight away rather than at the next time the dialog is opened.
                         var cls = classSel ? classSel.val() : declared;
-                        var compatible = groups.filter(function(g) { return halGroupAccepts(g.haType, haType, cls); });
+                        // Two contracts, one filter. The ha_type one asks whether the item speaks
+                        // the group's language; the capability one asks whether the group wants
+                        // what this item can do at all. Both go through `compatible` so that a
+                        // stored membership failing either is caught by the orphan handling below
+                        // rather than vanishing on Done.
+                        var compatible = groups.filter(function(g) {
+                            return halGroupAccepts(g.haType, haType, cls) &&
+                                   !halGroupCapabilityRefusal(g, it);
+                        });
 
                         // A stored membership whose group no longer accepts this item has to stay
                         // in the list, selected and marked. Leave it out and .val() finds nothing
@@ -453,7 +479,14 @@
                         } else {
                             listed.forEach(function(g) {
                                 var label = g.name + ' (' + (g.haType === 'other' ? 'mixed' : g.haType) + ')';
-                                if (orphan && g.id === stored.id) { label += ' — incompatible'; }
+                                if (orphan && g.id === stored.id) {
+                                    // Which of the two contracts it fails. Bare "incompatible"
+                                    // left the reader to work that out on a row with space to
+                                    // just say it, and the two have different remedies: one is
+                                    // fixed on the item, the other on the group.
+                                    var why = halGroupCapabilityRefusal(g, it);
+                                    label += ' — incompatible' + (why ? ': ' + why : '');
+                                }
                                 sel.append($("<option></option>").val(g.id).text(label));
                             });
                             if (selected && !stored) {
@@ -478,7 +511,7 @@
                         held.forEach(function(v) { addGroupRow(v); });
                     }
                     mine.forEach(function(m) { addGroupRow(m.group); });
-                    $('<a/>', { href: "#", style: "font-size:0.85em;" })
+                    $('<a/>', { href: "#", class: "thing-fact-add-group", style: "font-size:0.85em;" })
                         .text('+ Add group')
                         .click(function(e) { e.preventDefault(); addGroupRow(null); })
                         .appendTo(body);

@@ -17,6 +17,15 @@ const vm = require('node:vm');
 const html = fs.readFileSync(path.join(__dirname, '..', 'core', 'thing.html'), 'utf8');
 const source = html.match(/<script type="text\/javascript">([\s\S]*?)<\/script>/)[1];
 
+// resources/hal.js run once for real, so the pure helpers the section relies on are the shipped
+// ones rather than stubs. It is browser code with no exports, so it is evaluated in its own
+// sandbox and the wanted names lifted out — the approach test/halEditorHelpers.test.js takes.
+const HAL = { console };
+HAL.self = HAL;
+HAL.window = HAL;
+vm.createContext(HAL);
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'resources', 'hal.js'), 'utf8'), HAL);
+
 function makeEl(tag, attrs) {
     const el = {
         tag,
@@ -124,6 +133,13 @@ function run({ items, groups, node, overrides }) {
     for (const m of helperSrc.matchAll(/^function (hal\w+)/gm)) {
         sandbox[m[1]] = () => [];
     }
+    // The decision helpers get their real implementations. A blanket `() => []` returns something
+    // truthy, which made every group read as refused — and the tests still passed, because the
+    // orphan path then kept each stored membership and marked it. Twelve greens for the wrong
+    // reason. These four decide what the section under test does, so they cannot be stubs.
+    for (const name of ['halStatusItem', 'halCommandItem', 'halGroupPolicy', 'halGroupCapabilityRefusal']) {
+        sandbox[name] = HAL[name];
+    }
     sandbox.halGroupAccepts = (overrides && overrides.halGroupAccepts) || (() => true);
     sandbox.halParseTags = () => [];
     sandbox.hal2DeviceClass = require('../resources/device-class');
@@ -139,11 +155,17 @@ function run({ items, groups, node, overrides }) {
 // realm's — deepStrictEqual rejects them however equal the contents are. Compare the data.
 const plain = x => JSON.parse(JSON.stringify(x));
 
+// `type` is what decides whether an item reports, accepts commands, or both, and the section
+// reads it — so the fixture carries it. Without it every item read as neither, every group read
+// as refused, and the whole suite went green through the orphan path instead of the happy one.
 const ITEMS = [
-    { id: '1',   name: 'Alive',   haType: '' },
-    { id: 'on1', name: 'Eluttag', haType: 'switch' },
-    { id: 'on2', name: 'Taklampa', haType: 'switch' },
-    { id: 'bri', name: 'Light',   haType: 'dimmer' }
+    { id: '1',   name: 'Alive',    haType: '',       type: 'status' },
+    { id: 'on1', name: 'Eluttag',  haType: 'switch', type: 'both' },
+    { id: 'on2', name: 'Taklampa', haType: 'switch', type: 'both' },
+    { id: 'bri', name: 'Light',    haType: 'dimmer', type: 'both' },
+    // The item this feature exists for: a Zigbee2MQTT Color Light's On reports and takes no
+    // commands. Appended, so the index-based assertions above it keep addressing the same rows.
+    { id: 'ro',  name: 'On',       haType: 'switch', type: 'status' }
 ];
 const GROUPS = [{ id: 'g1', name: 'Alla lampor', haType: 'light' }];
 
@@ -152,9 +174,9 @@ describe('core/thing.html — the Items section', function () {
         const node = { groups: [], itemFacts: [] };
         const { container } = run({ items: ITEMS, groups: GROUPS, node });
         const blocks = collect(container.el, '.thing-fact-item');
-        // 'Alive' (id '1') is excluded; the other three are always present, which is the whole
+        // 'Alive' (id '1') is excluded; the rest are always present, which is the whole
         // point — you can see what an item presents as without adding a row first.
-        assert.strictEqual(blocks.length, 3);
+        assert.strictEqual(blocks.length, 4);
     });
 
     it('carries a stored device class back out unchanged', function () {
@@ -289,5 +311,133 @@ describe('core/thing.html — the Items section', function () {
         def.oneditsave.call(node);
         assert.deepStrictEqual(plain(node.itemFacts), []);
         assert.deepStrictEqual(plain(node.groups), []);
+    });
+});
+
+// Rows in render order, minus the heartbeat item the section filters out.
+function blocksOf(container) {
+    const out = [];
+    collect(container.el, '.thing-fact-item').each((i, api) => out.push(api));
+    return out;
+}
+// The option labels of a block's group selects, one array per row. Every child of a select here
+// is an option, so they are taken wholesale rather than filtered by tag: the stub's tag parsing
+// turns `<option></option>` into "optionoption", and filtering on 'option' silently found none.
+function optionsOf(blockApi) {
+    const out = [];
+    blockApi.find('.thing-fact-group').each(function (i, api) {
+        out.push(api.el.children.map(o => o._text));
+    });
+    return out;
+}
+
+// Rows are indexed by render order, which skips the heartbeat item — so on1, on2, bri, ro.
+const ROW = { on1: 0, on2: 1, bri: 2, ro: 3 };
+
+// Press the row's "+ Add group" link, which is where the choice is actually made.
+function addGroupRow(blockApi) {
+    let clicked = false;
+    blockApi.find('.thing-fact-add-group').each(function (i, api) {
+        api.el.handlers.click({ preventDefault() {} });
+        clicked = true;
+    });
+    assert.ok(clicked, 'no + Add group link on this row');
+}
+
+describe('core/thing.html — what an item can do', function () {
+    // A group that takes only what can be commanded. Both flags absent elsewhere in this file,
+    // which is the point: that reads as accepting everything.
+    const CMD_ONLY = [{ id: 'g1', name: 'Alla lampor', haType: 'light', acceptsState: false }];
+
+    it('says so on the row when an item only reports', function () {
+        const node = { groups: [], itemFacts: [] };
+        const { container } = run({ items: ITEMS, groups: GROUPS, node });
+        const blocks = blocksOf(container);
+        assert.strictEqual(blocks[ROW.ro].find('.thing-fact-capability').length, 1, 'ro is status-only');
+        let text = '';
+        blocks[ROW.ro].find('.thing-fact-capability').each((i, api) => { text = api.text(); });
+        assert.match(text, /state only/);
+    });
+
+    it('stays silent on the ordinary item that does both', function () {
+        // Printing it on every row would bury the one row that matters.
+        const node = { groups: [], itemFacts: [] };
+        const { container } = run({ items: ITEMS, groups: GROUPS, node });
+        for (const key of ['on1', 'on2', 'bri']) {
+            assert.strictEqual(blocksOf(container)[ROW[key]].find('.thing-fact-capability').length, 0,
+                key + ' does both and should say nothing');
+        }
+    });
+
+    it('does not offer a command-only group to an item that only reports', function () {
+        // Pressing "+ Add group" is the moment the mistake was made, so the test presses it. An
+        // earlier version of this only checked that no row existed yet, which was true whether
+        // or not the group was being filtered — it passed with the feature removed.
+        const node = { groups: [], itemFacts: [] };
+        const { container } = run({ items: ITEMS, groups: CMD_ONLY, node });
+        addGroupRow(blocksOf(container)[ROW.ro]);
+        const rows = optionsOf(blocksOf(container)[ROW.ro]);
+        assert.strictEqual(rows.length, 1, 'a row should have been added');
+        assert.deepStrictEqual(rows[0], ['\u2014 no compatible group \u2014'],
+            'the group takes only what can be commanded, and this item cannot be');
+    });
+
+    it('offers it to an item that can be commanded, from the same press', function () {
+        // The other half: the filter has to be a filter, not a blanket refusal.
+        const node = { groups: [], itemFacts: [] };
+        const { container } = run({ items: ITEMS, groups: CMD_ONLY, node });
+        addGroupRow(blocksOf(container)[ROW.on2]);
+        assert.deepStrictEqual(optionsOf(blocksOf(container)[ROW.on2])[0], ['Alla lampor (light)']);
+    });
+
+    it('still offers it to an item that both reports and accepts commands', function () {
+        // An item that does both can serve as the group's target, so refusing it would leave a
+        // command group unable to hold an ordinary switch.
+        const node = { groups: [{ item: 'on2', group: 'g1' }], itemFacts: [] };
+        const { container } = run({ items: ITEMS, groups: CMD_ONLY, node });
+        const rows = optionsOf(blocksOf(container)[ROW.on2]);
+        assert.strictEqual(rows.length, 1);
+        assert.ok(!rows[0].some(t => /incompatible/.test(t)),
+            'a both-capable item belongs in a command group without complaint');
+    });
+
+    describe('a membership the group no longer admits', function () {
+        // The mistake being fixed, after the fact: On is already in the group, and the group is
+        // then declared command-only. The pairing is wrong and has to be visible — deleting it
+        // on the next Done is how the original mistake stayed invisible for so long.
+        const node = () => ({ groups: [{ item: 'ro', group: 'g1' }], itemFacts: [] });
+
+        it('keeps it through a save rather than dropping it in silence', function () {
+            const n = node();
+            const { def } = run({ items: ITEMS, groups: CMD_ONLY, node: n });
+            def.oneditsave.call(n);
+            assert.deepStrictEqual(plain(n.groups), [{ item: 'ro', group: 'g1' }],
+                'a membership must survive until someone removes it deliberately');
+        });
+
+        it('marks it with the reason, so the row says which contract it fails', function () {
+            const n = node();
+            const { container } = run({ items: ITEMS, groups: CMD_ONLY, node: n });
+            const rows = optionsOf(blocksOf(container)[ROW.ro]);
+            assert.strictEqual(rows.length, 1);
+            assert.ok(rows[0].some(t => /incompatible: state only/.test(t)),
+                'expected the reason in the label, got ' + JSON.stringify(rows[0]));
+        });
+    });
+
+    it('leaves every membership alone while both flags are ticked', function () {
+        // The no-migration guarantee, at the level that matters: a group carrying neither flag
+        // behaves exactly as it did before the flags existed.
+        const n = { groups: [{ item: 'ro', group: 'g1' }, { item: 'on2', group: 'g1' }], itemFacts: [] };
+        const { container, def } = run({ items: ITEMS, groups: GROUPS, node: n });
+        def.oneditsave.call(n);
+        assert.deepStrictEqual(
+            plain(n.groups).sort((a, b) => a.item.localeCompare(b.item)),
+            [{ item: 'on2', group: 'g1' }, { item: 'ro', group: 'g1' }]);
+        for (const key of ['on2', 'ro']) {
+            const rows = optionsOf(blocksOf(container)[ROW[key]]);
+            assert.ok(!rows[0].some(t => /incompatible/.test(t)),
+                key + ' must not be marked by a group that accepts everything');
+        }
     });
 });

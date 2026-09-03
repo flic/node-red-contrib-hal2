@@ -2,13 +2,12 @@
 A set of nodes to help with basic home automation logic, with an optional MCP server so an AI
 assistant can read device state and control the house.
 
-> **Upgrading to 3.2?** The MCP tools renamed `thing_id` and `thing_name` to `id` and `name`,
-> in the parameters and in the responses. The thing is these tools' subject, so it takes the
-> unprefixed words; items keep `item_id` and `item_name`, where the prefix is what says which
-> namespace a value belongs to. A client holding an older answer in its context will call with the
-> old names and get nothing — start a fresh conversation rather than debugging the miss. Rooms
-> arrive in the same release: see [rooms](#rooms), and note that a `name` matching several things
-> is now refused instead of commanding all of them.
+> **Upgrading to 3.2?** `thing_id` and `thing_name` are now **`id`** and **`name`**, in parameters
+> and responses alike. Items keep `item_id` and `item_name`. This is not only the MCP tools — the
+> [JSON API](#json-api-hal2api) node calls the same tools, so your own HTTP callers need updating
+> too. A client working from an older answer will use the old names and match nothing, so start a
+> fresh conversation rather than debugging the miss. Also new: [rooms](#rooms), and a `name`
+> matching several things is refused rather than applied to all of them.
 >
 > **Upgrading to 3.1?** `set_light` no longer switches an undeclared `switch` item. A switch says
 > only that something can be turned on and off — the load could be a lamp or a coffee machine — so
@@ -81,9 +80,34 @@ Four rules decide what goes into the calculation:
 
 A group behaves like an Item in every other respect: it emits on each member update carrying `state` and `laststate`, so an **Event** node's *only on change* filter works the same as it does for a Thing, and `msg.member` says which member moved it. A group's value is derived, so it is never written to the history database and a **Value** node can only read it — use an **Action** node to command a group.
 
-A group has a **HAType** that sets the command contract for its members. Compatibility is directional: `Switch` and `Light` are interchangeable (both are boolean On/Off), and a `Dimmer` item may also join an On/Off group (turning a dimmer off is well-defined) — but a switch or light cannot join a `Dimmer` group, since an On/Off device can't honour a 0–100 level. The Thing editor only offers compatible groups for each Item, and the Event handler only offers HATypes its existing members can all honour. For genuinely mixed groups there is an **Other** type that accepts any Item.
+A group has a **HAType** that sets the command contract for its members, and a member has to be able to honour it: `Switch` and `Light` are interchangeable (both are boolean On/Off), but a `Dimmer` item does not join an On/Off group and a switch or light does not join a `Dimmer` group, since neither can honour the other's value. Where an Item carries a declared [device class](#device-class--what-an-item-drives), that is what the group's contract is matched against rather than its `ha_type` — a switch driving a socket is not a light however identical the two look from the protocol side. The Thing editor only offers compatible groups for each Item, and the Event handler only offers HATypes its existing members can all honour. For genuinely mixed groups there is an **Other** type that accepts any Item.
 
 A group with no stateful members stays exactly what it was: a command target, invisible to the reading nodes.
+
+### What a member can do
+
+An Item reports a state, accepts commands, or both, and a group commonly exists for one of the two.
+Nothing used to say which an Item was at the point where its groups are chosen, so a Zigbee2MQTT
+Color Light's `On` — which reports and takes no commands — could join a group built to command and
+make up part of the member count and none of the reach. Nothing was wrong and nothing complained:
+the group really did have one more member than it could command, and `control_group` reported
+truthfully how many it reached.
+
+Two things now say so. In the Thing editor, an Item that does not do both is marked **`· state
+only`** or **`· command only`** beside its name. Doing both is the ordinary case and stays silent,
+so the row that needs a second look is the one that has something written on it. The Event
+handler's group info button lists each member's capability in its own column, which is how to
+audit a group that is already built.
+
+A group can also refuse a kind of member outright. **Accepts** on the group — `[x] State`
+`[x] Command`, both ticked by default — says which kinds may join, and unticking one stops the
+Thing editor offering that group to Items of the other kind. An Item that does both qualifies under
+either tick on its own, since it can serve as the group's reading or as its target. This is an
+admission rule for the editor and nothing more: what a group reads and what it commands stays
+derived from the members it actually has, the runtime never consults the flags, and a membership
+that no longer qualifies is **kept and marked**, not deleted — the group's summary counts them, and
+the Item's row says which contract it fails. Both flags ticked is exactly the old behaviour, so
+every group that predates the field is untouched.
 
 ### Groups over MCP
 
