@@ -10,13 +10,14 @@ const MCP_TOOLS = [
         name        : 'get_all_states',
         description : 'Returns the current state of all devices/things connected to this event handler. ' +
                       'The response includes a location field (e.g. "Home" or "Cabin") identifying which property this server controls. ' +
-                      'Use fields="summary" (default) for a lightweight list with id, name, type_name and alive — ideal for orientation and ID lookup. ' +
-                      'Use fields="items" for a compact per-device item index (id, name, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. ' +
+                      'Use fields="summary" (default) for a lightweight list with id, name, type_name, room and alive — ideal for orientation and ID lookup. ' +
+                      'Use fields="items" for a compact per-device item index (id, name, room, type_name, items:[{item_id, item_name, ha_type, history}]) — cheap way to find an item_id without the full dump. ' +
                       'Use fields="full" to include all items with item_id, item_name, ha_type and current value. ' +
                       'Each item and each device always includes a last_change field (ISO 8601 UTC timestamp, null if the value has not changed since startup) — when the value last actually changed. Use this to answer "when did X happen?" without an extra get_history call. ' +
                       'Each device has an alive field (true/false) — if false the device is offline. ' +
                       'Only items with a ha_type are included in full mode. ' +
                       'Responses include free-text notes and tags on both Thing and Item level when configured — use them to disambiguate what a device actually measures or controls (e.g. "Pool Sensor" notes: "pool water temperature"). ' +
+                      'Every device carries room when it has one — the room it was installed in, present in all three fields modes. It is absent when the device has none, which is normal and complete for scenes, people and phones, not a gap to fill. Read it before assuming two devices with the same name are the same device: since the room left the name, several things may legitimately be called "Golvspot". ' +
                       'Each device also includes a categories field listing which control categories it falls into (climate, spa, light, fan, cover, scene), derived from its items — use this to identify what kind of device it is at a glance. ' +
                       'ha_type accepts both literal item types (e.g. "light", "temperature") and category aliases that expand to their underlying types — e.g. "climate" matches devices with target temperature / ac mode / fan mode / swing mode. Supported aliases: climate, spa, light, fan, cover, scene. ' +
                       'Use tag to limit results to devices/items tagged with a specific keyword. ' +
@@ -517,6 +518,60 @@ function resolveByName(devices, args) {
     return { devices: hits };
 }
 
+// What each `fields` mode keeps of a device entry.
+//
+// Lifted out of the get_all_states dispatch so it can be tested at all — the same reason
+// lib/group-tools.js exists. It matters because the modes are not simply "more" and "less" of one
+// another: summary and items each choose what a caller needs to tell two devices apart, and a
+// field that survives full but not summary is invisible in the mode almost every call uses.
+// `room` shipped that way once: present in full, dropped from the default.
+//
+// Returns a new object per device; the input entries are not touched.
+function projectDevices(devices, fields) {
+    const mode = String(fields || 'summary').toLowerCase();
+
+    if (mode === 'summary') {
+        return (devices || []).map(d => {
+            const o = {
+                id          : d.id,
+                name        : d.name,
+                type_name   : d.type_name,
+                alive       : d.alive,
+                last_change : d.last_change || null
+            };
+            // Summary is the orientation mode, so it carries what tells two devices apart. That is
+            // the whole job of room now that the room has left the name: five things called
+            // "Golvspot" are one indistinguishable list without it.
+            if (d.room)       o.room       = d.room;
+            if (d.notes)      o.notes      = d.notes;
+            if (d.tags)       o.tags       = d.tags;
+            if (d.categories) o.categories = d.categories;
+            return o;
+        });
+    }
+
+    if (mode === 'items') {
+        // Compact item index for cheap id lookup — no values, metadata, notes or tags.
+        return (devices || []).map(d => ({
+            id  : d.id,
+            name: d.name,
+            type_name : d.type_name,
+            // Notes and tags are stripped here on purpose; room is not one of them. This mode
+            // exists to pick an id out of a list of names, and the room is what makes two
+            // identical names pickable.
+            ...(d.room ? { room: d.room } : {}),
+            items     : (d.items || []).map(i => ({
+                item_id  : i.item_id,
+                item_name: i.item_name,
+                ha_type  : i.ha_type,
+                ...(i.history ? { history: true } : {})
+            }))
+        }));
+    }
+
+    return devices || [];
+}
+
 function deriveCategories(items) {
     const present = new Set();
     for (const i of items) {
@@ -605,5 +660,6 @@ module.exports = {
     itemSatisfies,
     fanValue,
     presenceIdentity,
-    deriveCategories
+    deriveCategories,
+    projectDevices
 };

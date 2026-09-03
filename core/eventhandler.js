@@ -10,7 +10,7 @@ const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/http
 const {
     MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
-    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity, resolveByName
+    itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity, resolveByName, projectDevices
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
         advertisedScopes, visibleTools } = require('../lib/claim-gate');
@@ -1137,35 +1137,9 @@ module.exports = function(RED) {
                         const limit  = args.limit ? parseInt(args.limit) : undefined;
                         let paged    = limit !== undefined ? devices.slice(offset, offset + limit) : devices.slice(offset);
 
-                        const fields = (args.fields || 'summary').toLowerCase();
-                        if (fields === 'summary') {
-                            paged = paged.map(d => {
-                                const o = {
-                                    id    : d.id,
-                                    name  : d.name,
-                                    type_name   : d.type_name,
-                                    alive       : d.alive,
-                                    last_change : d.last_change || null
-                                };
-                                if (d.notes)      o.notes      = d.notes;
-                                if (d.tags)       o.tags       = d.tags;
-                                if (d.categories) o.categories = d.categories;
-                                return o;
-                            });
-                        } else if (fields === 'items') {
-                            // Compact item index for cheap id lookup — no values, metadata, notes or tags.
-                            paged = paged.map(d => ({
-                                id  : d.id,
-                                name: d.name,
-                                type_name : d.type_name,
-                                items     : (d.items || []).map(i => ({
-                                    item_id  : i.item_id,
-                                    item_name: i.item_name,
-                                    ha_type  : i.ha_type,
-                                    ...(i.history ? { history: true } : {})
-                                }))
-                            }));
-                        }
+                        // What each mode keeps lives in core/mcp-tools.js, where it can be
+                        // tested; see projectDevices.
+                        paged = projectDevices(paged, args.fields);
 
                         const result = { total, offset, devices: paged };
                         if (limit !== undefined) result.limit = limit;
