@@ -49,6 +49,9 @@ module.exports = function(RED) {
             msg.thing = {
                 name: thing.name,
                 id: thing.id,
+                // Same shape the Thing itself emits: the room's name when it has one, and no key
+                // at all when it does not.
+                ...(typeof thing.roomName === 'function' && thing.roomName() ? { room: thing.roomName() } : {}),
                 last_update: thing.heartbeat[node.item],
                 last_change: thing.last_change[node.item]
             };

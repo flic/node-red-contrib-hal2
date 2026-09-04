@@ -372,6 +372,13 @@ module.exports = function(RED) {
         node.getRooms = function () {
             return (Array.isArray(config.rooms) ? config.rooms : []).map(r => ({ id: r.id, name: r.name, notes: r.notes || '' }));
         };
+        // Resolved once. The registry only changes on deploy, and this is read on every message a
+        // Thing emits — rebuilding the map per message would be a map per message. Returns '' for
+        // a Thing with no room, which is a complete answer and not a gap.
+        const roomNameById = roomNames();
+        node.getRoomName = function (roomId) {
+            return (roomId && roomNameById.get(roomId)) || '';
+        };
         // groupId → send(payload) → { queued, skipped }. Rebuilt by wireGroups on every deploy.
         node.groupCommanders = {};
         // groupId → read(fn) → { value, live, members }. The configured function is only a
@@ -578,7 +585,8 @@ module.exports = function(RED) {
                 // Which member moved the group. Kept because "the hall light is what turned
                 // the group on" is exactly the context an event flow wants next.
                 member: trigger && {
-                    thing: { id: trigger.id, name: trigger.name },
+                    thing: { id: trigger.id, name: trigger.name,
+                             ...(trigger.room ? { room: trigger.room } : {}) },
                     item:  { id: trigger.item_id,  name: trigger.item_name },
                     heartbeat: trigger.heartbeat
                 }
@@ -680,6 +688,10 @@ module.exports = function(RED) {
                     if (!isMember && itemid !== HEARTBEAT_ITEM) return;
                     const trigger = {
                         id: thingid, name: (payload && payload.thing && payload.thing.name) || thingid,
+                        // Carried through from the Thing's own message rather than resolved again.
+                        // "The hall light turned the group on" is the context this exists for, and
+                        // two members may legitimately share a name once the room left it.
+                        room: (payload && payload.thing && payload.thing.room) || '',
                         item_id:  itemid,  item_name:  (payload && payload.item  && payload.item.name)  || itemid,
                         heartbeat: !isMember
                     };

@@ -34,6 +34,13 @@ module.exports = function(RED) {
         // Room id, resolved to a name by the Event handler's registry. '' means no room, which is
         // a complete answer rather than a gap — a scene is nowhere.
         this.room = config.room || '';
+        // Resolved at send time rather than here: config nodes are constructed in no guaranteed
+        // order, so the handler may not yet carry the registry when this one is built. A Map
+        // lookup per message costs nothing.
+        this.roomName = function () {
+            return (this.eventHandler && typeof this.eventHandler.getRoomName === 'function')
+                ? this.eventHandler.getRoomName(this.room) : '';
+        };
         this.topicPrefix = config.topicPrefix;
         this.attributes = config.attributes;
         this.groups = config.groups || [];   // [{ item, group }] — group membership, resolved by the EventHandler group engine
@@ -307,6 +314,10 @@ module.exports = function(RED) {
                 thing: {
                     name: node.name,
                     id: node.id,
+                    // Present only when the Thing has a room, and carrying the name rather than
+                    // the registry id — the same contract get_all_states follows. Since the room
+                    // left the name, this is what tells two things called "Golvspot" apart.
+                    ...(node.roomName() ? { room: node.roomName() } : {}),
                     last_update: node.heartbeat[node.id],
                     last_change: node.last_change[node.id]
                 },
@@ -532,6 +543,7 @@ module.exports = function(RED) {
                     command.thing = {
                         name: node.name,
                         id: node.id,
+                        ...(node.roomName() ? { room: node.roomName() } : {}),
                         last_update: node.heartbeat[node.id]
                     }
                     command.item = {

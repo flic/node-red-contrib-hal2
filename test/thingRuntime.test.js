@@ -10,15 +10,21 @@ const THING = path.join(__dirname, '..', 'core', 'thing.js');
 
 // Builds a Thing wired to the given ThingType, and returns it along with the context store it
 // persists into, so a test can check what would survive a restart.
-function makeThing(thingType, thingConfig) {
+function makeThing(thingType, thingConfig, opts) {
     const ctxStore = {};
     const nodeContext = { get: k => ctxStore[k], set: (k, v) => { ctxStore[k] = v; } };
 
+    // Every message the Thing puts on the bus, so a test can read what it actually emitted.
+    const published = [];
     const eventHandler = {
-        publishUpdate: () => {}, publishLog: () => {},
+        publishUpdate: (...args) => { published.push(args); }, publishLog: () => {},
         subscribe: () => {}, unsubscribe: () => {},
+        // The room registry lives on the handler and is reached by id. An older handler has no
+        // such method at all, which the Thing has to survive — see the test for it.
+        getRoomName: id => ((opts && opts.rooms) || {})[id] || '',
         ingressLibrary: [], egressLibrary: []
     };
+    if (opts && opts.noRoomRegistry) { delete eventHandler.getRoomName; }
 
     let registered = null;
     const RED = {
@@ -53,7 +59,7 @@ function makeThing(thingType, thingConfig) {
         attributes: [], groups: []
     }, thingConfig));
 
-    return { node, ctxStore };
+    return { node, ctxStore, published };
 }
 
 const esphomeType = () => ({
@@ -189,5 +195,62 @@ describe('hal2Thing function store', function () {
         node.getStore().other = 'keep';
         node.clearStore('seen');
         assert.deepStrictEqual(node.getStore(), { other: 'keep' });
+    });
+});
+
+describe('hal2Thing — the room on the emitted thing block', function () {
+    // Which room a device is in used to be a prefix on its name. Now it is a field, so the block
+    // a flow receives has to carry it: without it, a Value or Event node downstream sees two
+    // things called "Golvspot" and has nothing to tell them apart.
+    //
+    // The Thing stores a registry id; what goes out is the name, resolved through the Event
+    // handler. That is the same contract get_all_states follows, and for the same reason — an id
+    // is an editor concern.
+    const wifi = { topic: 'esphome/kontor/device/wifi',
+                   payload: { ip: '10.0.0.5', ssid: 'ftb-iot', bssid: 'AC:8B:A9:26:5F:09', rssi: -60 } };
+
+    function emit(opts, cfg) {
+        const { node, published } = makeThing(esphomeType(),
+            Object.assign({}, thingConfig, cfg), opts);
+        node._input(wifi);
+        assert.ok(published.length, 'the Thing published nothing to react to');
+        return published[0][3];      // publishUpdate(typeId, thingId, itemId, eventmsg, logtype)
+    }
+
+    it('carries the room name, not the id it is stored as', function () {
+        const msg = emit({ rooms: { r1: 'Kontor' } }, { room: 'r1' });
+        assert.strictEqual(msg.thing.room, 'Kontor');
+    });
+
+    it('omits the key entirely for a thing with no room', function () {
+        // Not null, and not an empty string: absence is the answer for a scene or a person, and
+        // anything else reads as a gap waiting to be filled.
+        const msg = emit({ rooms: { r1: 'Kontor' } }, {});
+        assert.ok(!('room' in msg.thing), 'expected no room key, got ' + JSON.stringify(msg.thing));
+    });
+
+    it('omits it when the id no longer resolves, rather than leaking the id', function () {
+        // A room deleted from the registry while a Thing still points at it. Emitting the raw id
+        // would put an editor identifier into a flow, where nothing can read it.
+        const msg = emit({ rooms: {} }, { room: 'deleted' });
+        assert.ok(!('room' in msg.thing));
+    });
+
+    it('leaves the rest of the block exactly as it was', function () {
+        // The block is consumed by flows that predate rooms; adding a key must not disturb one.
+        const msg = emit({ rooms: { r1: 'Kontor' } }, { room: 'r1' });
+        assert.deepStrictEqual(Object.keys(msg.thing).sort(),
+            ['id', 'last_change', 'last_update', 'name', 'room']);
+        assert.strictEqual(msg.thing.name, 'Kontor ESP');
+        assert.strictEqual(msg.thing.id, 'thing1');
+    });
+
+    it('survives an Event handler with no room registry at all', function () {
+        // Config nodes are constructed in no guaranteed order, and a handler deployed before
+        // rooms existed has no such method. Throwing here would take out every message the Thing
+        // sends, which is the whole device.
+        const msg = emit({ noRoomRegistry: true }, { room: 'r1' });
+        assert.ok(!('room' in msg.thing));
+        assert.strictEqual(msg.thing.name, 'Kontor ESP');
     });
 });
