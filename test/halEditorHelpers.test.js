@@ -14,7 +14,7 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'resources', 'hal.js'), 'utf8'), sandbox);
 const { halNumericOperator, halGroupAccepts, halHaTypeFamily,
-        halGroupPolicy, halGroupCapabilityRefusal } = sandbox;
+        halGroupPolicy, halGroupCapabilityRefusal, halDuplicateNames } = sandbox;
 
 describe('hal.js halNumericOperator', function () {
     it('claims the comparisons that can only mean a number', function () {
@@ -265,5 +265,53 @@ describe('hal.js halGroupCapabilityRefusal', function () {
     it('admits an unrecognised type nowhere but an open group', function () {
         const odd = { id: 'i', type: 'something-new' };
         assert.strictEqual(halGroupCapabilityRefusal(POLICY.open, odd), 'neither state nor command');
+    });
+});
+
+describe('hal.js halDuplicateNames', function () {
+    // Rooms are matched by name, and that match is a plain equality with no ambiguity refusal —
+    // unlike group names, where several matches come back as "Several groups match". So a
+    // duplicate room name is not a nuisance, it is a silent merge: get_all_states(room:"Kontor")
+    // would answer with both rooms' devices and nothing would say so.
+    const dup = r => [...halDuplicateNames(r)].sort();
+    const rooms = (...names) => names.map((name, i) => ({ id: 'r' + i, name }));
+
+    it('finds nothing wrong with a registry of distinct names', function () {
+        assert.deepStrictEqual(dup(rooms('Kontor', 'Kök', 'Hall', 'Sovrum')), []);
+    });
+
+    it('names the one that repeats', function () {
+        assert.deepStrictEqual(dup(rooms('Kontor', 'Kök', 'Kontor')), ['kontor']);
+    });
+
+    it('compares the way the tools do — case-insensitively', function () {
+        // get_all_states lowercases both sides before comparing, so these two rooms are one room
+        // as far as every answer is concerned.
+        assert.deepStrictEqual(dup(rooms('Kontor', 'kontor')), ['kontor']);
+        assert.deepStrictEqual(dup(rooms('KONTOR', 'Kontor')), ['kontor']);
+    });
+
+    it('ignores surrounding whitespace, which the save trims away anyway', function () {
+        assert.deepStrictEqual(dup(rooms('Kontor', ' Kontor ')), ['kontor']);
+    });
+
+    it('does not count unnamed rows against each other', function () {
+        // Two blank rows in the editor are not two rooms with the same name; the save drops them.
+        assert.deepStrictEqual(dup(rooms('', '', 'Kontor')), []);
+        assert.deepStrictEqual(dup(rooms('  ', 'Kontor')), []);
+    });
+
+    it('reports each colliding name once, however many rows share it', function () {
+        assert.deepStrictEqual(dup(rooms('Kontor', 'Kontor', 'Kontor')), ['kontor']);
+    });
+
+    it('reports every distinct collision', function () {
+        assert.deepStrictEqual(dup(rooms('Kontor', 'Kök', 'Kontor', 'kök')), ['kontor', 'kök']);
+    });
+
+    it('survives an empty list, a missing one, and a row with no name at all', function () {
+        assert.deepStrictEqual(dup([]), []);
+        assert.deepStrictEqual(dup(undefined), []);
+        assert.deepStrictEqual(dup([{ id: 'r1' }, { id: 'r2' }, null]), []);
     });
 });

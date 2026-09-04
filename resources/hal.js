@@ -394,6 +394,32 @@ function halGroupAccepts(groupHaType, itemHaType, deviceClass) {
     return halHaTypeFamily(groupHaType) === itemFam;
 }
 
+// The names in a registry that appear more than once, normalised — trimmed and lowercased,
+// because that is how the tools compare them. Used for both the rooms and the groups registry:
+// each is a flat list whose entries are addressed by name, and in each a repeat is a fault.
+//
+// For rooms the fault is silent. The room filter is a plain equality with no ambiguity refusal,
+// so two rooms called "Kontor" merge in every answer — get_all_states(room:"Kontor") returns both
+// rooms' devices and nothing says so. They also defeat the labelling: a Thing's name is unique
+// within its room by room *id*, so two rooms of one name let two Things both read
+// "[Kontor] Taklampa".
+//
+// For groups the runtime does answer "Several groups match" and make the caller pick
+// (lib/group-tools.js), but that is a mitigation, not a licence: it degrades control_group by
+// name from acting to refusing, and it does nothing for the editor, where every group dropdown
+// shows the name alone and two identical entries cannot be told apart by the person choosing.
+//
+// Returns the offending names, so a row can be marked for the one it collides on.
+function halDuplicateNames(entries) {
+    var seen = {}, dup = {};
+    (entries || []).forEach(function (e) {
+        var n = String((e && e.name) || '').trim().toLowerCase();
+        if (!n) { return; }   // an unnamed row is not an entry yet; the save drops it
+        if (seen[n]) { dup[n] = true; } else { seen[n] = true; }
+    });
+    return Object.keys(dup);
+}
+
 // Which kinds of member a group admits. Two independent flags, not one three-way choice: the
 // pair reads as a union — the group takes state items and takes command items — where a single
 // "state+command" value could equally be read as a requirement that each member be both, which

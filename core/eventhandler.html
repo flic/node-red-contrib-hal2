@@ -386,8 +386,22 @@
             maxlisteners:      { value: "50" },
             checkHeartbeat:    { value: false },
             heartbeat:         { value: 3600 },
-            groups:            { value: [], required: false },
-            rooms:             { value: [], required: false },
+            // Same rule as rooms below, and the same two layers. A duplicate here is less
+            // silent — control_group by name answers "Several groups match" rather than acting on
+            // the wrong one — but that is a refusal where there should have been an action, and
+            // it does nothing for the dropdowns, which show the name and nothing else.
+            groups:            { value: [], required: false,
+                                 validate: function (v) { return halDuplicateNames(v).length === 0; } },
+            // Validated, unlike groups: a group matched by name that hits several answers
+            // "Several groups match" and lets the caller pick, but the room filter is a plain
+            // equality, so two rooms of one name merge in every answer with nothing said.
+            //
+            // This is the half that refuses the deploy, as a Thing's duplicate name does. It also
+            // catches a pair that never went through this dialog — a hand-edited flow file, or an
+            // import. Which row to fix is marked separately, by hal2ehSyncRoomNames: a validate
+            // marks the node, and an editableList row is not a field it can reach.
+            rooms:             { value: [], required: false,
+                                 validate: function (v) { return halDuplicateNames(v).length === 0; } },
             // History
             historyEnabled:        { value: false },
             historyDbPath:         { value: '' },
@@ -452,6 +466,31 @@
             }
 
             // ── Groups editableList ───────────────────────────────────────────
+            // Mark the name fields that collide, using the class Node-RED marks an invalid input
+            // with — same border, same themed colour, and it is what the editor's own "that name
+            // is taken" checks use. The validate on the registry blocks the deploy; this is what
+            // says which row to fix, since an editableList row is not a node-config-input-* field
+            // and so gets none of that marking for free.
+            //
+            // Recomputed across the whole list on every keystroke: a per-row check cannot see the
+            // row it duplicates, and with a dozen entries the cost is nothing.
+            function hal2ehMarkDuplicateNames(selector) {
+                var rows = $(selector);
+                var dup = halDuplicateNames(rows.map(function () {
+                    return { name: $(this).val() };
+                }).get());
+                rows.each(function () {
+                    $(this).toggleClass('input-error',
+                        dup.indexOf(String($(this).val() || '').trim().toLowerCase()) >= 0);
+                });
+            }
+            function hal2ehSyncRoomNames() {
+                hal2ehMarkDuplicateNames("#node-config-eh-rooms-list-items .node-config-eh-room-name-property");
+            }
+            function hal2ehSyncGroupNames() {
+                hal2ehMarkDuplicateNames("#node-config-eh-groups-list-items .node-config-eh-group-name-property");
+            }
+
             // Rooms: a flat registry of names. No haType, no rate limit, nothing to aggregate —
             // a room is a place, and the only thing that can be wrong about one is its spelling.
             $("#node-config-eh-rooms-list-items").editableList({
@@ -464,14 +503,18 @@
                     $('<label/>', { style: "width:60px; margin:0;" }).text('Name').appendTo(row);
                     $('<input/>', { type: 'text', class: "node-config-eh-room-name-property",
                                     placeholder: "e.g. Kontor", style: "width:calc(45% - 60px);" })
-                        .appendTo(row).val(room.name || '');
+                        .appendTo(row).val(room.name || '')
+                        .on('input', hal2ehSyncRoomNames);
                     $('<label/>', { style: "width:60px; margin:0 0 0 10px;" })
                         .html('<i class="fa fa-file"></i> Notes').appendTo(row);
                     $('<input/>', { type: 'text', class: "node-config-eh-room-notes-property",
                                     style: "width:calc(55% - 80px);" })
                         .appendTo(row).val(room.notes || '');
+                    hal2ehSyncRoomNames();
                 },
                 removable: true,
+                // A removed row can resolve a collision, so the marking follows deletions too.
+                removeItem: hal2ehSyncRoomNames,
                 // Sortable, unlike the groups list: rooms are read as a list by a human choosing
                 // one, and the order they appear in the dropdown is this one.
                 sortable: true,
@@ -524,7 +567,8 @@
                         .appendTo(rowNotes).append(' Notes');
 
                     var nameProperty = $('<input/>', { style: "padding-right:10px;width:calc(100% - 160px)", class: "node-config-eh-group-name-property", type: "text", placeholder: "Group name" })
-                        .appendTo(rowName).prop('required', true);
+                        .appendTo(rowName).prop('required', true)
+                        .on('input', hal2ehSyncGroupNames);
                     var idProperty = $('<input/>', { class: "node-config-eh-group-id-property", type: "hidden" })
                         .appendTo(rowName).val(group.id || halCreateId());
 
@@ -805,8 +849,11 @@
                         .appendTo(rowNotes).val(group.notes || '');
 
                     if (group.name) { nameProperty.val(group.name); }
+                    hal2ehSyncGroupNames();
                 },
                 removable: true,
+                // A removed row can resolve a collision, so the marking follows deletions too.
+                removeItem: hal2ehSyncGroupNames,
                 sortable:  true,
                 addButton: "Group"
             });
