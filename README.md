@@ -304,6 +304,13 @@ A Thing's name has to be unique **within its room**, not across the house — tw
 both be `Golvspot` as long as they are in different rooms, which is the rename rooms exist to make
 possible. Two Things with no room still collide: there the name is all there is.
 
+The room reaches flows too, not only the tools. The `thing` block a Thing puts on the bus — what a
+**Value** or **Event** node passes on, and what a group's emission names as the member that moved it
+— carries `room` alongside `name` and `id`. It is the room's **name**, not the registry id it is
+stored as, and the key is absent when the Thing has no room. Without it a flow downstream sees two
+things called `Golvspot` and has nothing to tell them apart, which is the problem rooms exist to
+solve.
+
 `get_presence` reports `current_room` — where a person is *now*, which is not the same thing as the
 room a device was installed in, and no longer shares a key with it.
 
