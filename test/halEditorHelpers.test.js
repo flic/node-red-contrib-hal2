@@ -315,3 +315,67 @@ describe('hal.js halDuplicateNames', function () {
         assert.deepStrictEqual(dup([{ id: 'r1' }, { id: 'r2' }, null]), []);
     });
 });
+
+describe('hal.js halGetThings ordering', function () {
+    const { halGetThings } = sandbox;
+
+    // Two rooms, and names chosen so that ordering by the bare name and ordering by the label
+    // disagree: by name it is Alfa, Bravo, Charlie; by label it is [Attic] Bravo, [Attic] Charlie,
+    // [Zone] Alfa. Deliberately ASCII — localeCompare follows the runtime locale, so asserting
+    // where å sorts would test the test runner's ICU data rather than this function.
+    const THINGS = [
+        { id: 't1', name: 'Alfa',    room: 'r2', thingType: 'tt', eventHandler: 'eh' },
+        { id: 't2', name: 'Charlie', room: 'r1', thingType: 'tt', eventHandler: 'eh' },
+        { id: 't3', name: 'Bravo',   room: 'r1', thingType: 'tt', eventHandler: 'eh' }
+    ];
+    const ROOMS = [{ id: 'r1', name: 'Attic' }, { id: 'r2', name: 'Zone' }];
+
+    const redFor = things => ({
+        nodes: {
+            filterNodes: () => things,
+            node: id => (id === 'eh' ? { rooms: ROOMS } : { thingCommand: true, thingStatus: true }),
+            eachConfig: () => {}
+        }
+    });
+    // Spread out of the sandbox realm before comparing: an array built in there carries that
+    // context's Array.prototype, and deepStrictEqual compares prototypes.
+    const order = things => [...halGetThings(redFor(things))].map(t => t.name);
+
+    it('orders by the label the dropdown shows, so rooms come out together', function () {
+        // The bug this guards: the list was sorted on the bare name while displaying the label,
+        // which put the rooms in an order with no visible logic.
+        assert.deepStrictEqual(order(THINGS), ['Bravo', 'Charlie', 'Alfa']);
+    });
+
+    it('is not merely the old name order', function () {
+        // Fails if someone reverts to sorting on .name — that would give Alfa, Bravo, Charlie.
+        assert.notDeepStrictEqual(order(THINGS), ['Alfa', 'Bravo', 'Charlie']);
+    });
+
+    it('still ignores case, as the uppercase comparison it replaced did', function () {
+        const mixed = [
+            { id: 'a', name: 'beta',  thingType: 'tt', eventHandler: 'eh' },
+            { id: 'b', name: 'Alpha', thingType: 'tt', eventHandler: 'eh' }
+        ];
+        assert.deepStrictEqual(order(mixed), ['Alpha', 'beta']);
+    });
+
+    it('sorts a thing with no room by its bare name, without dropping it', function () {
+        // A scene has no room and still has to appear in the list.
+        const mixed = THINGS.concat([
+            { id: 't4', name: 'Scene Night', thingType: 'tt', eventHandler: 'eh' }
+        ]);
+        assert.strictEqual(order(mixed).length, 4);
+        assert.ok(order(mixed).includes('Scene Night'));
+    });
+
+    it('keeps a thing whose room id no longer resolves', function () {
+        // Deleting a room must not delete the Thing from every dropdown in the flow.
+        const stale = [{ id: 't9', name: 'Orphan', room: 'gone', thingType: 'tt', eventHandler: 'eh' }];
+        assert.deepStrictEqual(order(stale), ['Orphan']);
+    });
+
+    it('survives an empty registry', function () {
+        assert.deepStrictEqual(order([]), []);
+    });
+});

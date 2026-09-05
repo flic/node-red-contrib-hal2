@@ -327,7 +327,13 @@
                         $("#thing-filter-div").hide();
                         $("#node-input-thing").children().remove();
                         for (var t in thingsList) {
-                            $("<option value='" + thingsList[t].id + "'> " + thingsList[t].name + "</option>").appendTo("#node-input-thing");
+                            // halThingLabel, not .name: a Thing's room left its name, so two
+                            // called "Golvspot" are one entry twice without it. Built through
+                            // .val()/.text() rather than an HTML string, which is how the filtered
+                            // list below does it — and it is also what stops a name containing a
+                            // quote or an angle bracket from breaking the option.
+                            $("#node-input-thing").append($("<option></option>")
+                                .val(thingsList[t].id).text(halThingLabel(RED, thingsList[t])));
                         }
                         if ((typeof savedTypeSel != 'undefined') && (savedTypeSel == 'hal2Thing')) {
                             $("#node-input-thing").val(savedThing);

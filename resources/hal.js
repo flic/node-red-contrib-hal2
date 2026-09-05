@@ -226,13 +226,20 @@ function halGetThings(RED,filter) {
             console.log('Error: '+error.message);
         }
     }
-    filteredThingsList.sort(function(a, b) {
-        var textA = a.name.toUpperCase();
-        var textB = b.name.toUpperCase();
-        return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-    });
-
-    return filteredThingsList;
+    // Sorted on the label the dropdowns actually show — "[Kontor] Taklampa" — not the bare name.
+    // Sorting on one and displaying the other put the list in an order with no visible logic, and
+    // the room is the first thing a reader scans for, so it has to be what the list is ordered by.
+    //
+    // Labels are computed once per Thing rather than inside the comparator: halThingLabel resolves
+    // the room registry on every call, and a comparator runs O(n log n) times.
+    //
+    // localeCompare rather than the code-unit comparison this replaced: the room names are words
+    // in the reader's language, and å/ä/ö sort by code point in an order Swedish does not use.
+    // `sensitivity: 'accent'` keeps the case-insensitivity the toUpperCase gave.
+    return filteredThingsList
+        .map(function (t) { return { thing: t, key: String(halThingLabel(RED, t) || '') }; })
+        .sort(function (a, b) { return a.key.localeCompare(b.key, undefined, { sensitivity: 'accent' }); })
+        .map(function (x) { return x.thing; });
 }
 
 function halGetGroups(RED, eventHandlerId, filter) {
