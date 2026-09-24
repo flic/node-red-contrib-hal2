@@ -1,4 +1,5 @@
 module.exports = function(RED) {
+    var common = require('../lib/common');
     // DEPRECATED. Groups are no longer separate nodes — their identity lives on the
     // EventHandler (Groups tab) and membership lives per item on each hal2Thing.
     //
@@ -27,7 +28,7 @@ module.exports = function(RED) {
 
             // Input wire: hand the payload to the engine's group command path.
             node.on('input', function (msg) {
-                node.eventHandler.publishCommand(node.id, node.id, msg.payload);
+                node.eventHandler.publishCommand(node.id, node.id, msg.payload, common.senderOf(node));
             });
         }
 

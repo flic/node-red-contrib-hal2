@@ -1,6 +1,7 @@
 module.exports = function(RED) {
     var topics = require('../lib/topics');
     var store = require('../lib/store');
+    var common = require('../lib/common');
     // Topic/prefix helpers live in lib/topics (pure, unit-tested). fixTopic is used directly;
     // applyFilters is wrapped to inject Node-RED's message-property getter.
     var fixTopic = topics.fixTopic;
@@ -478,8 +479,11 @@ module.exports = function(RED) {
         }
             
         if (node.eventHandler) {
-            node.listener = function(itemid, payload) {
+            node.listener = function(itemid, payload, source) {
                 var item;
+                var flowLabelOf = function(z) {
+                    try { var f = RED.nodes.getFlow && RED.nodes.getFlow(z); return f && f.label; } catch (err) { return null; }
+                };
 
                 if (!node.thingType.items) {
                     node.debug("No items configured. Dropping message.");
@@ -494,12 +498,12 @@ module.exports = function(RED) {
                 }
 
                 if (!item) {
-                    node.error("Item ["+itemid+"] undefined.");
+                    node.error(common.refusalText("Item ["+itemid+"] undefined", node, source, flowLabelOf));
                     return;
                 }
 
                 if (item.type == 'status') {
-                    node.error("Item "+item.name+"["+item.id+"] is status only");
+                    node.error(common.refusalText("Item "+item.name+"["+item.id+"] is status only", node, source, flowLabelOf));
                     return;
                 }
 

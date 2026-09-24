@@ -244,7 +244,9 @@ module.exports = function(RED) {
             node.debug("Removed listener for event " + eventStr);
         };
 
-        node.publishCommand = function (id, itemid, payload) {
+        // `source` says who is asking — { type, name, id, z } of the sending node, or a plain
+        // label — and rides along to the listener only so a refusal there can name the sender.
+        node.publishCommand = function (id, itemid, payload, source) {
             // Normalise string on/off/true/false to boolean
             if (payload === 'on'  || payload === 'true')  payload = true;
             if (payload === 'off' || payload === 'false') payload = false;
@@ -260,7 +262,7 @@ module.exports = function(RED) {
                 node.pendingHal2Commands.set(id + '::' + itemid, now + node.hal2CorrelationMs);
             }
 
-            this.emit("command_" + id, itemid, payload);
+            this.emit("command_" + id, itemid, payload, source);
         };
 
         node.publishUpdate = function (thingtypeid, thingid, itemid, payload, logtype) {
@@ -640,7 +642,7 @@ module.exports = function(RED) {
                 // throttle queue is persistent per group, so the pace holds across bursts —
                 // two rapid group commands share one rate limit instead of racing.
                 const throttle = common.createThrottledQueue(ratelimit,
-                    m => node.publishCommand(m.thing, m.item, m.payload));
+                    m => node.publishCommand(m.thing, m.item, m.payload, { type: 'group', name: def.name, id: groupId }));
                 // One implementation for both ways in — the bus listener below and the MCP
                 // tool — so the count the tool reports is the queue that was actually built,
                 // not an estimate from the member list. Members are resolved at send time
@@ -1098,7 +1100,7 @@ module.exports = function(RED) {
                     return { error: 'Item "' + item.name + '" is read-only (status) and cannot be controlled.',
                              id: thingId, name: thing.name, available_items: thingItemsSummary(thing) };
                 }
-                node.publishCommand(thingId, itemId, value);
+                node.publishCommand(thingId, itemId, value, { type: 'MCP tool', name: 'control_device' });
                 return { success: true, name: thing.name, item_id: itemId, value };
             }
 

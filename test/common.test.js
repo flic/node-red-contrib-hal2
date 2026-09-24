@@ -230,3 +230,48 @@ describe('lib/common isThingAlive', function () {
         assert.strictEqual(common.isThingAlive({}), false, 'no thingType — not a usable thing');
     });
 });
+
+describe('lib/common command refusals name the sender', function () {
+    const thing = {
+        name: 'Fönster 1',
+        thingType: {
+            name: 'Matter Color Temperature Light',
+            items: [
+                { id: 'mctl_on', name: 'On', type: 'both' },
+                { id: 'mctl_reach', name: 'Reachable', type: 'status' }
+            ]
+        }
+    };
+
+    it('queueSend hands the sending node along with each command', function () {
+        const seen = [];
+        const node = {
+            type: 'hal2Action', name: 'Tänd lampor', id: 'a1', z: 'tab1', ratelimit: 0,
+            eventHandler: { publishCommand: (t, i, p, source) => seen.push(source) },
+            status() {}
+        };
+        common.queueSend(node, [{ thing: 't', item: 'i', payload: 1 }], 0);
+        assert.deepStrictEqual(seen, [{ type: 'hal2Action', name: 'Tänd lampor', id: 'a1', z: 'tab1' }]);
+    });
+
+    it('says which node sent it and in which flow', function () {
+        const text = common.refusalText('Item [mlt_on] undefined', thing,
+            { type: 'hal2Action', name: 'Tänd lampor', id: 'a1', z: 'tab1' },
+            z => (z === 'tab1' ? 'Automation (händelse)' : null));
+        assert.ok(text.startsWith('Item [mlt_on] undefined on "Fönster 1"'), text);
+        assert.ok(text.includes('(type "Matter Color Temperature Light")'), text);
+        assert.ok(text.includes('hal2Action "Tänd lampor" [a1] in flow "Automation (händelse)"'), text);
+    });
+
+    it('lists only the items a command can reach', function () {
+        const text = common.refusalText('Item [x] undefined', thing, null);
+        assert.ok(text.includes('Commandable items: mctl_on (On).'), text);
+        assert.ok(!text.includes('mctl_reach'), text);
+    });
+
+    it('falls back to the tab id, a plain label, or an unknown sender', function () {
+        assert.ok(common.describeSender({ type: 'hal2Action', z: 'tab1' }).includes('in flow "tab1"'));
+        assert.strictEqual(common.describeSender('group "Alla lampor"'), 'group "Alla lampor"');
+        assert.strictEqual(common.describeSender(undefined), 'an unknown sender');
+    });
+});
