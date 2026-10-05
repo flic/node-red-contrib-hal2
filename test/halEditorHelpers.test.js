@@ -14,7 +14,7 @@ sandbox.window = sandbox;
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'resources', 'hal.js'), 'utf8'), sandbox);
 const { halNumericOperator, halGroupAccepts, halHaTypeFamily,
-        halGroupPolicy, halGroupCapabilityRefusal, halDuplicateNames } = sandbox;
+        halGroupPolicy, halGroupCapabilityRefusal, halDuplicateNames, halGetThingTypes } = sandbox;
 
 describe('hal.js halNumericOperator', function () {
     it('claims the comparisons that can only mean a number', function () {
@@ -377,5 +377,52 @@ describe('hal.js halGetThings ordering', function () {
 
     it('survives an empty registry', function () {
         assert.deepStrictEqual(order([]), []);
+    });
+});
+
+describe('hal.js halGetThingTypes', function () {
+    // Two ThingTypes used by one Thing each: one status-only, one command-only.
+    const TYPES = {
+        tt1: { id: 'tt1', name: 'Sensor', thingStatus: true,  thingCommand: false },
+        tt2: { id: 'tt2', name: 'Switch', thingStatus: false, thingCommand: true }
+    };
+    const RED = { nodes: { node: id => TYPES[id] } };
+    const THINGS = [
+        { id: 't1', thingType: 'tt1' },
+        { id: 't2', thingType: 'tt2' }
+    ];
+    // Array.from, not list.map: the list comes back built with the sandbox realm's Array, and
+    // deepStrictEqual treats that as a different type than a plain array from this realm — the
+    // same reason test/halEditorHelpers.test.js's `tags` helper above copies with a spread.
+    const names = list => Array.from(list, t => t.name);
+
+    it('with no filter requested, returns every ThingType in use — not none', function () {
+        // Regression: the "neither filter requested" branch used to be written as an
+        // assignment, `(filterOnStatus = false) && (filterOnCommand = false)`, which is
+        // always false and also zeroes both flags as a side effect — so this call returned
+        // an empty list no matter what ThingTypes existed.
+        assert.deepStrictEqual(names(halGetThingTypes(RED, THINGS)), ['Sensor', 'Switch']);
+        assert.deepStrictEqual(names(halGetThingTypes(RED, THINGS, false, false)), ['Sensor', 'Switch']);
+    });
+
+    it('filterOnStatus keeps only ThingTypes with thingStatus', function () {
+        assert.deepStrictEqual(names(halGetThingTypes(RED, THINGS, true)), ['Sensor']);
+    });
+
+    it('filterOnCommand keeps only ThingTypes with thingCommand', function () {
+        assert.deepStrictEqual(names(halGetThingTypes(RED, THINGS, false, true)), ['Switch']);
+    });
+
+    it('does not let one ThingType missing the filter suppress the ones after it', function () {
+        // Same regression, from the other side: the broken clause mutated filterOnStatus to
+        // false on the first miss, so a filterOnStatus:true call would stop filtering
+        // correctly partway through the list once Sensor was ordered after a non-matching type.
+        const types = {
+            ttA: { id: 'ttA', name: 'NoStatus', thingStatus: false, thingCommand: false },
+            ttB: { id: 'ttB', name: 'HasStatus', thingStatus: true,  thingCommand: false }
+        };
+        const red = { nodes: { node: id => types[id] } };
+        const things = [{ id: 'a', thingType: 'ttA' }, { id: 'b', thingType: 'ttB' }];
+        assert.deepStrictEqual(names(halGetThingTypes(red, things, true)), ['HasStatus']);
     });
 });

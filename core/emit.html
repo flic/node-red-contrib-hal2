@@ -1,0 +1,240 @@
+<script type="text/javascript" src="resources/node-red-contrib-hal2/hal.js"></script>
+
+<script type="text/x-red" data-template-name="hal2Emit">
+    <div class="form-row">
+        <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
+        <input type="text" id="node-input-name" placeholder="Name" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-row">
+        <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler" style="width:calc(100% - 170px)" placeholder="Event handler">
+    </div>
+    <div class="form-row">
+        <label for="node-input-topic" style="width:95px; padding-right:10px;"><i class="fa fa-tasks"></i> Topic</label>
+        <input type="text" id="node-input-topic" style="width:calc(100% - 170px)">
+    </div>
+    <div class="form-tips">
+        <small>Sets <code>msg.topic</code>, for a plain <code>mqtt out</code> wired straight after this
+        node. Tokens <code>&lt;site&gt;</code>/<code>&lt;room&gt;</code>/<code>&lt;thing&gt;</code>/<code>&lt;item&gt;</code>
+        are substituted per event, each normalised (<code>/</code>, <code>+</code>, <code>#</code> and
+        whitespace runs become <code>_</code>; a missing value becomes <code>_</code> too, rather than
+        vanishing, so the topic keeps a constant depth for a wildcard subscriber). The whole topic,
+        template text included, is lowercased. Cleared empty, no topic is set at all — the downstream
+        node's own topic, if any, decides.</small>
+    </div>
+    <div class="form-row">
+        <label style="width:95px; padding-right:10px;"><i class="fa fa-filter"></i> Filters</label>
+    </div>
+    <div class="form-row">
+        <ol id="node-input-filter-container"></ol>
+    </div>
+    <div class="form-tips">
+        <small>An event is sent if <b>any</b> filter row matches (duplicates from overlapping rows are
+        sent only once). Row order has no effect. Rows resolve <b>once at deploy</b> — a Thing or
+        ThingType added afterwards needs a redeploy to be picked up by an "All things" or "HA type" row.</small>
+    </div>
+</script>
+
+<script type="text/x-red" data-help-name="hal2Emit">
+    <p>Normalises matching <i>Thing</i>/<i>Item</i> and <i>Group</i> update events from the selected
+    <i>Event handler</i> into a fixed envelope and sends it out — wire a <code>websocket out</code> or
+    <code>mqtt out</code> node after it to publish the envelope to an external subscriber.</p>
+    <p>Selection is entirely static: filter rows decide what is sent, there is no subscribing from the
+    far end of the transport.</p>
+    <li><strong>Name</strong>: Node name.</li>
+    <li><strong>Event handler</strong>: Which bus to listen on.</li>
+    <li><strong>Topic</strong>: <code>msg.topic</code> template, for wiring a plain <code>mqtt out</code>
+    straight after this node. Tokens <code>&lt;site&gt;</code>/<code>&lt;room&gt;</code>/<code>&lt;thing&gt;</code>/<code>&lt;item&gt;</code>
+    are substituted per event and the whole result lowercased; prefilled with
+    <code>hal2/&lt;site&gt;/event/&lt;room&gt;/&lt;thing&gt;/&lt;item&gt;</code> on a new node. Cleared
+    to empty, no <code>msg.topic</code> is set at all.</li>
+    <li><strong>Filters</strong>: One or more rows, OR'ed together.
+        <ul>
+            <li><strong>All things</strong>: every Thing/Item update on this Event handler.</li>
+            <li><strong>ThingType</strong> / <strong>Thing</strong>: updates from one ThingType or one Thing, optionally narrowed to one Item.</li>
+            <li><strong>HA type</strong>: every Item, on every ThingType, whose HA type matches (e.g. every <code>light</code>).</li>
+            <li><strong>Group</strong>: one Group's aggregated value.</li>
+            <li><strong>On update / On change</strong>: every update, or only ones where the value actually changed.</li>
+        </ul>
+    </li>
+    <p>Envelope: <code>{v, type:"event", site?, boot, seq, ts, thing:{id,name,room?}, item:{id,name,ha_type},
+    group:{id,name,ha_type}, new, old, last_change, origin?}</code> &mdash; <code>thing</code>/<code>item</code>
+    are present for Thing/ThingType/HA&nbsp;type rows, <code>group</code> for Group rows.
+    <code>site</code> comes from the Event handler's <i>Location</i> field, when set. <code>ts</code> and
+    <code>last_change</code> are epoch ms, like every other timestamp in hal2's own internal state.
+    <code>boot</code> is epoch ms fixed at node start; <code>seq</code> counts envelopes sent since then.</p>
+</script>
+
+<script type="text/javascript">
+    RED.nodes.registerType('hal2Emit', {
+        category: 'Home Automation',
+        color: '#b3b3ff',
+        defaults: {
+            name:         {},
+            eventHandler: { value: "", type: "hal2EventHandler", required: true },
+            topic:        { value: "hal2/<site>/event/<room>/<thing>/<item>" },
+            filters:      {}
+        },
+        inputs: 0,
+        outputs: 1,
+        icon: "font-awesome/fa-share-alt",
+        label: function() {
+            return this.name || "emit";
+        },
+        paletteLabel: "emit",
+        oneditprepare: function() {
+            var thingsList    = halGetThings(RED);
+            var thingTypeList = halGetThingTypes(RED, thingsList);
+            var groupsList    = halGetGroups(RED, $("#node-input-eventHandler").val(), 'value');
+            var haTypeList    = halHaTypes();
+
+            var SCOPES = [
+                ['all',       'All things'],
+                ['thingtype', 'ThingType'],
+                ['thing',     'Thing'],
+                ['hatype',    'HA type'],
+                ['group',     'Group']
+            ];
+
+            $("#node-input-filter-container").editableList({
+                addItem: function(container, i, opt) {
+                    var row = opt || {};
+                    container.css({ overflow: 'hidden', whiteSpace: 'nowrap' });
+
+                    // Two rows per filter, not one with four selects side by side: a percentage
+                    // width only holds up when the container's own width is determinate, and
+                    // four-wide was tight enough that it wasn't, in practice, growing the whole
+                    // edit dialog rather than just this row. Every other editableList row in this
+                    // codebase (gate.html, thingtype.html, ...) pairs at most two fields on a
+                    // line, one fixed-px and the other calc(100% - Npx) — the one technique with
+                    // a long track record here of never doing this, so this follows it exactly.
+                    // Paired to read naturally: row 1 "<Scope> <Target>" (e.g. "Thing" | "Lamp,
+                    // kitchen"), row 2 "<Item> <On update/change>".
+                    var rowTop    = $('<div/>').appendTo(container);
+                    var rowBottom = $('<div/>', { style: "margin-top:6px;" }).appendTo(container);
+
+                    var scopeField = $('<select/>', {
+                        class: "node-input-filter-scope", style: "width:150px;"
+                    }).appendTo(rowTop);
+                    SCOPES.forEach(function(s) {
+                        scopeField.append($("<option></option>").val(s[0]).text(s[1]));
+                    });
+
+                    // Target gets the calc(100% - Npx) share of the row: it can carry a
+                    // room-prefixed Thing label or a long HA type description.
+                    var targetField = $('<select/>', {
+                        class: "node-input-filter-target", style: "width:calc(100% - 160px); margin-left:10px;"
+                    }).appendTo(rowTop);
+
+                    var itemField = $('<select/>', {
+                        class: "node-input-filter-item", style: "width:150px;"
+                    }).appendTo(rowBottom);
+
+                    var modeField = $('<select/>', {
+                        class: "node-input-filter-mode", style: "width:calc(100% - 160px); margin-left:10px;"
+                    }).appendTo(rowBottom);
+                    modeField.append($("<option></option>").val('update').text('On update'));
+                    modeField.append($("<option></option>").val('change').text('On change'));
+
+                    function thingTypeFor(scope, targetVal) {
+                        try {
+                            if (scope === 'thing') {
+                                var thing = RED.nodes.node(targetVal);
+                                return thing ? RED.nodes.node(thing.thingType) : null;
+                            }
+                            if (scope === 'thingtype') { return RED.nodes.node(targetVal); }
+                        } catch (error) { console.log('Error: ' + error.message); }
+                        return null;
+                    }
+
+                    function fillTarget(keep) {
+                        targetField.children().remove();
+                        var scope = scopeField.val();
+                        if (scope === 'thingtype') {
+                            thingTypeList.forEach(function(t) {
+                                targetField.append($("<option></option>").val(t.id).text(t.name));
+                            });
+                        } else if (scope === 'thing') {
+                            thingsList.forEach(function(t) {
+                                targetField.append($("<option></option>").val(t.id).text(halThingLabel(RED, t)));
+                            });
+                        } else if (scope === 'group') {
+                            groupsList.forEach(function(g) {
+                                targetField.append($("<option></option>").val(g.id).text(g.name));
+                            });
+                        } else if (scope === 'hatype') {
+                            haTypeList.forEach(function(h) {
+                                targetField.append($("<option></option>").val(h.v).text(h.t));
+                            });
+                        }
+                        if (keep) { targetField.val(keep); }
+                    }
+
+                    function fillItem(keep) {
+                        itemField.children().remove();
+                        var scope = scopeField.val();
+                        if (scope !== 'thing' && scope !== 'thingtype') { return; }
+                        itemField.append($("<option></option>").val('').text('<All items>'));
+                        var tt = thingTypeFor(scope, targetField.val());
+                        if (tt && Array.isArray(tt.items)) {
+                            tt.items.forEach(function(it) {
+                                if (halStatusItem(it)) {
+                                    itemField.append($("<option></option>").val(it.id).text(it.name));
+                                }
+                            });
+                        }
+                        if (keep) { itemField.val(keep); }
+                    }
+
+                    function syncVisibility() {
+                        var scope = scopeField.val();
+                        targetField.toggle(scope !== 'all');
+                        // visibility, not display: Mode sits to the right of Item on row 2, with
+                        // a fixed margin-left that assumes Item's 150px is still there. display:
+                        // none would collapse that space and pull Mode out of line with Target
+                        // directly above it on row 1 — visibility:hidden keeps the box, just blank.
+                        itemField.css('visibility', (scope === 'thing' || scope === 'thingtype') ? 'visible' : 'hidden');
+                    }
+
+                    scopeField.change(function() {
+                        syncVisibility();
+                        fillTarget();
+                        fillItem();
+                    });
+                    targetField.change(function() { fillItem(); });
+
+                    scopeField.val(row.scope || 'all');
+                    syncVisibility();
+                    fillTarget(row.target);
+                    fillItem(row.item);
+                    modeField.val(row.mode || 'update');
+                },
+                removable: true,
+                sortable: true,
+                addButton: "Filter"
+            });
+
+            if (Array.isArray(this.filters) && this.filters.length) {
+                this.filters.forEach(function(f) {
+                    $("#node-input-filter-container").editableList('addItem', f);
+                });
+            } else {
+                $("#node-input-filter-container").editableList('addItem',
+                    { scope: 'all', target: '', item: '', mode: 'update' });
+            }
+        },
+        oneditsave: function() {
+            var filters = [];
+            $("#node-input-filter-container").children().each(function() {
+                var row = $(this);
+                filters.push({
+                    scope:  row.find(".node-input-filter-scope").val(),
+                    target: row.find(".node-input-filter-target").val() || '',
+                    item:   row.find(".node-input-filter-item").val() || '',
+                    mode:   row.find(".node-input-filter-mode").val()
+                });
+            });
+            this.filters = filters;
+        }
+    });
+</script>

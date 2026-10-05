@@ -332,8 +332,11 @@ module.exports = function(RED) {
             if (Object.keys(attribute) != 0) {
                 eventmsg.thing.attributes = Object.assign({},attribute);
             }
-            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg,logtype);
+            // Set before publishUpdate, not after: 'update' listeners (e.g. hal2Emit) receive
+            // this same eventmsg object synchronously during that call, and need logtype on it
+            // too, not just the later publishLog listeners.
             eventmsg.logtype = logtype;
+            node.eventHandler.publishUpdate(node.thingType.id,node.id,node.thingType.items[item].id,eventmsg,logtype);
             node.eventHandler.publishLog(eventmsg);
             node.showState();            
         }        

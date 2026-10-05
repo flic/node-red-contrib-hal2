@@ -480,7 +480,7 @@ function halGetThingTypes(RED,thingsList,filterOnStatus=false,filterOnCommand=fa
     for (let i in thingTypeId) {
         try {
             var thingType = RED.nodes.node(thingTypeId[i]);
-            if (((filterOnCommand) && (thingType.thingCommand)) || ((filterOnStatus) && (thingType.thingStatus)) || ((filterOnStatus = false) && (filterOnCommand = false))) {
+            if (((filterOnCommand) && (thingType.thingCommand)) || ((filterOnStatus) && (thingType.thingStatus)) || (!filterOnStatus && !filterOnCommand)) {
                 thingTypeList.push(thingType); 
             }
         } catch (error) {

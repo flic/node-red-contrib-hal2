@@ -80,6 +80,9 @@ module.exports = function(RED) {
         RED.nodes.createNode(this, config);
 
         this.host           = config.name;
+        // Exposed so other nodes (e.g. hal2Emit) can read it off the resolved EventHandler
+        // instance — internally this is only ever read off the closed-over `config`.
+        this.locationName   = config.locationName || '';
         this.contextStore   = config.contextStore;
         this.maxlisteners   = config.maxlisteners;
         this.heartbeat      = config.heartbeat;
