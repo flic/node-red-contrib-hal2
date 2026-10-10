@@ -31,53 +31,47 @@ function isCimdClientId(value) {
         && u.pathname !== '' && u.pathname !== '/';
 }
 
-// Every value a token offers as its audience: `aud` (string or array) plus `azp`. Which of
-// them carries what is provider-specific, so both are read as one list.
-function audienceValues(payload) {
+// What a token says it is for: `aud`, string or array. Only `aud` — `azp` names the client the
+// token was issued to, and who asked for a token says nothing about which server it is for.
+function tokenAudiences(payload) {
     const p = (payload && typeof payload === 'object') ? payload : {};
-    const values = Array.isArray(p.aud) ? p.aud.slice() : (p.aud ? [p.aud] : []);
-    // azp too: which of aud/azp carries a CIMD client id is provider-specific, and reading
-    // only one of them would make this depend on a detail no spec pins down.
-    if (typeof p.azp === 'string' && p.azp) { values.push(p.azp); }
-    return values;
+    return Array.isArray(p.aud) ? p.aud.slice() : (p.aud ? [p.aud] : []);
 }
 
-// The CIMD client id a token was issued to, or '' if it was not a CIMD client. Separate from
-// acceptsAudience because the answer is worth logging, not only deciding on: with registration
-// gone this server sees nothing of how a client got its id, so a token's audience is the only
-// place a CIMD client leaves a trace at all.
+// The CIMD client id a token was issued to, or '' if it was not a CIMD client. Logged, never
+// decided on: with registration gone this server sees nothing of how a client got its id, so
+// the token is the only place a CIMD client leaves a trace at all. Which of `aud` and `azp`
+// carries the client id is provider-specific and pinned by no spec, so both are read.
 //
 // The resource identifier and a configured audience are excluded, because either can be an
 // https URL with a path and so is CIMD-shaped too. An IdP that honours RFC 8707 binds the
 // token to the resource, which then sits in `aud` ahead of anything else — reporting that as
 // the client is how this first went wrong against a real token.
 function cimdClientId(payload, { expected = '', resourceUrl = '' } = {}) {
-    return audienceValues(payload)
-        .find(v => v !== expected && v !== resourceUrl && isCimdClientId(v)) || '';
+    const values = tokenAudiences(payload);
+    if (payload && typeof payload.azp === 'string' && payload.azp) { values.push(payload.azp); }
+    return values.find(v => v !== expected && v !== resourceUrl && isCimdClientId(v)) || '';
 }
 
-// Decides whether a signature-valid token was issued for this server. This replaces handing
-// `audience` to jwtVerify, because a CIMD client's id is its document URL: the IdP issues the
-// token to that URL, so `aud` never equals the pre-registered client id and jose would reject
-// it before anything here could look.
+// Decides whether a signature-valid token was issued for this server: its `aud` must name the
+// configured audience or this server's RFC 8707 resource identifier. Checked here rather than
+// by jose so a rejection is logged with the audience the token did carry.
 //
-// Accepting a CIMD audience is safe only because the IdP resolves such a client_id against its
-// own allowlist of metadata documents before issuing anything — which is why it is gated on
-// `allowCimd`, mirrored from the IdP's advertised support, rather than on the shape of the
-// string alone. It does mean any CIMD client the IdP allowlists for any application can reach
-// this server, with the claim gate as the remaining check; narrowing that later means passing
-// a list of accepted client ids here instead of the boolean, and nothing else moves.
-function acceptsAudience(payload, { expected = '', resourceUrl = '', allowCimd = false } = {}) {
+// A CIMD client id in `aud` or `azp` used to be accepted as well, on the assumption that the
+// IdP would put the client's document URL in `aud` instead of the resource. Pocket ID binds the
+// token to the resource, and accepting the client id meant a token that same client got for any
+// other API at the same IdP was accepted here too — claude.ai's token for one MCP server was
+// good for all of them.
+function acceptsAudience(payload, { expected = '', resourceUrl = '' } = {}) {
     // Only a server that knows neither an audience nor its own resource identifier has nothing
     // to check against. Previously an empty `expected` alone waved everything through, which
     // made the whole check vanish the moment the Client ID field was cleared — and that field is
     // otherwise vestigial, so clearing it looks harmless. With a resource identifier in hand the
     // token must still be for this server.
     if (!expected && !resourceUrl) { return true; }
-    return audienceValues(payload).some(v =>
-               v === expected
-               || (!!resourceUrl && v === resourceUrl))   // RFC 8707: token bound to the resource
-        || (allowCimd && !!cimdClientId(payload, { expected, resourceUrl }));
+    return tokenAudiences(payload).some(v =>
+        v === expected
+        || (!!resourceUrl && v === resourceUrl));   // RFC 8707: token bound to the resource
 }
 
 function createMcpAuth(opts) {
@@ -229,19 +223,13 @@ function createMcpAuth(opts) {
         }
         try {
             const oidc = await getOidcConfig();
-            // Always pin the issuer to the discovered IdP; enforce audience only when configured.
-            // Without these, any signature-valid token from a provider that shares the JWKS would
-            // be accepted.
+            // Always pin the issuer to the discovered IdP. Without it, any signature-valid token
+            // from a provider that shares the JWKS would be accepted.
             const verifyOpts = {};
             if (oidc.issuer) verifyOpts.issuer = oidc.issuer;
             const { payload } = await jwtVerify(token, await getJwks(), verifyOpts);
-            // Audience is checked here rather than by jose so a CIMD client id can be accepted
-            // as well — see acceptsAudience.
-            if (!acceptsAudience(payload, {
-                expected    : tokenAudience,
-                resourceUrl : resourceUrl,
-                allowCimd   : oidc.client_id_metadata_document_supported === true
-            })) {
+            // Audience is checked here rather than by jose — see acceptsAudience.
+            if (!acceptsAudience(payload, { expected: tokenAudience, resourceUrl })) {
                 warn('MCP token rejected: audience ' + JSON.stringify(payload.aud) +
                      ' is not this server');
                 return null;

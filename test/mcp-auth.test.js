@@ -93,36 +93,25 @@ describe('core/mcp-auth acceptsAudience', function () {
         assert.strictEqual(acceptsAudience({ aud: ['x', 'y'] }, opts()), false);
     });
 
-    it('accepts a CIMD client id only when the IdP advertises CIMD', function () {
-        assert.strictEqual(acceptsAudience({ aud: CIMD }, opts({ allowCimd: false })), false);
-        assert.strictEqual(acceptsAudience({ aud: CIMD }, opts({ allowCimd: true })), true);
+    it('rejects a token the same CIMD client got for another server', function () {
+        // The hole this used to have: claude.ai's token for one MCP server at the same IdP
+        // carries claude.ai's client id too, and accepting that made it good for every server.
+        const R = 'https://mcp.example.com/mcp';
+        const o = { expected: '', resourceUrl: R };
+        assert.strictEqual(acceptsAudience({ aud: ['https://other.example.com/mcp', CIMD] }, o), false);
+        assert.strictEqual(acceptsAudience({ aud: 'https://other.example.com/mcp', azp: CIMD }, o), false);
+        assert.strictEqual(acceptsAudience({ aud: CIMD }, o), false);
+        assert.strictEqual(acceptsAudience({ aud: [R, CIMD] }, o), true);
     });
 
-    it('reads azp as well as aud', function () {
-        // Which of the two carries a CIMD client id is provider-specific and unpinned by any
-        // spec, so both are consulted.
-        assert.strictEqual(acceptsAudience({ aud: 'other', azp: CIMD }, opts({ allowCimd: true })), true);
-        assert.strictEqual(acceptsAudience({ aud: 'other', azp: 'pre-registered-id' }, opts()), true);
-    });
-
-    it('rejects values that only look like a CIMD client id', function () {
-        const bad = [
-            'http://claude.ai/client.json',          // not https
-            'https://claude.ai',                     // no path component
-            'https://claude.ai/',                    // ditto
-            'https://claude.ai/c.json#x',            // fragment
-            'https://user:pw@claude.ai/c.json',      // userinfo
-            'not a url', 42, null
-        ];
-        for (const v of bad) {
-            assert.strictEqual(acceptsAudience({ aud: v }, opts({ allowCimd: true })), false,
-                               String(v));
-        }
+    it('ignores azp', function () {
+        // azp names the client the token was issued to, not the server it is for.
+        assert.strictEqual(acceptsAudience({ aud: 'other', azp: 'pre-registered-id' }, opts()), false);
     });
 
     it('accepts the resource identifier itself', function () {
-        // RFC 8707: clients MUST send resource=<canonical MCP URI>. If the IdP ever honours
-        // it the audience becomes the resource, and this is what keeps working then.
+        // RFC 8707: clients MUST send resource=<canonical MCP URI>, and Pocket ID puts it in
+        // `aud` — this is the case real tokens take.
         const o = opts({ resourceUrl: 'https://mcp.example.com/mcp' });
         assert.strictEqual(acceptsAudience({ aud: 'https://mcp.example.com/mcp' }, o), true);
         assert.strictEqual(acceptsAudience({ aud: 'https://mcp.example.com/other' }, o), false);
@@ -156,6 +145,20 @@ describe('core/mcp-auth cimdClientId', function () {
     it('does not mistake a URL-shaped configured audience for a client', function () {
         const A = 'https://mcp.example.com/mcp';
         assert.strictEqual(cimdClientId({ aud: A }, { expected: A }), '');
+    });
+
+    it('rejects values that only look like a CIMD client id', function () {
+        const bad = [
+            'http://claude.ai/client.json',          // not https
+            'https://claude.ai',                     // no path component
+            'https://claude.ai/',                    // ditto
+            'https://claude.ai/c.json#x',            // fragment
+            'https://user:pw@claude.ai/c.json',      // userinfo
+            'not a url', 42, null
+        ];
+        for (const v of bad) {
+            assert.strictEqual(cimdClientId({ aud: v }), '', String(v));
+        }
     });
 });
 
@@ -214,8 +217,8 @@ describe('core/mcp-auth validateToken', function () {
         assert.strictEqual(state.verifyOpts.audience, undefined); // not set when unconfigured
     });
 
-    // Audience is no longer jose's job — it is checked after verification so a CIMD client id
-    // can be accepted too (see acceptsAudience). These two pin that the move did not weaken it.
+    // Audience is not jose's job — it is checked after verification (see acceptsAudience).
+    // These pin that it is still enforced.
     it('accepts a token whose audience matches the configured one', async function () {
         const { auth } = build({ tokenAudience: 'my-mcp-resource' }, { aud: 'my-mcp-resource' });
         assert.ok(await auth.validateToken('good'));
@@ -223,6 +226,13 @@ describe('core/mcp-auth validateToken', function () {
 
     it('rejects a signature-valid token issued for someone else', async function () {
         const { auth } = build({ tokenAudience: 'my-mcp-resource' }, { aud: 'another-app' });
+        assert.strictEqual(await auth.validateToken('good'), null);
+    });
+
+    it('rejects a CIMD client\'s token for another server even when the IdP advertises CIMD', async function () {
+        const { auth } = build({ httpGet: cimdHttpGet, resourceUrl: 'https://mcp.example.com/mcp' },
+                               { aud: ['https://other.example.com/mcp'],
+                                 azp: 'https://claude.ai/oauth/claude-code-client-metadata' });
         assert.strictEqual(await auth.validateToken('good'), null);
     });
 
