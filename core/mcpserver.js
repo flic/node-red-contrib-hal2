@@ -149,6 +149,23 @@ module.exports = function (RED) {
         const requiredClaim = (config.requiredClaim || 'groups').trim();
         // Default '' (allow all) only when never set. Empty string stays "any authenticated user".
         const requiredValue = (config.requiredValue === undefined ? '' : config.requiredValue).trim();
+        // The client axis, ANDed with the claim above: what the client was authorized to do on
+        // the user's behalf. Empty means no constraint, so an install that never fills this in
+        // behaves exactly as it did before the field existed.
+        const requiredScope = (config.requiredScope || '').trim();
+        // This node shares the Event handler's 401 challenge and protected-resource metadata,
+        // so a scope only reaches a client if the Event handler advertises it. One that does
+        // not is never asked for, and the symptom is every tool hidden with nothing logged.
+        // Warned, not silently fixed — the scope also has to exist at the identity provider.
+        const advertised = eventHandler.mcpAdvertisedScopes;
+        if (requiredScope && Array.isArray(advertised)) {
+            const missing = requiredScope.split(',').map(s => s.trim()).filter(Boolean)
+                .filter(s => !advertised.includes(s));
+            if (missing.length) {
+                node.warn('Required scope ' + missing.join(', ') + ' is not advertised by the Event ' +
+                          'handler — add it to its Additional scopes, or no client will ask for it');
+            }
+        }
 
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 
@@ -164,7 +181,7 @@ module.exports = function (RED) {
         // and unit-tested there. This handler is glue: authenticate, dispatch, write.
         const rpcDeps = {
             serverName, serverVersion: '1.0.0', instructions,
-            requiredClaim, requiredValue,
+            requiredClaim, requiredValue, requiredScope,
             // A standalone server exposes only flow-defined tools; the built-in catalog and
             // its admin tools belong to the Event handler's embedded endpoint.
             adminToolsEnabled: false,

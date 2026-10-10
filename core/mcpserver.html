@@ -32,10 +32,21 @@
         <input type="text" id="node-config-input-requiredValue" placeholder="(empty = any authenticated user)" style="width:calc(100% - 105px)">
     </div>
     <div class="form-tips" id="row-required-tip" style="margin-left:105px; margin-bottom:8px;">
-        <small>The caller's JWT claim (default <code>groups</code>) must contain <b>at least one</b> of the
+        <small><b>Requires the claim to be in the access token.</b> This server reads the token and nothing else, so a provider that keeps the claim in the ID token or userinfo alone leaves this gate with nothing to match and every tool hidden &mdash; the log says so when it happens. Ask your provider for it in the access token (<a href="https://www.rfc-editor.org/rfc/rfc9068.html" target="_blank">RFC 9068 §2.2.3.1</a>).<br><br>
+        The caller's claim (default <code>groups</code>) must contain <b>at least one</b> of the
         comma-separated values for this server's tools to be listed or callable. Leave the value empty
         to allow all authenticated users. Individual <code>hal2MCPIn</code> nodes can narrow this further
         with their own <b>Tool access</b> list, which is checked on top of this one.</small>
+    </div>
+    <div class="form-row" id="row-required-scope">
+        <label for="node-config-input-requiredScope"><i class="fa fa-check-circle"></i> Required scope</label>
+        <input type="text" id="node-config-input-requiredScope" placeholder="(empty = no scope required)" style="width:calc(100% - 105px)">
+    </div>
+    <div class="form-tips" id="row-required-scope-tip" style="margin-left:105px; margin-bottom:8px;">
+        <small>What the <i>client</i> is authorized to do, checked with <b>AND</b> on top of the claim
+        above &mdash; so a read-only client cannot act for a user who may. Matched against the token's
+        <code>scope</code> claim. The Event handler must advertise it (its <b>Additional scopes</b>),
+        or clients never ask for it; the node warns at deploy when it does not.</small>
     </div>
 </script>
 
@@ -74,7 +85,8 @@
             path          : { value: '' },
             instructions  : { value: '' },
             requiredClaim : { value: 'groups' },
-            requiredValue : { value: '' }
+            requiredValue : { value: '' },
+            requiredScope : { value: '' }
         },
         label : function () {
             if (this.mode === 'standalone') return this.name || '/mcp/' + (this.path || '?');
@@ -88,6 +100,8 @@
                 $('#row-required-claim').toggle(standalone);
                 $('#row-required-value').toggle(standalone);
                 $('#row-required-tip').toggle(standalone);
+                $('#row-required-scope').toggle(standalone);
+                $('#row-required-scope-tip').toggle(standalone);
             }
             $('#node-config-input-mode').on('change', updateVisibility);
             updateVisibility();

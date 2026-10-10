@@ -176,9 +176,11 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 > `groups`) is in the **access token** and not only in the ID token or userinfo. If your
 > provider cannot put it there — [PocketID currently
 > cannot](https://github.com/pocket-id/pocket-id/issues/1389) — leave *Read tools* and
-> *Write tools* empty and gate on [required scopes](#the-client-axis-required-scopes) plus
-> the provider's own per-client user restrictions instead. A gate whose claim never appears
-> refuses everyone, and says so in the log once per client.
+> *Write tools* empty. [Required scopes](#the-client-axis-required-scopes) still limit which
+> *clients* get in, but they cannot say which *users*: that is left to whatever user
+> restriction the provider applies per client, which covers every API the client reaches
+> rather than this server alone. There is no per-user gate for hal2 without the claim. A
+> gate whose claim never appears refuses everyone, and says so in the log once per client.
 
 The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental.
 
@@ -220,7 +222,7 @@ Providers that model APIs as resources — Pocket ID, Auth0 — are where this e
 
 Two further gates layer on the custom-tool side:
 
-- **Standalone-server gate** (`hal2MCPServer` in *Standalone* mode, `Required claim`/`Required value`): gates a whole standalone MCP server and its own claim name, independent of the Event handler's.
+- **Standalone-server gate** (`hal2MCPServer` in *Standalone* mode, `Required claim`/`Required value`, plus `Required scope` on the client axis): gates a whole standalone MCP server and its own claim name, independent of the Event handler's. The scope must be one the Event handler advertises (its *Additional scopes*), since the two share a 401 challenge; the node warns at deploy when it is not.
 - **Per-tool gate** (`hal2MCPIn`, `Tool access`): narrows a single tool further, checked on top of its server's list.
 
 Callers who fail a gate still connect — `initialize` succeeds — but the tools they cannot use are **absent from `tools/list`**, so an assistant is never offered a tool it will then be refused. A direct call to a hidden tool comes back as an MCP tool result with `isError: true` and a human-readable reason, so the model is told *why* rather than getting a generic "tool execution failed".
@@ -273,9 +275,9 @@ labels:
 - An **OIDC provider with discovery** — hal2 reads `‹issuer›/.well-known/openid-configuration`, and needs exactly two things from it: `jwks_uri`, to verify signatures, and `issuer`, to pin them. (It also notes `client_id_metadata_document_supported`, so the log can name which clients arrive by metadata document.) The authorization and token endpoints are the client's business, not hal2's. If discovery is unavailable it falls back to PocketID's path layout, so no extra config is needed for either.
 - It must issue **JWT access tokens** signed with a key published on its **JWKS** (hal2 verifies tokens locally). Providers that issue *opaque* access tokens are not supported (no introspection path yet).
 - A **public client** with **PKCE (S256)**, grant types `authorization_code` + `refresh_token`, and the MCP client's **redirect URI(s)** whitelisted (for Claude.ai: `https://claude.ai/api/mcp/auth_callback`) — or CIMD support, which supplies all of that from the client's own metadata document. Clients, redirect URIs and secrets are entirely the provider's business; hal2 has no fields for any of them and never sees a redirect.
-- The **access claim in the access token**, if you use the claim gate — the token is all hal2 reads. See [RFC 9068 §2.2.3.1](https://www.rfc-editor.org/rfc/rfc9068.html).
+- The **access claim in the access token**, if you use the claim gate — the token is all hal2 reads. See [RFC 9068 §2.2.3.1](https://www.rfc-editor.org/rfc/rfc9068.html). Not every provider can: PocketID currently cannot ([#1389](https://github.com/pocket-id/pocket-id/issues/1389)), and without the claim there is no per-user gate — required scopes restrict clients, not users.
 
-> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** and **Hermes** (MCP clients). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way.
+> Tested with the combination **[Caddy](https://caddyserver.com/)** (reverse proxy) + **[PocketID](https://pocket-id.org)** (identity provider) + **Claude.ai** and **Hermes** (MCP clients). Any spec-compliant OIDC provider issuing JWT access tokens, behind any reverse proxy that forwards the paths above, should work the same way. The claim gates are the exception with PocketID, which does not yet put the claim in the access token.
 
 ### Rooms
 

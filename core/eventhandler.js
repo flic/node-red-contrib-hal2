@@ -835,6 +835,7 @@ module.exports = function(RED) {
             const requiredScopes = requiredScopeChallenge([readScope, writeScope]);
             const advertisedArr  = advertisedScopes(mcpScopesArr, requiredScopes);
             const advertisedStr  = advertisedArr.join(' ');
+            node.mcpAdvertisedScopes = advertisedArr;   // read by standalone hal2MCPServer nodes
 
             // Admin keeps its own check inside dispatchAdminTools, where it also guards the
             // hal2Api path — only the matcher changes, so a single value still behaves as

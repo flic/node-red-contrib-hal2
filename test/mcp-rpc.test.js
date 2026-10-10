@@ -111,6 +111,32 @@ describe('lib/mcp-rpc tools/list', function () {
     });
 });
 
+describe('lib/mcp-rpc scope gate', function () {
+    // The client axis, ANDed with the claim: a read-only client must not act for a user who may.
+    const scoped = (scope, extra) => Object.assign({ sub: 'u', groups: ['media'], scope }, extra);
+    const list = d => handleRpc({ id: 1, method: 'tools/list' }, d.claims, d.deps);
+
+    it('hides every tool from a token without the required scope', async function () {
+        const out = await list({ claims: scoped('openid mcp:read'), deps: deps({ requiredScope: 'mcp:write' }) });
+        assert.deepStrictEqual(out.body.result.tools, []);
+    });
+
+    it('refuses a call from a token without the required scope, whatever the user may do', async function () {
+        const out = await call('open', { claims: scoped('openid'), deps: deps({ requiredScope: 'mcp:write' }) });
+        assert.strictEqual(out.body.result.isError, true);
+    });
+
+    it('lets a token carrying the scope through to the claim gate', async function () {
+        const out = await list({ claims: scoped('openid mcp:write'), deps: deps({ requiredScope: 'mcp:write' }) });
+        assert.deepStrictEqual(out.body.result.tools.map(t => t.name).sort(), ['gated', 'open']);
+    });
+
+    it('imposes nothing when no scope is required', async function () {
+        const out = await list({ claims: claims(['media']), deps: deps() });
+        assert.strictEqual(out.body.result.tools.length, 2);
+    });
+});
+
 describe('lib/mcp-rpc tools/call', function () {
     it('denies at the server gate with the server-level message', async function () {
         const out = await call('open', { claims: claims(['guest']), deps: deps({ requiredValue: 'staff' }) });
