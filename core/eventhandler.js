@@ -865,10 +865,16 @@ module.exports = function(RED) {
 
             // ── Admin API helper ───────────────────────────────────────────────
 
+            // Follows httpAdminRoot, so the admin tools keep working with the editor moved off '/'.
+            const adminPrefix = common.adminPathPrefix(RED.settings.httpAdminRoot);
+
             function adminApi(method, path, body) {
+                if (adminPrefix === null) {
+                    throw new Error('the Node-RED admin API is disabled (httpAdminRoot is false)');
+                }
                 const token = (node.credentials && node.credentials.adminToken) || '';
                 const hdrs  = token ? { 'Authorization': 'Bearer ' + token } : {};
-                return httpRequest(method, 'localhost', adminPort, path, hdrs, body);
+                return httpRequest(method, 'localhost', adminPort, adminPrefix + path, hdrs, body);
             }
 
             // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
