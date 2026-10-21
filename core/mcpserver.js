@@ -170,7 +170,7 @@ module.exports = function (RED) {
         node.log('hal2MCPServer registering route: POST ' + mcpPath);
 
         // Same hardening as the EventHandler's /mcp route (see lib/httpGuards.js).
-        const { rateLimit, maxBody } = createHttpGuards({ warn: msg => node.warn(msg) });
+        const { rateLimit, maxBody, jsonBody } = createHttpGuards({ warn: msg => node.warn(msg) });
 
         // Inherit the EventHandler's optional Host-header filtering so a standalone server
         // shares its hostname split. Empty (feature off, or single-host) → matches on path only.
@@ -197,7 +197,8 @@ module.exports = function (RED) {
         // Tag the first middleware so removeOwnedRoutes can tell this node's chain from a sibling's.
         guard._mcpOwner = node.id;
 
-        RED.httpNode.post(mcpPath, guard, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
+        RED.httpNode.post(mcpPath, guard, rateLimit('mcp', 300), maxBody(1024 * 1024),
+            jsonBody(1024 * 1024), async (req, res) => {
             const claims = await eventHandler.requireBearer(req, res);
             if (!claims) return;
 

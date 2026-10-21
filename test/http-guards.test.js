@@ -169,3 +169,67 @@ describe('lib/httpGuards maxBody', function () {
         assert.strictEqual(run(mw, mockReq()).passed, true);   // no header at all
     });
 });
+
+describe('lib/httpGuards jsonBody', function () {
+    // Node-RED parses bodies only in its admin app and in http-in nodes. Routes on RED.httpNode
+    // got the admin app's parser only while the editor sat at '/', so with it moved to '/editor'
+    // every MCP call arrived with req.body undefined.
+    const { PassThrough } = require('node:stream');
+
+    function post(body, headers, prior) {
+        const req = Object.assign(new PassThrough(),
+            { headers: Object.assign({ 'content-type': 'application/json' }, headers) }, prior);
+        const res = mockRes();
+        const { jsonBody } = createHttpGuards({});
+        return new Promise(resolve => {
+            res.json = function (b) { this.body = b; resolve({ req, res, passed: false }); return this; };
+            jsonBody(64)(req, res, () => resolve({ req, res, passed: true }));
+            if (body !== null) req.end(body);
+        });
+    }
+
+    it('parses a JSON body and marks it parsed', async function () {
+        const { req, passed } = await post('{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
+        assert.strictEqual(passed, true);
+        assert.deepStrictEqual(req.body, { jsonrpc: '2.0', id: 1, method: 'tools/list' });
+        assert.strictEqual(req._body, true);
+    });
+
+    it('accepts a JSON media type with parameters', async function () {
+        const { req, passed } = await post('{"a":1}', { 'content-type': 'application/json; charset=utf-8' });
+        assert.strictEqual(passed, true);
+        assert.deepStrictEqual(req.body, { a: 1 });
+    });
+
+    it('leaves a body that something upstream already parsed alone', async function () {
+        const { req, passed } = await post(null, {}, { _body: true, body: { kept: true } });
+        assert.strictEqual(passed, true);
+        assert.deepStrictEqual(req.body, { kept: true });
+    });
+
+    it('leaves a non-JSON body alone', async function () {
+        const { req, passed } = await post(null, { 'content-type': 'text/plain' });
+        assert.strictEqual(passed, true);
+        assert.strictEqual(req.body, undefined);
+    });
+
+    it('gives an empty body as an empty object', async function () {
+        const { req, passed } = await post('');
+        assert.strictEqual(passed, true);
+        assert.deepStrictEqual(req.body, {});
+    });
+
+    it('answers malformed JSON with a JSON-RPC parse error', async function () {
+        const { res, passed } = await post('{"jsonrpc":');
+        assert.strictEqual(passed, false);
+        assert.strictEqual(res.statusCode, 400);
+        assert.strictEqual(res.body.error.code, -32700);
+    });
+
+    it('caps a body without Content-Length while reading', async function () {
+        // maxBody only reads the header, so a chunked request passes it; this is the backstop.
+        const { res, passed } = await post(JSON.stringify({ pad: 'x'.repeat(100) }));
+        assert.strictEqual(passed, false);
+        assert.strictEqual(res.statusCode, 413);
+    });
+});

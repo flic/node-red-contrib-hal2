@@ -2126,7 +2126,7 @@ module.exports = function(RED) {
             // Per-IP rate limiting and a Content-Length cap blunt brute-force, DCR spam and
             // oversized-payload (deploy_flow) abuse. See lib/httpGuards.js — shared with
             // hal2MCPServer; warns once if the proxy's client IPs aren't trusted.
-            const { rateLimit, maxBody } = createHttpGuards({ warn: msg => node.warn(msg) });
+            const { rateLimit, maxBody, jsonBody } = createHttpGuards({ warn: msg => node.warn(msg) });
 
             // One guard for every route this node registers, tagged so the close handler can
             // remove exactly these — several EventHandlers may share the same paths when Host
@@ -2155,7 +2155,8 @@ module.exports = function(RED) {
             // ── MCP: /mcp ─────────────────────────────────────────────────────
 
             node.log('MCP registering route: POST ' + mcpPrefix + '/mcp');
-            RED.httpNode.post(mcpPrefix + '/mcp', guard, rateLimit('mcp', 300), maxBody(1024 * 1024), async (req, res) => {
+            RED.httpNode.post(mcpPrefix + '/mcp', guard, rateLimit('mcp', 300), maxBody(1024 * 1024),
+                jsonBody(1024 * 1024), async (req, res) => {
                 // Bearer token validation
                 const claims = await requireBearer(req, res);
                 if (!claims) return;
