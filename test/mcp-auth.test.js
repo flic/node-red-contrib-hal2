@@ -378,6 +378,20 @@ describe('core/mcp-auth missing access claim', function () {
         assert.deepStrictEqual(missing(state), []);
     });
 
+    it('asks a function per token, so gates registered after start count', async function () {
+        // mcp-in nodes register their tools after the server node has built its auth, and the
+        // admin list reads the same claim as the server list. A flag fixed at construction
+        // missed both.
+        let gated = false;
+        const { auth, state } = build({ gateClaim: 'groups', gateClaimRequired: () => gated }, {});
+        await auth.validateToken('a1');
+        assert.deepStrictEqual(missing(state), []);
+        gated = true;
+        await auth.validateToken('b2');
+        assert.strictEqual(missing(state).length, 1);
+        assert.ok(missing(state)[0].includes('client=client-2'), missing(state)[0]);
+    });
+
     it('warns once per client, not once per token', async function () {
         const { auth, state } = build({ gateClaim: 'groups', gateClaimRequired: true }, {});
         await auth.validateToken('a1');

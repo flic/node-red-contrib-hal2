@@ -13,7 +13,8 @@ const {
     itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity, resolveByName, projectDevices
 } = require('./mcp-tools');
 const { createToolGate, claimAllows, requiredScopeChallenge,
-        advertisedScopes, visibleTools } = require('../lib/claim-gate');
+        advertisedScopes, visibleTools,
+        gateReadsClaim } = require('../lib/claim-gate');
 const toolResult = require('../lib/tool-result');
 const groupAggregate = require('../resources/group-aggregate');
 const groupTools = require('../lib/group-tools');
@@ -881,7 +882,16 @@ module.exports = function(RED) {
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
                 advertisedScopes: advertisedStr,
-                gateClaim, gateClaimRequired: !!(readValue || writeValue),
+                gateClaim,
+                // Asked per token, not fixed here: the admin list and each hal2MCPIn tool's own
+                // list read the same claim, and the tools register after this runs. Checking only
+                // the read and write lists let a token without the claim hide the admin tools
+                // without a word. Standalone hal2MCPServer nodes gate on their own claim and are
+                // not covered by this warning.
+                gateClaimRequired: () => gateReadsClaim({
+                    serverValue: readValue + ',' + writeValue, adminToolsEnabled: adminEnabled,
+                    adminValue, tools: node.mcpRegisteredTools
+                }),
                 localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
                 localDebugGroups,
                 httpGet,

@@ -93,7 +93,8 @@ function createMcpAuth(opts) {
         advertisedScopes   = '',
         // The claim the access gate reads, and whether any gate value is actually set. Used
         // only to warn when an arriving token does not carry that claim — a state in which
-        // every tool is hidden and nothing else says why.
+        // every tool gated on it is hidden and nothing else says why. A function is asked per
+        // token instead, for gates that are only known later (tools registered after start).
         gateClaim          = '',
         gateClaimRequired  = false,
         discoveryRetryMs   = 30000,
@@ -108,6 +109,9 @@ function createMcpAuth(opts) {
     if (typeof httpGet !== 'function') {
         throw new Error('createMcpAuth requires an httpGet function');
     }
+
+    const claimRequired = typeof gateClaimRequired === 'function'
+        ? gateClaimRequired : () => !!gateClaimRequired;
 
     let tokenCache = {};
     // Clients already told that their tokens lack the claim the gate reads. Once each, capped
@@ -243,17 +247,18 @@ function createMcpAuth(opts) {
                     log('MCP CIMD client authenticated: ' + cimd);
                 }
             }
-            // A gate configured against a claim the token does not carry denies every tool,
-            // and does it silently: the caller authenticates cleanly and simply sees nothing.
+            // A gate configured against a claim the token does not carry denies every tool it
+            // guards, and does it silently: the caller authenticates cleanly and simply sees
+            // nothing.
             // That is the single most expensive failure mode this server has, so it is named.
             // RFC 9068 2.2.3.1 is where a provider is told to put it; naming the section gives
             // the reader something to ask for.
-            if (gateClaim && gateClaimRequired && readClaim(payload, gateClaim) === undefined) {
+            if (gateClaim && claimRequired() && readClaim(payload, gateClaim) === undefined) {
                 const who = payload.azp || payload.client_id || 'unknown';
                 if (!claimlessClients.has(who) && claimlessClients.size < CLAIM_WARN_MAX) {
                     claimlessClients.add(who);
                     warn('MCP access claim "' + gateClaim + '" is missing from tokens for client=' +
-                         who + ' — every tool will be hidden. The provider must include it in the ' +
+                         who + ' — every tool gated on it will be hidden. The provider must include it in the ' +
                          'access token (RFC 9068 2.2.3.1); an ID token or userinfo claim is not ' +
                          'visible to this server.');
                 }

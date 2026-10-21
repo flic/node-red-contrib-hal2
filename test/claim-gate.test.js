@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { readClaim, grants, claimAllows, createToolGate, visibleTools } = require('../lib/claim-gate');
+const { readClaim, grants, claimAllows, createToolGate, visibleTools, gateReadsClaim } = require('../lib/claim-gate');
 
 describe('lib/claim-gate grants', function () {
     it('grants nothing for an empty or absent list', function () {
@@ -200,5 +200,33 @@ describe('lib/claim-gate visibleTools', function () {
     it('tolerates an empty registry', function () {
         assert.deepStrictEqual(visibleTools({}, gate({ groups: [] })), []);
         assert.deepStrictEqual(visibleTools(undefined, gate({ groups: [] })), []);
+    });
+});
+
+describe('lib/claim-gate gateReadsClaim', function () {
+    // Decides whether a token without the claim is worth a warning. Every gate that reads the
+    // claim counts, not just the whole-server list: with that list empty, a token without the
+    // claim used to hide the admin tools with nothing in the log.
+    const none = { serverValue: '', adminToolsEnabled: false, adminValue: 'admin', tools: {} };
+
+    it('is false when no gate has a list', function () {
+        assert.strictEqual(gateReadsClaim(none), false);
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { serverValue: ' , ' })), false);
+    });
+
+    it('counts the whole-server list', function () {
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { serverValue: 'ops' })), true);
+    });
+
+    it('counts the admin list only while admin tools are on', function () {
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { adminToolsEnabled: true })), true);
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { adminToolsEnabled: true, adminValue: '' })), false);
+    });
+
+    it('counts a registered tool with its own list', function () {
+        const tools = { a: { requiredValue: '' }, b: { requiredValue: 'ops' } };
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { tools })), true);
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { tools: { a: { requiredValue: '' } } })), false);
+        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { tools: undefined })), false);
     });
 });
