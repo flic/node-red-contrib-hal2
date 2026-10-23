@@ -98,7 +98,7 @@
     "type": "function",
     "z": "tab-jellyfin-mcp",
     "name": "Build request",
-    "func": "const base = env.get('JELLYFIN_URL');\nconst externalBase = env.get('JELLYFIN_EXTERNAL_URL') || base;\nconst key = env.get('JELLYFIN_API_KEY');\nconst { item_id, width } = msg.payload;\nmsg.url = `${base}/Items/${item_id}/Images/Primary?maxWidth=${width || 400}&quality=80`;\nmsg.imageUrl = `${externalBase}/Items/${item_id}/Images/Primary?maxWidth=${width || 400}&quality=80&api_key=${key}`;\nmsg.headers = { 'X-Emby-Token': key };\nreturn msg;",
+    "func": "const base = env.get('JELLYFIN_URL');\nconst externalBase = env.get('JELLYFIN_EXTERNAL_URL') || base;\nconst key = env.get('JELLYFIN_API_KEY');\nconst { item_id, width } = msg.payload;\nmsg.url = `${base}/Items/${item_id}/Images/Primary?maxWidth=${width || 400}&quality=80`;\n// Jellyfin serves item images without authentication, so the link the client sees\n// carries no key; the backend request below still authenticates with the header.\nmsg.imageUrl = `${externalBase}/Items/${item_id}/Images/Primary?maxWidth=${width || 400}&quality=80`;\nmsg.headers = { 'X-Emby-Token': key };\nreturn msg;",
     "outputs": 1,
     "noerr": 0,
     "initialize": "",

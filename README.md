@@ -182,7 +182,7 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 > rather than this server alone. There is no per-user gate for hal2 without the claim. A
 > gate whose claim never appears refuses everyone, and says so in the log once per client.
 
-The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a local debug token for development. Experimental.
+The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a debug token for setups where OAuth cannot be set up — it bypasses authentication on every MCP route, grants no groups unless configured, and is named in the log at every start while set. Experimental.
 
 It ships with a catalog of built-in tools:
 

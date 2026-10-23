@@ -80,7 +80,9 @@ function createMcpAuth(opts) {
         tokenTTL           = 300000,
         tokenAudience      = '',
         localDebugToken    = '',
-        localDebugGroups   = ['admin'],
+        // None by default: the debug user gets exactly what is written into the field, and
+        // admin — deploy_flow among it — is never something a forgotten token grants unasked.
+        localDebugGroups   = [],
         mcpServerUrl       = '',
         // The RFC 9728 resource identifier — the MCP endpoint clients connect to. Distinct
         // from mcpServerUrl, which is the base the WWW-Authenticate challenge points at.
@@ -229,7 +231,8 @@ function createMcpAuth(opts) {
             const oidc = await getOidcConfig();
             // Always pin the issuer to the discovered IdP. Without it, any signature-valid token
             // from a provider that shares the JWKS would be accepted.
-            const verifyOpts = {};
+            // A token without `exp` would never expire; jose only checks it when present.
+            const verifyOpts = { requiredClaims: ['exp'] };
             if (oidc.issuer) verifyOpts.issuer = oidc.issuer;
             const { payload } = await jwtVerify(token, await getJwks(), verifyOpts);
             // Audience is checked here rather than by jose — see acceptsAudience.

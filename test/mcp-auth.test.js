@@ -217,6 +217,12 @@ describe('core/mcp-auth validateToken', function () {
         assert.strictEqual(state.verifyOpts.audience, undefined); // not set when unconfigured
     });
 
+    it('requires exp on jwtVerify, so a token without one is refused', async function () {
+        const { auth, state } = build();
+        await auth.validateToken('good');
+        assert.deepStrictEqual(state.verifyOpts.requiredClaims, ['exp']);
+    });
+
     // Audience is not jose's job — it is checked after verification (see acceptsAudience).
     // These pin that it is still enforced.
     it('accepts a token whose audience matches the configured one', async function () {
@@ -264,10 +270,16 @@ describe('core/mcp-auth validateToken', function () {
     });
 
     it('bypasses the IdP for the local debug token', async function () {
-        const { auth, state } = build({ localDebugToken: 'dbg-secret' });
+        const { auth, state } = build({ localDebugToken: 'dbg-secret', localDebugGroups: ['admin'] });
         const claims = await auth.validateToken('dbg-secret');
         assert.deepStrictEqual(claims.groups, ['admin']);
         assert.strictEqual(state.verifyCalls, 0); // never touched jose
+    });
+
+    it('grants the debug token no groups unless some are configured', async function () {
+        const { auth } = build({ localDebugToken: 'dbg-secret' });
+        const claims = await auth.validateToken('dbg-secret');
+        assert.deepStrictEqual(claims.groups, []);
     });
 
     it('clearCache empties the cache', async function () {

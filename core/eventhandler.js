@@ -879,11 +879,22 @@ module.exports = function(RED) {
 
             // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
             // See core/mcp-auth.js. External deps injected so the module stays testable.
-            // Groups granted to the local debug token (comma-separated, default 'admin'), so gates
-            // with other values can be tested locally. Default only when never set — an explicitly
-            // emptied field means a debug user with no groups at all.
-            const localDebugGroups = (config.localDebugGroups === undefined ? 'admin' : config.localDebugGroups)
+            // Groups granted to the local debug token (comma-separated), so gates with other values
+            // can be tested without an identity provider. None unless written in: the token
+            // replaces OAuth on every MCP route, public ones included, and admin is not something
+            // it should carry by default.
+            const localDebugToken  = (node.credentials && node.credentials.localDebugToken) || '';
+            const localDebugGroups = (config.localDebugGroups || '')
                 .split(',').map(s => s.trim()).filter(Boolean);
+            // Named at every start, so a token left behind after debugging is visible in the log
+            // rather than only in a password field nobody opens.
+            if (localDebugToken) {
+                node.warn('Local debug token is set — OAuth is bypassed on every MCP route of this '
+                    + 'event handler, public ones included, for groups=' + JSON.stringify(localDebugGroups)
+                    + (adminEnabled && isAdmin({ groups: localDebugGroups })   // the claims validateToken hands out
+                        ? ' — this token can deploy flows' : '')
+                    + '. Clear the field when OAuth is available.');
+            }
 
             const auth = createMcpAuth({
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
@@ -898,7 +909,7 @@ module.exports = function(RED) {
                     serverValue: readValue + ',' + writeValue, adminToolsEnabled: adminEnabled,
                     adminValue, tools: node.mcpRegisteredTools
                 }),
-                localDebugToken: (node.credentials && node.credentials.localDebugToken) || '',
+                localDebugToken,
                 localDebugGroups,
                 httpGet,
                 log:  msg => node.log(msg),
