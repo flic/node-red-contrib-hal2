@@ -11,7 +11,7 @@
         "type": "comment",
         "z": "tab-hal2-json-api",
         "name": "How to use",
-        "info": "Query device state:\n\n    curl -s localhost:1880/hal2/api \\\n      -H 'content-type: application/json' \\\n      -d '{\"tool\":\"get_all_states\",\"args\":{\"fields\":\"summary\"}}'\n\nControl a light:\n\n    curl -s localhost:1880/hal2/api \\\n      -H 'content-type: application/json' \\\n      -d '{\"tool\":\"set_light\",\"args\":{\"thing_name\":\"kitchen\",\"on\":true}}'\n\nAdmin tools (get_flow/deploy_flow) require 'Allow admin tools' on the node.",
+        "info": "Query device state:\n\n    curl -s localhost:1880/hal2/api \\\n      -H 'content-type: application/json' \\\n      -d '{\"tool\":\"get_all_states\",\"args\":{\"fields\":\"summary\"}}'\n\nControl a light:\n\n    curl -s localhost:1880/hal2/api \\\n      -H 'content-type: application/json' \\\n      -d '{\"tool\":\"set_light\",\"args\":{\"thing_name\":\"kitchen\",\"on\":true}}'",
         "x": 160,
         "y": 80,
         "wires": []
@@ -39,7 +39,6 @@
         "z": "tab-hal2-json-api",
         "name": "",
         "eventHandler": "",
-        "allowAdminTools": false,
         "x": 410,
         "y": 160,
         "wires": [

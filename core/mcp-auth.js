@@ -81,7 +81,8 @@ function createMcpAuth(opts) {
         tokenAudience      = '',
         localDebugToken    = '',
         // None by default: the debug user gets exactly what is written into the field, and
-        // admin — deploy_flow among it — is never something a forgotten token grants unasked.
+        // a gated tool — an admin node's among them — is never something a forgotten token
+        // grants unasked.
         localDebugGroups   = [],
         mcpServerUrl       = '',
         // The RFC 9728 resource identifier — the MCP endpoint clients connect to. Distinct
@@ -167,7 +168,7 @@ function createMcpAuth(opts) {
                         // off" apart from "the client isn't using it".
                         log('MCP OIDC discovery ok: issuer=' + oidcConfig.issuer +
                             ', CIMD=' + (oidcConfig.client_id_metadata_document_supported === true
-                                ? 'advertised by the IdP — CIMD client ids accepted as audience'
+                                ? 'advertised by the IdP — clients may identify by metadata document'
                                 : 'not advertised by the IdP — clients need an id registered there'));
                         return oidcConfig;
                     }
@@ -210,13 +211,30 @@ function createMcpAuth(opts) {
         }
     }
 
+    // The debug user's claims: `groups` as always, and the gate's own claim when that is another
+    // one. A subject is one id, so `sub` takes the first value; a dotted claim is nested.
+    function debugClaims() {
+        const claims = { sub: 'debug', name: 'Local debug user', groups: localDebugGroups.slice() };
+        if (gateClaim && gateClaim !== 'groups') {
+            const value = gateClaim === 'sub' ? (localDebugGroups[0] || 'debug') : localDebugGroups.slice();
+            const parts = gateClaim.split('.');
+            let at = claims;
+            for (const part of parts.slice(0, -1)) {
+                if (!at[part] || typeof at[part] !== 'object') at[part] = {};
+                at = at[part];
+            }
+            at[parts[parts.length - 1]] = value;
+        }
+        return claims;
+    }
+
     async function validateToken(token) {
         // Local debug token bypass — skips the IdP entirely. Constant-time compare so the token
-        // can't be recovered by timing the response. Groups are configurable so claim gates with
-        // values other than 'admin' can be exercised locally too; sliced so a flow that mutates
+        // can't be recovered by timing the response. The configured values go to the claim the
+        // gates read, so any gate can be exercised locally; sliced so a flow that mutates
         // msg.jwtClaims can't poison later requests.
         if (localDebugToken && secretEqual(token, localDebugToken)) {
-            return { sub: 'debug', name: 'Local debug user', groups: localDebugGroups.slice() };
+            return debugClaims();
         }
 
         const cacheKey = 'auth_' + crypto.createHash('sha256').update(token).digest('hex').slice(0, 20);

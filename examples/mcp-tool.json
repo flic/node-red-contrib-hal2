@@ -1,0 +1,116 @@
+[
+    {
+        "id": "tab-hal2-mcp-tool",
+        "type": "tab",
+        "label": "hal2 MCP tool",
+        "disabled": false,
+        "info": "Example: tools of your own in this location's MCP catalogue, next to hal2's built-in ones.\n\nSwitch on **MCP** on the event handler and fill in its server URL and identity provider. The two tools are then served at `<Server URL>/mcp`.\n\n- **get_note** is a *read* tool: it clears the event handler's read gate.\n- **set_note** is a *write* tool: it clears the write gate as well.\n\nBoth check their arguments against **Parameters** before the flow runs."
+    },
+    {
+        "id": "eh-mcp-tool",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "locationName": "Home",
+        "maxlisteners": "50",
+        "heartbeat": "3600",
+        "mcpEnabled": true,
+        "mcpServerUrl": "",
+        "accessClaim": "sub"
+    },
+    {
+        "id": "in-get-note",
+        "type": "hal2MCPIn",
+        "z": "tab-hal2-mcp-tool",
+        "name": "",
+        "eventHandler": "eh-mcp-tool",
+        "toolName": "get_note",
+        "description": "Read the household note left with set_note. Returns { note, updated } or { note: null } when there is none.",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {},\n  \"additionalProperties\": false\n}",
+        "validateArgs": true,
+        "access": "read",
+        "topic": "",
+        "timeout": 10,
+        "requiredValue": "",
+        "exposeClaims": false,
+        "x": 140,
+        "y": 80,
+        "wires": [
+            [
+                "fn-get-note"
+            ]
+        ]
+    },
+    {
+        "id": "fn-get-note",
+        "type": "function",
+        "z": "tab-hal2-mcp-tool",
+        "name": "Read note",
+        "func": "msg.payload = flow.get('note') || { note: null };\nreturn msg;",
+        "outputs": 1,
+        "x": 340,
+        "y": 80,
+        "wires": [
+            [
+                "out-get-note"
+            ]
+        ]
+    },
+    {
+        "id": "out-get-note",
+        "type": "hal2MCPOut",
+        "z": "tab-hal2-mcp-tool",
+        "name": "",
+        "eventHandler": "eh-mcp-tool",
+        "x": 540,
+        "y": 80,
+        "wires": []
+    },
+    {
+        "id": "in-set-note",
+        "type": "hal2MCPIn",
+        "z": "tab-hal2-mcp-tool",
+        "name": "",
+        "eventHandler": "eh-mcp-tool",
+        "toolName": "set_note",
+        "description": "Leave a short note for the household, replacing the previous one. Read it back with get_note.",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"note\": {\n      \"type\": \"string\",\n      \"minLength\": 1,\n      \"maxLength\": 200,\n      \"description\": \"The note, at most 200 characters.\"\n    }\n  },\n  \"required\": [\n    \"note\"\n  ],\n  \"additionalProperties\": false\n}",
+        "validateArgs": true,
+        "access": "write",
+        "topic": "",
+        "timeout": 10,
+        "requiredValue": "",
+        "exposeClaims": false,
+        "x": 140,
+        "y": 160,
+        "wires": [
+            [
+                "fn-set-note"
+            ]
+        ]
+    },
+    {
+        "id": "fn-set-note",
+        "type": "function",
+        "z": "tab-hal2-mcp-tool",
+        "name": "Store note",
+        "func": "// The arguments were checked against the schema: note is a string of 1–200 characters.\nconst entry = { note: msg.payload.note, updated: new Date().toISOString() };\nflow.set('note', entry);\nmsg.payload = entry;\nreturn msg;",
+        "outputs": 1,
+        "x": 340,
+        "y": 160,
+        "wires": [
+            [
+                "out-set-note"
+            ]
+        ]
+    },
+    {
+        "id": "out-set-note",
+        "type": "hal2MCPOut",
+        "z": "tab-hal2-mcp-tool",
+        "name": "",
+        "eventHandler": "eh-mcp-tool",
+        "x": 540,
+        "y": 160,
+        "wires": []
+    }
+]

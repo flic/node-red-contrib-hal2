@@ -12,7 +12,7 @@ The **hal2Api** node exposes the hal2 tool catalog as a JSON request/response ga
 { "tool": "<name>", "args": { /* tool-specific */ } }
 ```
 
-`msg.tool` / `msg.args` override the payload fields when present. An optional `msg.claims` object is forwarded to the tool (used for admin role checks).
+`msg.tool` / `msg.args` override the payload fields when present. Arguments are not checked against the schema on this path: a flow is trusted to send what it means.
 
 **Response** — `msg.payload`:
 
@@ -26,9 +26,9 @@ On failure:
 { "ok": false, "error": { "code": -32601, "message": "…" } }
 ```
 
-Most tools return a JSON object in `result`. A few admin tools return plain text.
+Tools return a JSON object in `result`.
 
-Each tool below is tagged 👁 **read**, ✏️ **write** or 🔒 **admin**. Those classes are what the MCP server's [access gates](../README.md#access-control) act on, so a token can be allowed to observe the house without being allowed to change it. They are informational here: the hal2Api node is a local flow node and gates only its admin tools, via its own checkbox.
+Each tool below is tagged 👁 **read** or ✏️ **write**. Those classes are what the MCP server's [access gates](../README.md#access-control) act on, so a token can be allowed to observe the house without being allowed to change it. They are informational here: the hal2Api node is a local flow node and is not gated.
 
 ## Tools
 
@@ -48,8 +48,6 @@ Each tool below is tagged 👁 **read**, ✏️ **write** or 🔒 **admin**. Tho
 - [`control_group`](#controlgroup)
 - [`set_light`](#setlight)
 - [`analyze_patterns`](#analyzepatterns)
-- [`get_flow`](#getflow)
-- [`deploy_flow`](#deployflow)
 
 ### `get_all_states` 👁 (read)
 
@@ -382,47 +380,5 @@ Analyzes the history database to detect recurring behavioral patterns — e.g. "
 
 ```json
 { "tool": "analyze_patterns", "args": { "days": 0, "window_minutes": 0 } }
-```
-
-## Admin tools
-
-These require **Allow admin tools** to be enabled on the hal2Api node.
-
-### `get_flow` 🔒 (admin)
-
-Lists all Node-RED tabs (ID and node count) when called without arguments. Returns full JSON configuration for a specific tab when called with an id.
-
-> Exposed through hal2Api only when **Allow admin tools** is enabled on the node.
-
-**Parameters**
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `id` | `string` | no | Flow/tab ID — omit to list all flows |
-
-**Example**
-
-```json
-{ "tool": "get_flow", "args": { "id": "…" } }
-```
-
-### `deploy_flow` 🔒 (admin)
-
-Creates or updates a Node-RED flow tab. Omit id to create new.
-
-> Exposed through hal2Api only when **Allow admin tools** is enabled on the node.
-
-**Parameters**
-
-| Parameter | Type | Required | Description |
-|---|---|---|---|
-| `id` | `string` | no | Existing flow ID (omit for new flow) |
-| `label` | `string` | yes | Flow tab label/name |
-| `nodes` | `array` | yes | Array of node objects |
-
-**Example**
-
-```json
-{ "tool": "deploy_flow", "args": { "label": "…", "nodes": [] } }
 ```
 

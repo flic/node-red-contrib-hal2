@@ -3,15 +3,9 @@
         <label for="node-input-eventHandler" style="width:95px; padding-right:10px;"><i class="fa fa-ellipsis-h"></i> Event handler</label>
         <input type="text" id="node-input-eventHandler" style="width:calc(100% - 125px)" placeholder="Event handler">
     </div>
-    <div class="form-row">
-        <label for="node-input-mcpServer" style="width:95px; padding-right:10px;"><i class="fa fa-server"></i> Standalone</label>
-        <input type="text" id="node-input-mcpServer" style="width:calc(100% - 125px)">
-    </div>
     <div class="form-tips" style="margin-bottom:8px;">
-        Which endpoint this node speaks for. <b>none</b> is the event handler's own endpoint: the
-        built-in tools plus anything published to it in <i>embedded</i> mode. Pick a standalone MCP
-        server to reach that server's tools instead &mdash; and only those, exactly as an MCP client
-        on its URL sees. Send <code>{ "list": true }</code> to ask what is behind it.
+        Calls the event handler's tools: the built-in ones and those flows add with <b>tool call</b>.
+        Send <code>{ "list": true }</code> to ask what is there.
     </div>
     <div class="form-row">
         <label for="node-input-name" style="width:95px; padding-right:10px;"><i class="fa fa-tag"></i> Name</label>
@@ -22,11 +16,6 @@
         <input type="text" id="node-input-field" style="width:calc(100% - 125px)">
         <input type="hidden" id="node-input-fieldType">
     </div>
-    <div class="form-row">
-        <label for="node-input-allowAdminTools" style="width:auto"><i class="fa fa-shield"></i> Allow admin tools</label>
-        <input type="checkbox" id="node-input-allowAdminTools" style="display: inline-block; width: auto; vertical-align: top;">
-    </div>
-    <div class="form-tips">Admin tools (<code>get_flow</code>, <code>deploy_flow</code>) are only exposed when this is checked. Leave off unless the flow exposing this node is trusted.</div>
 </script>
 
 <script type="text/x-red" data-help-name="hal2Api">
@@ -37,7 +26,8 @@
     <h3>Input</h3>
     <p><code>msg.payload</code> = <code>{ "tool": "&lt;name&gt;", "args": { ... } }</code>.
     <code>msg.tool</code> / <code>msg.args</code> override the payload fields if present.
-    Optional <code>msg.claims</code> is passed through to the tool (used for admin role checks).</p>
+    Optional <code>msg.claims</code> is passed through to the tool (a tool call node with
+    <b>JWT claims</b> on hands them to its flow).</p>
     <p><strong>The payload must be an object.</strong> In an <code>inject</code> node set the type to
     <code>{} JSON</code>, not <code>string</code> — a JSON <em>string</em> is auto-parsed as a fallback, but
     setting <code>msg.tool</code> directly always works regardless of payload type.</p>
@@ -50,12 +40,9 @@
     <code>{ "ok": false, "error": { "code", "message" } }</code> on failure.</p>
 
     <h3>Which tools</h3>
-    <p>This node speaks for one endpoint, chosen with <strong>Standalone</strong>. Set to
-    <code>none</code> it is the event handler's: the built-in catalogue plus every tool published to it by an
-    <code>mcp-in</code> whose server runs in <b>embedded</b> mode. Pick a <b>standalone</b> MCP
-    server and you get that server's tools and nothing else &mdash; <code>get_state</code> answers
-    <em>Unknown tool</em> there, exactly as it does for an MCP client on that URL. A flow needing
-    both uses two of these nodes.</p>
+    <p>The event handler's catalogue: the built-in tools plus every tool a <b>tool call</b> node
+    added to it. Tools on an MCP server of node-red-contrib-mcp-server are reached with that
+    package's MCP Call node instead.</p>
 
     <p>Send <code>{ "list": true }</code> (or <code>msg.list = true</code>) instead of a tool name
     to get the catalogue behind this node: <code>{ name, description, inputSchema }</code> per tool,
@@ -64,9 +51,8 @@
     <p><strong>Tool access does not apply here.</strong> The claim and scope gates run on the MCP
     route, where the token behind them was verified; a flow node is already inside the trust
     boundary, since editing flows is full control either way. So a tool restricted to certain
-    callers over MCP is still callable from a flow, and the listing above shows it. Admin tools are
-    the exception: they need <strong>Allow admin tools</strong> <em>and</em> an admin claim on
-    <code>msg.claims</code>.</p>
+    callers over MCP is still callable from a flow, and the listing above shows it. Arguments are not
+    checked against the schema either: the flow is trusted.</p>
 
     <h3>Tools</h3>
     <p>The available tools and their arguments mirror the MCP catalog and are documented in
@@ -74,12 +60,10 @@
     (auto-generated on GitHub). Read tools (e.g. <code>get_all_states</code>, <code>get_state</code>,
     <code>get_history</code>, <code>get_scenes</code>, <code>get_presence</code>, <code>get_alerts</code>)
     and control tools (e.g. <code>set_light</code>, <code>control_cover</code>, <code>control_climate</code>,
-    <code>activate_scene</code>) are always available. Admin tools require <strong>Allow admin tools</strong>.</p>
+    <code>activate_scene</code>) are always available.</p>
 
     <li><strong>Event handler</strong>: the hal2EventHandler whose devices this API serves.</li>
-    <li><strong>Standalone</strong>: an MCP server node whose tools this node exposes instead. <code>none</code> = the event handler's own endpoint.</li>
     <li><strong>Property</strong>: message property or context key the response envelope is written to (default <code>msg.payload</code>).</li>
-    <li><strong>Allow admin tools</strong>: expose <code>get_flow</code> / <code>deploy_flow</code> through this node.</li>
 </script>
 
 <script type="text/javascript">
@@ -92,9 +76,7 @@
                 type: "hal2EventHandler",
                 required: true
             },
-            mcpServer:       { value: "", type: "hal2MCPServer", required: false },
             name:            {},
-            allowAdminTools: { value: false },
             field:           { value: "payload" },
             fieldType:       { value: "msg" }
         },

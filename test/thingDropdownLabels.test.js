@@ -3,7 +3,7 @@
 // "[Kontor] Taklampa". Since the room left the name, two Things may legitimately share one, and a
 // dropdown listing the bare name offers the same entry twice with no way to tell them apart.
 //
-// Seven editors do this and they were converted with a search-and-replace over the shape
+// Six editors did this and they were converted with a search-and-replace over the shape
 //     .append($("<option></option>").val(x.id).text(x.name))
 // which missed hal2Event's main Thing list — that one built its option as an HTML string, so the
 // pattern did not match and the node shipped without room labels. Nothing failed; the list simply
@@ -21,8 +21,7 @@ const EDITORS = fs.readdirSync(CORE).filter(f => f.endsWith('.html'));
 
 // The editors that offer a Thing to pick. thing.html is not one of them — it *is* the Thing, and
 // labels itself through the same helper in its `label:` callback.
-const OFFERS_THINGS = ['event.html', 'value.html', 'gate.html', 'action.html',
-                       'group.html', 'bayes.html'];
+const OFFERS_THINGS = ['event.html', 'value.html', 'gate.html', 'action.html', 'bayes.html'];
 
 describe('every Thing dropdown carries the room', function () {
     for (const file of OFFERS_THINGS) {

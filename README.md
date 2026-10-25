@@ -2,6 +2,34 @@
 A set of nodes to help with basic home automation logic, with an optional MCP server so an AI
 assistant can read device state and control the house.
 
+> **Upgrading to 4.0?** hal2 now serves one MCP endpoint, the location's own catalogue on the
+> Event handler's `/mcp`, and nothing else:
+> - **`hal2MCPServer` is removed.** An *embedded* server only passed its tools on to the Event
+>   handler, so its tool nodes now point at the Event handler directly. A *standalone* server was
+>   an MCP server of its own, which is what [node-red-contrib-mcp-server](https://www.npmjs.com/package/@frtnbach/node-red-contrib-mcp-server)
+>   (3.0 or later) does; with that package installed, a standalone server and its nodes become its
+>   *MCP Server*, *MCP In*, *MCP Out* and *MCP Call*, keeping their ids and wires.
+> - **The admin tools are removed.** `get_flow` and `deploy_flow`, and *Allow admin tools* on
+>   hal2Api, are gone; Node-RED is administered over MCP with mcp-server's *MCP Admin* node.
+> - **hal2Api** calls the Event handler's catalogue only.
+> - **MCP In and MCP Out are now called *tool call* and *tool result*** in the palette — the MCP
+>   specification's own terms — so they are not mistaken for mcp-server's nodes when both packages
+>   are installed. The types are still `hal2MCPIn` and `hal2MCPOut`. A tool call is a **read** or a
+>   **write** tool, held to the gate of that class; write is the default.
+> - **Arguments are checked against each tool's schema** before it runs, for the built-in tools
+>   and for your own (switch *Validate* off on a tool whose schema cannot describe what it takes).
+> - **The Access claim defaults to `sub`** rather than `groups`; an Event handler that set it keeps its value.
+> - **The deprecated `hal2Group` node is removed**, and with it the Event handler's folding of such
+>   nodes at runtime. Groups live on the Event handler's *Groups* tab and membership on each
+>   Thing's items, as they have since 3.x; the conversion moves any group nodes there, keeping
+>   their ids, so Action and Event references still resolve.
+>
+> Flows from 3.x still start: `hal2MCPServer` and `hal2Group` are kept as stubs that do nothing and say so.
+> The editor offers to **convert** them when it loads them — one click, saved straight away. Each
+> standalone server then becomes a resource of its own, `<Server URL>/mcp/<path>`, so the reverse
+> proxy has to pass that path and `/.well-known/oauth-protected-resource/mcp/<path>`, the identity
+> provider needs the resource, and its clients sign in again.
+>
 > **Upgrading to 3.2?** `thing_id` and `thing_name` are now **`id`** and **`name`**, in parameters
 > and responses alike. Items keep `item_id` and `item_name`. This is not only the MCP tools — the
 > [JSON API](#json-api-hal2api) node calls the same tools, so your own HTTP callers need updating
@@ -155,7 +183,7 @@ doing: the name is usually all it has to go on, and "All lights" does not say wh
 lights are in it. A note does, and `get_groups` takes a `tag` filter so the assistant can ask for
 exactly the set it means.
 
-Groups replace the old standalone `hal2Group` node. Existing flows keep working — the Event handler folds legacy group nodes in automatically, though they are command-only until migrated — but you should run `node tools/migrate-groups.js <flows.json>` to make the move permanent and then remove the deprecated nodes. The migration preserves group ids, so existing Action/Event references keep resolving untouched.
+Groups replaced the old standalone `hal2Group` node, which 4.0.0 removed. The editor converts any that are left when it loads the flows (or run `node tools/migrate-groups.js <flows.json>` on a flows file); the conversion keeps group ids, so existing Action/Event references keep resolving untouched.
 
 ## AI & external control
 
@@ -172,8 +200,8 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 > **Migration.** Register each MCP client at your identity provider — or point it at a
 > Client ID Metadata Document, if the provider resolves those — instead of letting it
 > self-register here; a client that self-registered before the upgrade should be removed
-> and re-added. Then make sure the claim the access gates match on (`Access claim`, default
-> `groups`) is in the **access token** and not only in the ID token or userinfo. If your
+> and re-added. Then make sure the claim the access gates match on (`Access claim`, `groups`
+> before 4.0.0) is in the **access token** and not only in the ID token or userinfo. If your
 > provider cannot put it there — [PocketID currently
 > cannot](https://github.com/pocket-id/pocket-id/issues/1389) — leave *Read tools* and
 > *Write tools* empty. [Required scopes](#the-client-axis-required-scopes) still limit which
@@ -182,15 +210,13 @@ Beyond local automation, hal2 can expose your devices to AI assistants and exter
 > rather than this server alone. There is no per-user gate for hal2 without the claim. A
 > gate whose claim never appears refuses everyone, and says so in the log once per client.
 
-The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a debug token for setups where OAuth cannot be set up — it bypasses authentication on every MCP route, grants no groups unless configured, and is named in the log at every start while set. Experimental.
+The **hal2EventHandler** config node can run an embedded **MCP (Model Context Protocol) server**, letting an AI assistant such as Claude read device state and control your home in natural language. Enable it on the *MCP* tab of the Event handler. The server is **OAuth 2.0 protected and works with any standard OIDC identity provider** (its real endpoints are auto-discovered — see [Authentication & reverse proxy](#authentication--reverse-proxy)), carries a per-location identifier (e.g. "Home" / "Cabin") so an assistant connected to several homes can tell them apart, and supports a debug token for setups where OAuth cannot be set up — it bypasses authentication on every MCP route, grants no claim values unless configured, and is named in the log at every start while set. Experimental.
 
 It ships with a catalog of built-in tools:
 
 - **Read** — `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `get_groups`, `analyze_patterns`
 - **Write** — `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`, `control_group`
-- **Admin** (opt-in) — `get_flow`, `deploy_flow`
-
-Those three classes are also the unit of [access control](#access-control): a token can be allowed to read the house without being allowed to change it.
+Those two classes are also the unit of [access control](#access-control): a token can be allowed to read the house without being allowed to change it.
 
 Tools are exposed only when matching hardware is configured at that location — a server with no covers won't advertise `control_cover`. Things and Items can carry free-text **notes** and **tags**, and devices report derived **categories** (light, fan, cover, climate, spa, scene), all of which help the assistant pick the right device. Full parameters and examples are in **[docs/API.md](docs/API.md)**.
 
@@ -198,15 +224,16 @@ Tools are exposed only when matching hardware is configured at that location —
 
 Tools are gated on the **claims in the caller's verified access token**, so one MCP endpoint can serve several people at different privilege levels. A gate is a **claim name** plus a **value list**: the values are comma-separated and matched **any-of** — an array claim must *contain* at least one of them, a scalar claim must *equal* one. An **empty list is no constraint**, which is the default everywhere, so an existing setup keeps behaving exactly as before.
 
-On the Event handler's *MCP* tab, one **Access claim** (default `groups`) carries three lists, checked with **AND**:
+On the Event handler's *MCP* tab, one **Access claim** (default `sub`, the user's id) carries the lists, checked with **AND**:
 
 | Gate | Covers | Default |
 |---|---|---|
 | **Read tools** | `get_all_states`, `get_state`, `get_history`, `get_scenes`, `get_presence`, `get_alerts`, `get_groups`, `analyze_patterns` | empty — any authenticated caller |
 | **Write tools** | `set_light`, `control_device`, `control_fan`, `control_cover`, `control_spa`, `control_climate`, `activate_scene`, `control_group` | empty — same as read |
-| **Admin tools** | `get_flow`, `deploy_flow` (and only when *Enable Node-RED admin tools* is on) | `admin` |
 
 The read list is the floor: a caller who fails it reaches nothing at all. Writes are checked **on top of** it, so `Read tools = family`, `Write tools = ops` gives the whole household visibility while only ops can switch anything. A tool that is in neither set — a future addition, or the undocumented `control_light` alias of `set_light` — is treated as a **write**, so an unclassified tool fails closed rather than slipping through.
+
+With the default claim `sub` a list names users by their id at the identity provider. Set the claim to `groups` (or any claim the token carries) to name groups instead.
 
 ### The client axis: required scopes
 
@@ -220,20 +247,17 @@ The scope claim is read the way OAuth defines it ([RFC 6749 §3.3](https://datat
 
 Providers that model APIs as resources — Pocket ID, Auth0 — are where this earns its keep: the IdP grants a client access to the MCP server's resource with a specific set of scopes, and this is where the server enforces what it was handed.
 
-Two further gates layer on the custom-tool side:
-
-- **Standalone-server gate** (`hal2MCPServer` in *Standalone* mode, `Required claim`/`Required value`, plus `Required scope` on the client axis): gates a whole standalone MCP server and its own claim name, independent of the Event handler's. The scope must be one the Event handler advertises (its *Additional scopes*), since the two share a 401 challenge; the node warns at deploy when it is not.
-- **Per-tool gate** (`hal2MCPIn`, `Tool access`): narrows a single tool further, checked on top of its server's list.
+Your own [tool calls](#custom-mcp-tools-tool-call--tool-result) are held to the same gates. Each one is a **read** or a **write** tool (*Kind*, write by default), and clears the lists and scopes of its class. Its *Tool access* list narrows it further, checked on top of them.
 
 Callers who fail a gate still connect — `initialize` succeeds — but the tools they cannot use are **absent from `tools/list`**, so an assistant is never offered a tool it will then be refused. A direct call to a hidden tool comes back as an MCP tool result with `isError: true` and a human-readable reason, so the model is told *why* rather than getting a generic "tool execution failed".
 
-> The gates apply to the **MCP surface only**, where claims are cryptographically verified. The `hal2Api` node reads `msg.claims` off the message, which any flow can set, so gating it would be decoration rather than a boundary; it keeps its own local *Allow admin tools* checkbox instead.
+> The gates apply to the **MCP surface only**, where claims are cryptographically verified. The `hal2Api` node reads `msg.claims` off the message, which any flow can set, so gating it would be decoration rather than a boundary.
 >
 > **Nested claims** are addressed with a dotted path, for providers that don't put roles at the top level of the token: `realm_access.roles` reads Keycloak's realm roles, and any depth works. A key that exists literally always wins, so PocketID's flat `groups` is unaffected. Only strings and arrays of strings match — pointing the claim at a container object grants nothing rather than matching by accident.
 
 ### Hostname filtering
 
-Off by default. When **Only serve requests for this hostname** is enabled on the Event handler, its MCP routes only answer requests whose `Host` header matches the hostname in the *MCP server URL*. This lets several Event handlers share the *same* paths (e.g. `/mcp`) on one Node-RED instance, each answering only its own virtual host — useful when one backend fronts several homes on different hostnames. Standalone `hal2MCPServer` nodes inherit the setting from their Event handler. Leave it off for a single server, or when a reverse proxy rewrites the `Host` header.
+Off by default. When **Only serve requests for this hostname** is enabled on the Event handler, its MCP routes only answer requests whose `Host` header matches the hostname in the *MCP server URL*. This lets several Event handlers share the *same* paths (e.g. `/mcp`) on one Node-RED instance, each answering only its own virtual host — useful when one backend fronts several homes on different hostnames. A filtered Event handler wins its hostname over an unfiltered MCP server on the same paths, whichever registered first — including an *MCP Server* of node-red-contrib-mcp-server, which shares the registry. Leave it off for a single server, or when a reverse proxy rewrites the `Host` header.
 
 ### Authentication & reverse proxy
 
@@ -253,22 +277,21 @@ The MCP server advertises itself as a **protected resource** and points clients 
 
 There is no second call. Nothing is fetched from `/userinfo`: that endpoint serves a client asking about its own user ([OIDC Core §5.3](https://openid.net/specs/openid-connect-core-1_0.html#UserInfo)), not a resource server asking about a token, and a provider may refuse it once the token is bound to this server. **Everything the access gates read must therefore be in the token** — see [RFC 9068 §2.2.3.1](https://www.rfc-editor.org/rfc/rfc9068.html), which is where an authorization server is told to put `groups`, `roles` and `entitlements`. A provider that keeps them in the ID token or userinfo alone will leave the claim gate with nothing to match, and the log will say so, once per client.
 
-Each **standalone** `hal2MCPServer` node adds one more endpoint, `POST /mcp/<path>` (e.g. `/mcp/jellyfin`), sharing the same auth. Setting an *HTTP path prefix* shifts every route under it (`/prefix/mcp`, `/prefix/.well-known/…`), so update the proxy to match.
+Setting an *HTTP path prefix* shifts every route under it (`/prefix/mcp`, `/prefix/.well-known/…`), so update the proxy to match.
 
 > **Allowlist these paths — don't blanket-proxy everything to Node-RED.** hal2's MCP routes live on Node-RED's shared HTTP server, alongside the flow editor, admin API and any other `http in` endpoints. A catch-all proxy would put *all* of those on the public hostname; hal2 forwards anything it doesn't own to Node-RED, so you can't know what else would be exposed. Route only the specific paths below.
 
-Example with **[Caddy](https://caddyserver.com/)** via [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy) labels (default prefix; drop the `/mcp/*` line if you run no standalone servers):
+Example with **[Caddy](https://caddyserver.com/)** via [caddy-docker-proxy](https://github.com/lucaslorentz/caddy-docker-proxy) labels (default prefix):
 
 ```yaml
 labels:
   caddy_1: mcp.example.com
   caddy_1.reverse_proxy_0: /mcp "{{upstreams 1880}}"
-  caddy_1.reverse_proxy_1: /mcp/* "{{upstreams 1880}}"
-  caddy_1.reverse_proxy_2: /.well-known/oauth-protected-resource "{{upstreams 1880}}"
-  caddy_1.reverse_proxy_3: /.well-known/oauth-protected-resource/mcp "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_1: /.well-known/oauth-protected-resource "{{upstreams 1880}}"
+  caddy_1.reverse_proxy_2: /.well-known/oauth-protected-resource/mcp "{{upstreams 1880}}"
 ```
 
-`/mcp` (exact) and `/mcp/*` are deliberately **separate** matchers — in Caddy `/mcp/*` does *not* match the bare `/mcp`. To serve several MCP servers on different hostnames from one backend, give each its own `caddy_N` site block and enable [hostname filtering](#hostname-filtering).
+To serve several MCP servers on different hostnames from one backend, give each its own `caddy_N` site block and enable [hostname filtering](#hostname-filtering).
 
 **What hal2 expects of the identity provider:**
 
@@ -389,9 +412,14 @@ marked in the row rather than dropped, so tightening the rule cannot delete data
 > apart. And a Thing that matched but took no command now answers `nothing_to_command`, listing
 > what its items are, rather than reporting success and changing nothing.
 
-### Custom MCP tools (hal2MCPIn / hal2MCPOut)
+### Custom MCP tools (tool call / tool result)
 
-You can define your own MCP tools as Node-RED flows: a **hal2MCPIn** node registers a tool and fires a message when the assistant calls it, and a **hal2MCPOut** node returns the result. Responses can be text or image/media content, so a tool can return e.g. a camera snapshot. For a fully standalone setup there is also a **hal2MCPServer** node. See `examples/jellyfin-mcp.json` for a worked example.
+You can add tools of your own to the location's catalogue as Node-RED flows: a **tool call** node (`hal2MCPIn`) registers a tool on an Event handler and fires a message when the assistant calls it, and a **tool result** node (`hal2MCPOut`) returns the answer. Responses can be text or image/media content, so a tool can return e.g. a camera snapshot. The tool is served on the Event handler's `/mcp` next to the built-in ones, and its *Tool name* must not be one of theirs.
+
+- **Kind** — a *read* or a *write* tool, held to the [gate](#access-control) of that class. Write is the default, so a tool nobody classified gets the stricter gate.
+- **Validate** — on by default: arguments are checked against *Parameters* before the flow runs (types, `required`, `enum`, bounds, lengths, `pattern`, `items`, `additionalProperties: false`), and a call that does not match is answered with the reason instead of reaching the flow. Keywords outside that set are named in the log once.
+
+See `examples/mcp-tool.json` for one tool of each kind. For tools on an MCP server of their own — a resource with its own URL, audience and gates — use [node-red-contrib-mcp-server](https://www.npmjs.com/package/@frtnbach/node-red-contrib-mcp-server) instead.
 
 ### JSON API (hal2Api)
 
@@ -405,11 +433,11 @@ The **hal2Api** node turns the same tool catalog into a simple JSON request/resp
 { "ok": true, "result": { "id": "…", "items": [ … ] } }
 ```
 
-**Which endpoint it speaks for** is set by the *Standalone* field. Left empty, the node serves the Event handler's own embedded catalog — the built-in tools plus any `hal2MCPIn` tools registered against it. Point it at a `hal2MCPServer` node instead and it serves that server's tools and nothing else, exactly as an MCP client connecting to that server's URL would see.
+It serves the Event handler's catalogue — the built-in tools plus any tool calls registered on it. (For an MCP server of node-red-contrib-mcp-server, use its *MCP Call* node.)
 
-Send `{ "list": true }` instead of a tool name to get the catalogue of whichever endpoint the node speaks for — `{ name, description, inputSchema }` per tool, the shape `tools/list` returns. For the built-in tools **[docs/API.md](docs/API.md)** (auto-generated, `npm run docs:api`) is the fuller reference; for your own `hal2MCPIn` tools the listing is usually the only index there is.
+Send `{ "list": true }` instead of a tool name to get that catalogue — `{ name, description, inputSchema }` per tool, the shape `tools/list` returns. For the built-in tools **[docs/API.md](docs/API.md)** (auto-generated, `npm run docs:api`) is the fuller reference; for your own `hal2MCPIn` tools the listing is usually the only index there is.
 
-**Access control does not apply on this path.** The claim and scope gates run on the MCP server's HTTP route, where the token behind them was verified. A flow node is already inside the trust boundary — whoever can edit flows can edit the tool — so a tool restricted to certain callers over MCP is still callable here, and the listing shows it. Don't use hal2Api to re-expose a gated tool to an outside caller; that gate is yours to reproduce. Admin tools (`get_flow`, `deploy_flow`) are the exception and keep the route's rule: enabled on the server, *Allow admin tools* enabled on this node, **and** an admin claim on `msg.claims`.
+**Access control does not apply on this path.** The claim and scope gates run on the MCP server's HTTP route, where the token behind them was verified. A flow node is already inside the trust boundary — whoever can edit flows can edit the tool — so a tool restricted to certain callers over MCP is still callable here, and the listing shows it. Don't use hal2Api to re-expose a gated tool to an outside caller; that gate is yours to reproduce. Arguments are not checked against the schema here either: a flow is trusted to send what it means.
 
 See `examples/json-api.json` for a ready-made HTTP endpoint flow.
 
@@ -719,7 +747,7 @@ nearly there or nowhere near; the share does, in the unit the rules were tuned i
   its ordinary firing discipline and simply carries `true`, exactly as the boolean output type does.
   It never sends `false`, and the editor says so where you choose it.
 
-- **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, with automatic migration.
+- **Groups redesigned** — group identity now lives on the Event handler and membership per Item on each Thing, with HAType-aware compatibility (see [Groups](#groups)). Replaces the old `hal2Group` node, removed in 4.0.0.
 - **Multi-filter on Things and Items** — combine several match conditions on any message field (exact string, regex, MQTT wildcard, starts/ends/contains) with AND/OR logic, replacing the old single-topic filter.
 - **Centralised ingress/egress functions** — define message-transform functions once on the Event handler and reuse them across thing types instead of copying them per type.
 - **Notes & tags** on Things and Items, plus automatically derived device **categories** — handy for organising devices and for disambiguation by the MCP and JSON API tools.

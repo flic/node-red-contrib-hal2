@@ -4,10 +4,15 @@ module.exports = function (RED) {
         RED.nodes.createNode(this, config);
         const node = this;
 
-        const mcpServer = RED.nodes.getNode(config.mcpServer);
-        if (!mcpServer) {
-            node.error('No MCP server configured');
-            node.status({ fill: 'red', shape: 'ring', text: 'no MCP server' });
+        // Answers calls on the event handler's /mcp. A node still pointing at a hal2MCPServer,
+        // removed in 4.0.0, says so.
+        const eventHandler = RED.nodes.getNode(config.eventHandler);
+        if (!eventHandler) {
+            const legacy = !config.eventHandler && config.mcpServer;
+            node.error(legacy
+                ? 'Points at a hal2MCPServer, removed in 4.0.0. Convert the flows in the editor.'
+                : 'No event handler configured');
+            node.status({ fill: 'red', shape: 'ring', text: legacy ? 'hal2MCPServer removed — convert' : 'no event handler' });
             return;
         }
 
@@ -32,7 +37,7 @@ module.exports = function (RED) {
                     ? payload
                     : (typeof payload === 'string' ? payload : JSON.stringify(payload));
             }
-            mcpServer.resolveMCPCall(callId, content);
+            eventHandler.resolveMCPCall(callId, content);
             node.status({ fill: 'green', shape: 'dot', text: 'responded' });
             setTimeout(() => node.status({ fill: 'grey', shape: 'ring', text: 'idle' }), 1000);
         });

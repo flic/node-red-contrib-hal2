@@ -20,7 +20,10 @@ function buildGate(claims, { claimName = 'groups', readValue = '', writeValue = 
             return toolClass(toolName) === 'write'
                 ? gate.allows(writeValue, writeScope) : true;
         },
-        allowsValue: list => gate.allows(list)
+        allowsValue: list => gate.allows(list),
+        allowsEntry: entry => entry.access === 'read'
+            ? gate.allows(entry.requiredValue)
+            : gate.allows(entry.requiredValue) && gate.allows(writeValue, writeScope)
     };
 }
 
@@ -109,6 +112,42 @@ describe('read/write tool gate', function () {
     });
 });
 
+
+describe('flow tool classes', function () {
+    const opts = { readValue: 'family', writeValue: 'ops', readScope: 'mcp:read', writeScope: 'mcp:write' };
+    const reader = { groups: ['family'], scope: 'mcp:read' };
+    const writer = { groups: ['family', 'ops'], scope: 'mcp:read mcp:write' };
+
+    it('holds a read tool to the read gate only', function () {
+        assert.strictEqual(buildGate(reader, opts).allowsEntry({ access: 'read', requiredValue: '' }), true);
+        assert.strictEqual(buildGate({ groups: ['family'] }, opts).allowsEntry({ access: 'read', requiredValue: '' }), false);
+    });
+
+    it('holds a write tool, and one with no class, to the write gate as well', function () {
+        for (const entry of [{ access: 'write', requiredValue: '' }, { requiredValue: '' }]) {
+            assert.strictEqual(buildGate(reader, opts).allowsEntry(entry), false);
+            assert.strictEqual(buildGate(writer, opts).allowsEntry(entry), true);
+        }
+        // The write list without the write scope is not enough.
+        assert.strictEqual(buildGate({ groups: ['family', 'ops'], scope: 'mcp:read' }, opts)
+            .allowsEntry({ access: 'write', requiredValue: '' }), false);
+    });
+
+    it('applies the tool\'s own value list on top of its class', function () {
+        assert.strictEqual(buildGate(reader, opts).allowsEntry({ access: 'read', requiredValue: 'ops' }), false);
+        assert.strictEqual(buildGate(writer, opts).allowsEntry({ access: 'read', requiredValue: 'ops' }), true);
+    });
+});
+
+describe('built-in tool schemas', function () {
+    const { unsupportedKeywords } = require('../lib/schema');
+
+    it('use only keywords the argument check enforces', function () {
+        for (const t of MCP_TOOLS) {
+            assert.deepStrictEqual(unsupportedKeywords(t.inputSchema), [], t.name);
+        }
+    });
+});
 
 describe('client scope gate', function () {
     // The user axis is satisfied throughout, so every result below is the scope axis speaking.

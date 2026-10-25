@@ -2,13 +2,12 @@
 
 const assert = require('node:assert');
 const {
-    MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES,
-    MCP_READ_TOOL_NAMES, MCP_WRITE_TOOL_NAMES, toolClass, expandHaTypeFilter
+    MCP_TOOLS, MCP_READ_TOOL_NAMES, MCP_WRITE_TOOL_NAMES, toolClass, expandHaTypeFilter
 } = require('../core/mcp-tools');
 
 describe('core/mcp-tools catalog', function () {
     it('every tool has a name, description and object inputSchema', function () {
-        for (const t of [...MCP_TOOLS, ...MCP_TOOLS_ADMIN]) {
+        for (const t of MCP_TOOLS) {
             assert.ok(t.name && typeof t.name === 'string', 'missing name');
             assert.ok(t.description && typeof t.description === 'string', t.name + ' missing description');
             assert.ok(t.inputSchema && t.inputSchema.type === 'object', t.name + ' bad inputSchema');
@@ -16,21 +15,13 @@ describe('core/mcp-tools catalog', function () {
     });
 
     it('has no duplicate tool names', function () {
-        const names = [...MCP_TOOLS, ...MCP_TOOLS_ADMIN].map(t => t.name);
+        const names = MCP_TOOLS.map(t => t.name);
         assert.strictEqual(names.length, new Set(names).size, 'duplicate tool name');
     });
 
-    it('admin tool names set matches the admin tool list', function () {
-        assert.strictEqual(MCP_ADMIN_TOOL_NAMES.size, MCP_TOOLS_ADMIN.length);
-        for (const t of MCP_TOOLS_ADMIN) {
-            assert.ok(MCP_ADMIN_TOOL_NAMES.has(t.name), t.name + ' not in admin set');
-        }
-    });
-
-    it('admin tools are not also listed as regular tools', function () {
-        const regular = new Set(MCP_TOOLS.map(t => t.name));
-        for (const t of MCP_TOOLS_ADMIN) {
-            assert.ok(!regular.has(t.name), t.name + ' is both admin and regular');
+    it('has no admin tools left: Node-RED is administered with mcp-server\'s MCP Admin', function () {
+        for (const n of ['get_flow', 'deploy_flow']) {
+            assert.ok(!MCP_TOOLS.some(t => t.name === n), n + ' is still in the catalog');
         }
     });
 
@@ -42,13 +33,9 @@ describe('core/mcp-tools catalog', function () {
         assert.deepStrictEqual(missing, [], 'unclassified: ' + missing.join(', '));
     });
 
-    it('the three classes are disjoint', function () {
+    it('the two classes are disjoint', function () {
         for (const n of MCP_READ_TOOL_NAMES) {
             assert.ok(!MCP_WRITE_TOOL_NAMES.has(n), n + ' is both read and write');
-            assert.ok(!MCP_ADMIN_TOOL_NAMES.has(n), n + ' is both read and admin');
-        }
-        for (const n of MCP_WRITE_TOOL_NAMES) {
-            assert.ok(!MCP_ADMIN_TOOL_NAMES.has(n), n + ' is both write and admin');
         }
     });
 
@@ -64,7 +51,7 @@ describe('core/mcp-tools catalog', function () {
         assert.strictEqual(toolClass('some_future_tool'), 'write');
         assert.strictEqual(toolClass(''), 'write');
         assert.strictEqual(toolClass('get_state'), 'read');
-        assert.strictEqual(toolClass('deploy_flow'), 'admin');
+        assert.strictEqual(toolClass('deploy_flow'), 'write');
     });
 
     it('expandHaTypeFilter returns a Set that always contains the input key', function () {

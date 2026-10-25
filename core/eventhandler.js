@@ -5,14 +5,15 @@ const analyzePatterns = require('./analyzePatterns');
 const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
 const oauthDiscovery = require('../lib/oauth-discovery');
-const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter, hostRegistry, removeOwnedRoutes } = require('../lib/httpGuards');
+const { validateArgs, unsupportedKeywords } = require('../lib/schema');
 
 const {
-    MCP_TOOLS, MCP_TOOLS_ADMIN, MCP_ADMIN_TOOL_NAMES, toolClass,
+    MCP_TOOLS, toolClass,
     TOOL_HARDWARE_REQUIREMENTS, expandHaTypeFilter, deriveCategories,
     itemMatchesHaTypeFilter, lightTargets, writesOnOff, nothingToCommand, itemSatisfies, fanValue, presenceIdentity, resolveByName, projectDevices
 } = require('./mcp-tools');
-const { createToolGate, claimAllows, requiredScopeChallenge,
+const { createToolGate, requiredScopeChallenge,
         advertisedScopes, visibleTools,
         gateReadsClaim } = require('../lib/claim-gate');
 const toolResult = require('../lib/tool-result');
@@ -45,33 +46,16 @@ function httpGet(url, headers) {
     });
 }
 
-function httpRequest(method, hostname, port, path, headers, body) {
-    return new Promise((resolve, reject) => {
-        const data = body ? JSON.stringify(body) : null;
-        const hdrs = Object.assign({ 'Content-Type': 'application/json', 'Node-RED-API-Version': 'v2' }, headers);
-        if (data) hdrs['Content-Length'] = Buffer.byteLength(data);
-        const req = http.request({ method, hostname, port, path, headers: hdrs }, res => {
-            let raw = '';
-            res.on('data', c => raw += c);
-            res.on('end', () => {
-                try   { resolve({ status: res.statusCode, body: JSON.parse(raw) }); }
-                catch { resolve({ status: res.statusCode, body: raw }); }
-            });
-        });
-        req.on('error', reject);
-        if (data) req.write(data);
-        req.end();
-    });
-}
-
 // Every name the built-in dispatchers answer to. A dynamic hal2MCPIn tool with one of
 // these names would register fine but never fire — node.callTool tries the built-ins
 // first — so registration refuses it loudly instead (see registerMCPTool).
 const BUILTIN_TOOL_NAMES = new Set([
     ...MCP_TOOLS.map(t => t.name),
-    ...MCP_TOOLS_ADMIN.map(t => t.name),
     'control_light'   // undocumented alias of set_light, accepted by the dispatcher
 ]);
+
+// The built-in tools' input schemas by name, checked before a call on the MCP route is run.
+const BUILTIN_SCHEMAS = new Map(MCP_TOOLS.map(t => [t.name, t.inputSchema]));
 
 // ── EventHandler node ─────────────────────────────────────────────────────────
 
@@ -112,7 +96,12 @@ module.exports = function(RED) {
             return (node.egressLibrary || []).find(f => f.id === id);
         };
 
-        node.registerMCPTool = function (toolName, description, schema, timeoutSec, requiredValue, ownerId) {
+        // opts.access: 'read' or 'write' (the default) — which of the read and write gates a call
+        // must clear, as for the built-in tools. opts.validate: false lets a tool take arguments
+        // its schema does not describe; checked against the schema otherwise (lib/schema.js).
+        node.registerMCPTool = function (toolName, description, schema, timeoutSec, requiredValue, ownerId, opts) {
+            const access   = opts && opts.access === 'read' ? 'read' : 'write';
+            const validate = !(opts && opts.validate === false);
             // A built-in name is refused, not shadowed: callTool dispatches to the built-ins
             // before the dynamic registry, so a flow behind this name would never run — and
             // registering it anyway would list the same name twice in tools/list.
@@ -130,9 +119,16 @@ module.exports = function(RED) {
                     + 'each call will run every one of those flows, with unpredictable results. '
                     + 'Rename the tools so each name is unique.');
             }
+            // Said once, at registration: a keyword the validator does not check would otherwise
+            // look like a constraint that holds.
+            const unchecked = validate ? unsupportedKeywords(schema) : [];
+            if (unchecked.length) {
+                node.warn('MCP tool "' + toolName + '": the input schema uses ' + unchecked.join(', ')
+                    + ', which argument validation does not check. Everything else in it is checked.');
+            }
             node.mcpRegisteredTools[toolName] = {
                 description, schema, timeoutMs: (timeoutSec || 30) * 1000,
-                requiredValue: requiredValue || '', ownerId
+                requiredValue: requiredValue || '', access, validate, ownerId
             };
             node.log('MCP tool registered: ' + toolName);
         };
@@ -328,12 +324,6 @@ module.exports = function(RED) {
         // members and shaped exactly like a hal2Thing item's — state/laststate, its own
         // last_update/last_change — so hal2Event, hal2Value, hal2Gate and hal2Bayes can
         // read a group wherever they can read a thing.
-        //
-        // Back-compat: legacy hal2Group nodes are folded in automatically (in memory)
-        // by reading their config — old flows keep working with no file changes and no
-        // manual step. tools/migrate-groups.js makes this permanent (and removes the
-        // dead nodes). The group's node id is reused as the group id throughout, so
-        // Action/Event references keep pointing at the same id either way.
 
         node.groupWirings = [];
         // groupId -> { state, laststate, last_update, last_change, members, live, fn, name }
@@ -413,10 +403,7 @@ module.exports = function(RED) {
             return out;
         };
 
-        // groupId -> { ratelimit, aggregate, name, legacy } merged from the registry and any
-        // legacy hal2Group nodes belonging to this handler. The registry wins on collision
-        // (i.e. once a group has been migrated, its hal2Group node is ignored). Legacy nodes
-        // never carry an aggregate — the field only exists in the registry.
+        // groupId -> { ratelimit, aggregate, name, haType, notes, tags } from the registry.
         function buildGroupDefs() {
             const defs = new Map();
             for (const g of node.groups) {
@@ -430,23 +417,9 @@ module.exports = function(RED) {
                     name: g.name || g.id,
                     haType: g.haType || '',
                     notes: g.notes || '',
-                    tags: Array.isArray(g.tags) ? g.tags : [],
-                    legacy: false
+                    tags: Array.isArray(g.tags) ? g.tags : []
                 });
             }
-            RED.nodes.eachNode(function (cfg) {
-                if (cfg.type !== 'hal2Group' || cfg.eventHandler !== node.id) return;
-                if (defs.has(cfg.id)) return;
-                defs.set(cfg.id, {
-                    ratelimit: Number(cfg.ratelimit) || 0,
-                    aggregate: null,          // a legacy node has no HAType to derive from
-                    name: cfg.name || cfg.id,
-                    haType: '',
-                    notes: '',
-                    tags: [],
-                    legacy: true
-                });
-            });
             return defs;
         }
 
@@ -457,7 +430,7 @@ module.exports = function(RED) {
                 if (!members.has(groupId)) members.set(groupId, []);
                 members.get(groupId).push({ thing: thing, item: item });
             };
-            // New model: membership declared per item on each thing.
+            // Membership is declared per item on each thing.
             RED.nodes.eachNode(function (cfg) {
                 if (cfg.type !== 'hal2Thing') return;
                 const thing = RED.nodes.getNode(cfg.id);
@@ -465,15 +438,6 @@ module.exports = function(RED) {
                 if (!Array.isArray(thing.groups)) return;
                 for (const m of thing.groups) {
                     if (m && m.group) add(m.group, thing.id, m.item);
-                }
-            });
-            // Legacy model: hal2Group nodes (folded in memory, unless already migrated).
-            RED.nodes.eachNode(function (cfg) {
-                if (cfg.type !== 'hal2Group' || cfg.eventHandler !== node.id) return;
-                if (node.groups.some(g => g.id === cfg.id)) return;
-                const list = Array.isArray(cfg.group) ? cfg.group : [];
-                for (const m of list) {
-                    if (m && m.thing) add(cfg.id, m.thing, m.item);
                 }
             });
             return members;
@@ -629,11 +593,9 @@ module.exports = function(RED) {
             const info = [];
             node.groupCommanders = {};
             node.groupReaders = {};
-            let legacyCount = 0;
             for (const [groupId, def] of defs) {
                 const groupMembers = members.get(groupId) || [];
                 const ratelimit    = def.ratelimit;
-                if (def.legacy) legacyCount += 1;
 
                 const caps = memberCapabilities(groupMembers);
                 info.push({
@@ -736,10 +698,6 @@ module.exports = function(RED) {
             if (valueGroups.length) {
                 node.log('Group values: ' + valueGroups.join(', '));
             }
-            if (legacyCount > 0) {
-                node.warn('Group engine: auto-handling ' + legacyCount + ' legacy hal2Group node(s) in memory. ' +
-                    'Run tools/migrate-groups.js to make this permanent and remove the deprecated nodes.');
-            }
         }
 
         // Wire after every (re)start, once all things have registered so membership
@@ -781,7 +739,6 @@ module.exports = function(RED) {
                               '" is not a valid URL — filtering disabled, matching on path only');
                 }
             }
-            node.mcpExpectedHost = expectedHost;   // read by standalone hal2MCPServer nodes
             // Each well-known document is reachable both at the concatenated path
             // (<prefix>/.well-known/<name>, what most MCP clients request) and at the
             // RFC 8414 form (/.well-known/<name><prefix>). No prefix → one route.
@@ -807,8 +764,13 @@ module.exports = function(RED) {
             // in `aud` for an API, so the field is only needed by a provider that uses something
             // else. The issuer is always enforced regardless (see validateToken).
             const tokenAudience = (config.mcpAudience || '').trim();
-            const adminEnabled  = config.adminToolsEnabled === true;
-            const adminPort     = Number(config.adminPort || 1880);
+            // 3.x offered get_flow/deploy_flow from here. 4.0.0 leaves administering Node-RED to
+            // node-red-contrib-mcp-server's MCP Admin node; said once, rather than left for a
+            // caller to discover.
+            if (config.adminToolsEnabled === true) {
+                node.warn('Admin tools are no longer part of hal2. Administer Node-RED over MCP with the '
+                    + 'MCP Admin node of @frtnbach/node-red-contrib-mcp-server.');
+            }
             // A fixed base plus whatever the provider needs to release the claim the gate reads.
             // `openid` is not negotiable — without it the flow is not OIDC at all — and `profile`
             // earns its place because providers commonly attach custom claims to it. The rest of
@@ -816,10 +778,10 @@ module.exports = function(RED) {
             const BASE_SCOPES   = ['openid', 'profile', 'email'];
             const extraScopes   = (config.mcpExtraScopes || '').trim().split(/\s+/).filter(Boolean);
             const mcpScopesArr  = BASE_SCOPES.concat(extraScopes).filter((v, i, a) => a.indexOf(v) === i);
-            const gateClaim     = (config.adminRequiredClaim || 'groups').trim();
-            // Default 'admin' only when never set (undefined). Empty string is respected
-            // as "allow any authenticated user" per the UI help text.
-            const adminValue    = (config.adminRequiredValue === undefined ? 'admin' : config.adminRequiredValue).trim();
+            // The one claim every gate here matches against. `sub` by default: the one claim every
+            // JWT access token carries (RFC 9068 §2.2), where `groups` exists only if the provider
+            // puts it there. Saved as adminRequiredClaim before 4.0.0, which is still read.
+            const gateClaim     = ((config.accessClaim !== undefined ? config.accessClaim : config.adminRequiredClaim) || 'sub').trim();
             // Read and write default to empty — no constraint — so an existing install
             // behaves exactly as before until the fields are filled in.
             const readValue     = (config.readRequiredValue  || '').trim();
@@ -836,12 +798,6 @@ module.exports = function(RED) {
             const requiredScopes = requiredScopeChallenge([readScope, writeScope]);
             const advertisedArr  = advertisedScopes(mcpScopesArr, requiredScopes);
             const advertisedStr  = advertisedArr.join(' ');
-            node.mcpAdvertisedScopes = advertisedArr;   // read by standalone hal2MCPServer nodes
-
-            // Admin keeps its own check inside dispatchAdminTools, where it also guards the
-            // hal2Api path — only the matcher changes, so a single value still behaves as
-            // before while comma-separated lists now work too.
-            const isAdmin = claims => claimAllows(claims, gateClaim, adminValue);
 
             // Read/write authorization for the MCP surface. Built once per request from
             // verified claims and handed to callTool in opts — deliberately not derived from
@@ -858,31 +814,19 @@ module.exports = function(RED) {
                         return toolClass(toolName) === 'write'
                             ? gate.allows(writeValue, writeScope) : true;
                     },
-                    // Dynamic hal2MCPIn tools carry their own list instead of a class.
-                    allowsValue: list => gate.allows(list)
+                    // Flow-defined tools carry a class of their own and a list on top of it.
+                    allowsEntry: entry => entry.access === 'read'
+                        ? gate.allows(entry.requiredValue)
+                        : gate.allows(entry.requiredValue) && gate.allows(writeValue, writeScope)
                 };
-            }
-
-            // ── Admin API helper ───────────────────────────────────────────────
-
-            // Follows httpAdminRoot, so the admin tools keep working with the editor moved off '/'.
-            const adminPrefix = common.adminPathPrefix(RED.settings.httpAdminRoot);
-
-            function adminApi(method, path, body) {
-                if (adminPrefix === null) {
-                    throw new Error('the Node-RED admin API is disabled (httpAdminRoot is false)');
-                }
-                const token = (node.credentials && node.credentials.adminToken) || '';
-                const hdrs  = token ? { 'Authorization': 'Bearer ' + token } : {};
-                return httpRequest(method, 'localhost', adminPort, adminPrefix + path, hdrs, body);
             }
 
             // ── MCP auth (OIDC discovery, JWKS, token validation, Bearer middleware) ──
             // See core/mcp-auth.js. External deps injected so the module stays testable.
-            // Groups granted to the local debug token (comma-separated), so gates with other values
-            // can be tested without an identity provider. None unless written in: the token
-            // replaces OAuth on every MCP route, public ones included, and admin is not something
-            // it should carry by default.
+            // Values of the access claim granted to the local debug token (comma-separated), so the
+            // gates can be tested without an identity provider. None unless written in: the token
+            // replaces OAuth on every MCP route, public ones included, so it carries nothing it was
+            // not given.
             const localDebugToken  = (node.credentials && node.credentials.localDebugToken) || '';
             const localDebugGroups = (config.localDebugGroups || '')
                 .split(',').map(s => s.trim()).filter(Boolean);
@@ -890,9 +834,7 @@ module.exports = function(RED) {
             // rather than only in a password field nobody opens.
             if (localDebugToken) {
                 node.warn('Local debug token is set — OAuth is bypassed on every MCP route of this '
-                    + 'event handler, public ones included, for groups=' + JSON.stringify(localDebugGroups)
-                    + (adminEnabled && isAdmin({ groups: localDebugGroups })   // the claims validateToken hands out
-                        ? ' — this token can deploy flows' : '')
+                    + 'event handler, public ones included, with ' + gateClaim + '=' + JSON.stringify(localDebugGroups)
                     + '. Clear the field when OAuth is available.');
             }
 
@@ -900,14 +842,11 @@ module.exports = function(RED) {
                 issuerUrl, tokenTTL, tokenAudience, mcpServerUrl: publicBase, resourceUrl,
                 advertisedScopes: advertisedStr,
                 gateClaim,
-                // Asked per token, not fixed here: the admin list and each hal2MCPIn tool's own
-                // list read the same claim, and the tools register after this runs. Checking only
-                // the read and write lists let a token without the claim hide the admin tools
-                // without a word. Standalone hal2MCPServer nodes gate on their own claim and are
-                // not covered by this warning.
+                // Asked per token, not fixed here: each flow-defined tool's own list reads the same
+                // claim, and those tools register after this runs. Checking only the read and write
+                // lists let a token without the claim hide them without a word.
                 gateClaimRequired: () => gateReadsClaim({
-                    serverValue: readValue + ',' + writeValue, adminToolsEnabled: adminEnabled,
-                    adminValue, tools: node.mcpRegisteredTools
+                    serverValue: readValue + ',' + writeValue, tools: node.mcpRegisteredTools
                 }),
                 localDebugToken,
                 localDebugGroups,
@@ -1135,19 +1074,11 @@ module.exports = function(RED) {
                 return { success: true, name: thing.name, item_id: itemId, value };
             }
 
-            // ── Auth middleware helper ─────────────────────────────────────────
-            node.requireBearer = requireBearer;
-            // Read by standalone hal2MCPServer nodes: requireBearer exists regardless, but
-            // without mcpEnabled no OAuth discovery routes are registered, so clients could
-            // authenticate in principle yet never complete a login — refuse early instead.
-            node.mcpEnabled = !!config.mcpEnabled;
-
         // ── Shared tool dispatcher (used by the /mcp route and the hal2Api node) ──
         // Returns a uniform shape: { ok:true, text } | { ok:true, content } | { ok:false, code, message }
         // Tool-result shims — pure, shared by every dispatcher below.
-        // See lib/tool-result.js: hal2Api reads this shape, and a standalone hal2MCPServer
-        // produces the same one, so it is defined in one place rather than three.
-        const { toolOk, respond, rpcErr } = toolResult;
+        // See lib/tool-result.js: hal2Api reads this shape, so it is defined in one place.
+        const { toolOk, respond, rpcErr, unknownTool } = toolResult;
 
         // Built-in tool handlers, grouped by concern. Each returns a tool result when it handles
         // the named tool, or undefined to let the next dispatcher try. node.callTool (below) is a
@@ -1750,71 +1681,6 @@ module.exports = function(RED) {
                     return undefined;
         }
 
-        async function dispatchAdminTools(toolName, args, claims, opts) {
-                    // Admin tools — handled internally
-                    if (MCP_ADMIN_TOOL_NAMES.has(toolName)) {
-                        if (!opts.adminEnabled) return rpcErr(-32601, 'Unknown tool: ' + toolName);
-                        // Admin tools require a verified admin claim. Callers with no claims at all
-                        // (e.g. hal2Api invoked without msg.claims) are rejected — the adminEnabled
-                        // flag alone must never be sufficient to reach get_flow/deploy_flow. To use
-                        // admin tools via hal2Api, the flow must set an explicit admin claim on the
-                        // message (e.g. msg.claims = { groups: ['admin'] }).
-                        if (!claims || !isAdmin(claims)) {
-                            node.status({ fill: 'red', shape: 'ring', text: 'forbidden' });
-                            return rpcErr(-32000, 'Access denied: the "' + toolName + '" tool requires admin privileges, '
-                                + 'which your token does not have. This is a permission restriction, not a tool error.');
-                        }
-                        // Flow IDs go straight into the admin HTTP path; constrain to the
-                        // Node-RED id charset so a crafted id can't traverse or inject into it.
-                        if (args.id !== undefined && !/^[A-Za-z0-9._-]+$/.test(String(args.id))) {
-                            return rpcErr(-32602, 'Invalid flow id');
-                        }
-                        try {
-                            if (toolName === 'get_flow') {
-                                if (!args.id) {
-                                    const r        = await adminApi('GET', '/flows');
-                                    const allNodes = Array.isArray(r.body) ? r.body
-                                        : (Array.isArray(r.body?.flows) ? r.body.flows : []);
-                                    const tabs  = allNodes.filter(n => n.type === 'tab');
-                                    const lines = ['**Node-RED flikar:**', ''];
-                                    tabs.forEach(tab => {
-                                        const count = allNodes.filter(n => n.z === tab.id).length;
-                                        lines.push('- **' + tab.label + '**' + (tab.disabled ? ' [disabled]' : ''));
-                                        lines.push('  ID: `' + tab.id + '`  |  Nodes: ' + count);
-                                    });
-                                    node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                                    return toolOk(lines.join('\n'));
-                                }
-                                const r = await adminApi('GET', '/flow/' + args.id);
-                                if (r.status === 404) {
-                                    node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                                    return toolOk('Flow \'' + args.id + '\' not found.');
-                                }
-                                node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                                return toolOk(JSON.stringify(r.body, null, 2));
-                            }
-
-                            if (toolName === 'deploy_flow') {
-                                const tabId    = args.id || crypto.randomBytes(8).toString('hex');
-                                const nodes    = (args.nodes || []).map(n => Object.assign({}, n, { z: n.z || tabId }));
-                                const flowBody = { id: tabId, label: args.label, nodes };
-                                const r = args.id
-                                    ? await adminApi('PUT',  '/flow/' + args.id, flowBody)
-                                    : await adminApi('POST', '/flow',             flowBody);
-                                node.status({ fill: 'green', shape: 'dot', text: 'ready' });
-                                if (r.status === 200 || r.status === 204) {
-                                    return toolOk('Flow \'' + args.label + '\' deployed. ID: ' + (r.body.id || tabId));
-                                }
-                                return toolOk('Deploy failed (' + r.status + '): ' + JSON.stringify(r.body));
-                            }
-                        } catch (e) {
-                            node.status({ fill: 'red', shape: 'ring', text: 'admin error' });
-                            return toolOk('Admin call error: ' + e.message);
-                        }
-                    }
-                    return undefined;
-        }
-
         async function dispatchHistoryTools(toolName, args, claims, opts) {
                     // get_history
                     if (toolName === 'get_history') {
@@ -2063,10 +1929,8 @@ module.exports = function(RED) {
         }
 
         // What this endpoint offers, in the shape tools/list uses: the built-in catalogue plus
-        // everything registered in embedded mode. The gate allows everything because the flow
-        // path does — listing less than hal2Api can call would be a lie. Admin tools are left
-        // out: reaching them needs the API node's own checkbox and an admin claim, so listing
-        // them unconditionally would advertise a door most callers cannot open.
+        // everything flow-defined tools added. The gate allows everything because the flow path
+        // does — listing less than hal2Api can call would be a lie.
         node.listTools = function () {
             return MCP_TOOLS.concat(visibleTools(node.mcpRegisteredTools, { allows: () => true }));
         };
@@ -2076,19 +1940,28 @@ module.exports = function(RED) {
             opts = opts || {};
 
             // Read/write gating, only when the caller supplied a gate — i.e. the MCP route,
-            // where the claims behind it were actually verified. Admin tools carry their own
-            // check inside dispatchAdminTools and are skipped here. Checked before the
+            // where the claims behind it were actually verified. Checked before the
             // not_configured answer, or a caller without the read claim could still map out
             // which hardware categories (and location name) exist by probing control tools.
-            if (opts.gate && !MCP_ADMIN_TOOL_NAMES.has(toolName)) {
-                const dynamic = node.mcpRegisteredTools[toolName];
-                const allowed = dynamic
-                    ? opts.gate.allowsValue(dynamic.requiredValue)
-                    : opts.gate.allows(toolName);
+            const dynamic = node.mcpRegisteredTools[toolName];
+            if (opts.gate) {
+                const allowed = dynamic ? opts.gate.allowsEntry(dynamic) : opts.gate.allows(toolName);
                 if (!allowed) {
                     node.status({ fill: 'red', shape: 'ring', text: 'forbidden' });
                     return rpcErr(-32000, 'Access denied: the "' + toolName + '" tool requires a permission '
                         + 'your token does not have. This is a permission restriction, not a tool error.');
+                }
+            }
+
+            // Arguments from the MCP route are the caller's: checked against the tool's schema
+            // before anything is built from them. Flows (hal2Api) are trusted and not checked.
+            if (opts.validate) {
+                const schema = dynamic ? (dynamic.validate !== false ? dynamic.schema : null) : BUILTIN_SCHEMAS.get(toolName);
+                const problems = schema ? validateArgs(schema, args) : [];
+                if (problems.length) {
+                    node.status({ fill: 'red', shape: 'ring', text: 'invalid arguments' });
+                    return rpcErr(-32602, 'Invalid arguments for "' + toolName + '": ' + problems.join('; ')
+                        + '. Check the tool\'s input schema and call again.');
                 }
             }
 
@@ -2101,7 +1974,6 @@ module.exports = function(RED) {
             let r;
             r = await dispatchReadTools(toolName, args, claims, opts);    if (r !== undefined) return r;
             r = await dispatchControlTools(toolName, args, claims, opts); if (r !== undefined) return r;
-            r = await dispatchAdminTools(toolName, args, claims, opts);   if (r !== undefined) return r;
             r = await dispatchHistoryTools(toolName, args, claims, opts); if (r !== undefined) return r;
 
             // Dynamically registered tools (hal2MCPIn/Out)
@@ -2127,7 +1999,7 @@ module.exports = function(RED) {
                 }
             }
 
-            return rpcErr(-32601, 'Unknown tool: ' + toolName);
+            return unknownTool(toolName);
         };
 
             if (config.mcpEnabled) {
@@ -2135,17 +2007,21 @@ module.exports = function(RED) {
             // ── HTTP hardening middleware ──────────────────────────────────────
             // The MCP routes live on RED.httpNode, exposed to the internet behind a proxy.
             // Per-IP rate limiting and a Content-Length cap blunt brute-force, DCR spam and
-            // oversized-payload (deploy_flow) abuse. See lib/httpGuards.js — shared with
-            // hal2MCPServer; warns once if the proxy's client IPs aren't trusted.
+            // oversized-payload abuse. See lib/httpGuards.js; warns once if the proxy's client IPs
+            // aren't trusted.
             const { rateLimit, maxBody, jsonBody } = createHttpGuards({ warn: msg => node.warn(msg) });
 
             // One guard for every route this node registers, tagged so the close handler can
             // remove exactly these — several EventHandlers may share the same paths when Host
-            // filtering splits them, and a path-only removal would strip the siblings too.
-            const guard = hostFilter(expectedHost);
+            // filtering splits them, and a path-only removal would strip the siblings too. The
+            // registry (shared with node-red-contrib-mcp-server's servers) makes a filtered route
+            // win its hostname whatever order the routes were registered in; an unfiltered one
+            // steps aside for a hostname a filtered sibling has claimed.
+            const registry = hostRegistry(RED.httpNode);
+            const guard = hostFilter(expectedHost, registry);
             guard._mcpOwner = node.id;
-
-
+            registry.claim(node.id, expectedHost,
+                resourceMetadataPaths.map(p => ['GET', p]).concat([['POST', mcpPrefix + '/mcp']]));
 
             // ── OAuth: /.well-known/oauth-protected-resource ───────────────────
 
@@ -2198,9 +2074,9 @@ module.exports = function(RED) {
                                           'scene status can change at any time. When in doubt, call get_all_states ' +
                                           'or the relevant tool again before answering. ' +
                                           'Available tools: ' + [
-                                              ...MCP_TOOLS.filter(t => !getNotConfiguredError(t.name) && gate.allows(t.name)),
-                                              ...(adminEnabled && isAdmin(claims) ? MCP_TOOLS_ADMIN : [])
-                                          ].map(t => t.name).join(', ') + '.'
+                                              ...MCP_TOOLS.filter(t => !getNotConfiguredError(t.name) && gate.allows(t.name)).map(t => t.name),
+                                              ...Object.entries(node.mcpRegisteredTools).filter(([, t]) => gate.allowsEntry(t)).map(([n]) => n)
+                                          ].join(', ') + '.'
                     });
                 }
 
@@ -2213,9 +2089,8 @@ module.exports = function(RED) {
                     // Filtered rather than listed-then-refused: a tool the caller cannot use
                     // should not appear, or the model wastes turns discovering it is barred.
                     const tools = MCP_TOOLS.filter(t => !getNotConfiguredError(t.name) && gate.allows(t.name));
-                    if (adminEnabled && isAdmin(claims)) tools.push(...MCP_TOOLS_ADMIN);
                     for (const [name, t] of Object.entries(node.mcpRegisteredTools)) {
-                        if (!gate.allowsValue(t.requiredValue)) { continue; }
+                        if (!gate.allowsEntry(t)) { continue; }
                         const s = t.schema;
                         const inputSchema = (s && s.type === 'object')
                             ? s
@@ -2229,7 +2104,7 @@ module.exports = function(RED) {
                 if (method === 'tools/call') {
                     node.status({ fill: 'blue', shape: 'dot', text: params.name });
                     const out = await node.callTool(params.name, params.arguments || {}, claims,
-                        { adminEnabled: adminEnabled, gate: gate });
+                        { gate: gate, validate: true });
                     node.status({ fill: out.ok ? 'green' : 'red', shape: 'dot', text: out.ok ? 'ready' : 'error' });
                     if (out.ok && out.content) return respond({ content: out.content });
                     if (out.ok)                return toolOk(out.text);
@@ -2266,13 +2141,13 @@ module.exports = function(RED) {
                 const router = RED.httpNode && RED.httpNode._router;
                 for (const p of resourceMetadataPaths)                        { removeOwnedRoutes(router, 'get', p, node.id); }
                 removeOwnedRoutes(router, 'post', mcpPrefix + '/mcp', node.id);
+                hostRegistry(RED.httpNode).release(node.id);
             }
         });
     }
 
     RED.nodes.registerType("hal2EventHandler", hal2EventHandler, {
         credentials: {
-            adminToken           : { type: 'password' },
             localDebugToken      : { type: 'password' }
         }
     });

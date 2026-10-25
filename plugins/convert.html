@@ -1,0 +1,79 @@
+<script src="resources/node-red-contrib-hal2/convert.js"></script>
+<script type="text/javascript">
+(function () {
+    // Offers the 4.0 conversion of hal2's removed nodes once flows are loaded. Read and written
+    // through the runtime's own Admin API (GET/POST flows, v2): a normal deploy with a revision
+    // check, independent of how the editor shows nodes whose type has no definition — which is
+    // what hal2MCPServer and hal2Group are in 4.0.0.
+    var API_HEADERS = { 'Node-RED-API-Version': 'v2' };
+    var notification = null;
+    // RED.notify renders HTML, and names in the notes are the user's text.
+    var esc = function (t) { return $('<span>').text(t).html(); };
+
+    function fail(message) { RED.notify('hal2: ' + message, { type: 'error', timeout: 10000 }); }
+
+    // Whether node-red-contrib-mcp-server 3 is installed, which standalone servers need.
+    function mcpServerInstalled() {
+        return $.ajax({ url: 'nodes', headers: { Accept: 'application/json' }, dataType: 'json' }).then(function (sets) {
+            return (sets || []).some(function (s) { return (s.types || []).indexOf('ftb-mcp-server') !== -1; });
+        }, function () { return false; });
+    }
+
+    function readAll() {
+        return $.when($.ajax({ url: 'flows', headers: API_HEADERS, dataType: 'json' }), mcpServerInstalled())
+            .then(function (flowsAnswer, installed) {
+                var current = flowsAnswer[0];
+                return { current: current, result: window.hal2Convert4.convertFlows(current.flows, { mcpServerInstalled: installed }) };
+            });
+    }
+
+    function convert() {
+        if (RED.nodes.dirty()) { fail('deploy or discard your changes before converting.'); return; }
+        readAll().then(function (r) {
+            if (!r.result.changed.length) { if (notification) { notification.close(); } return; }
+            $.ajax({
+                url        : 'flows',
+                method     : 'POST',
+                contentType: 'application/json',
+                // Only the converted nodes restart. A revision that moved on since the read is
+                // rejected with 409 rather than overwritten.
+                headers    : $.extend({ 'Node-RED-Deployment-Type': 'nodes' }, API_HEADERS),
+                data       : JSON.stringify({ rev: r.current.rev, flows: r.result.flows })
+            }).done(function () {
+                if (notification) { notification.close(); }
+                RED.notify('<p>hal2: converted ' + r.result.changed.length + ' node(s).</p>'
+                    + r.result.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('')
+                    + '<p>Reloading the editor…</p>', { type: 'success', timeout: 15000 });
+                setTimeout(function () { window.location.reload(); }, r.result.notes.length ? 15000 : 2000);
+            }).fail(function (xhr) {
+                fail(xhr.status === 409
+                    ? 'the flows changed while converting. Reload the editor and try again.'
+                    : 'conversion failed (' + xhr.status + ').');
+            });
+        }, function (xhr) { fail('could not read the flows (' + (xhr && xhr.status) + ').'); });
+    }
+
+    function check() {
+        $.ajax({ url: 'flows', headers: API_HEADERS, dataType: 'json' }).done(function (current) {
+            if (notification || !window.hal2Convert4.needsConversion(current.flows)) { return; }
+            readAll().then(function (r) {
+                var count = r.result.changed.length;
+                notification = RED.notify(
+                    '<p><strong>hal2 4.0</strong></p><p>hal2MCPServer and hal2Group were removed: tools and '
+                    + 'groups on them do nothing until the flows are converted. ' + (count ? count + ' node(s) can be converted now.' : 'Nothing can be converted yet.')
+                    + '</p>' + r.result.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join(''), {
+                        type   : 'warning',
+                        fixed  : true,
+                        buttons: [
+                            { text: 'Later', click: function () { notification.close(); notification = null; } }
+                        ].concat(count ? [{ text: 'Convert', class: 'primary', click: convert }] : [])
+                    });
+            });
+        });
+    }
+
+    RED.plugins.registerPlugin('hal2-convert-4', {
+        onadd: function () { RED.events.on('flows:loaded', check); }
+    });
+})();
+</script>

@@ -5,7 +5,7 @@
 const fs   = require('fs');
 const path = require('path');
 const {
-    MCP_TOOLS, MCP_TOOLS_ADMIN, TOOL_HARDWARE_REQUIREMENTS, toolClass
+    MCP_TOOLS, TOOL_HARDWARE_REQUIREMENTS, toolClass
 } = require('../core/mcp-tools');
 
 function sampleValue(prop) {
@@ -46,9 +46,8 @@ function exampleRequest(tool) {
     return `{ "tool": "${tool.name}", "args": { ${args} } }`;
 }
 
-function section(tool, isAdmin) {
-    const cls = isAdmin ? 'admin' : toolClass(tool.name);
-    const badge = { read: '👁 (read)', write: '✏️ (write)', admin: '🔒 (admin)' }[cls];
+function section(tool) {
+    const badge = { read: '👁 (read)', write: '✏️ (write)' }[toolClass(tool.name)];
     let md = `### \`${tool.name}\` ${badge}\n\n`;
     md += tool.description.trim() + '\n\n';
     const hw = TOOL_HARDWARE_REQUIREMENTS[tool.name];
@@ -62,14 +61,13 @@ function section(tool, isAdmin) {
             ? `, or one declared ${quoted(hw.classes)}.\n\n`
             : `.\n\n`;
     }
-    if (isAdmin) md += `> Exposed through hal2Api only when **Allow admin tools** is enabled on the node.\n\n`;
     md += '**Parameters**\n\n' + paramsTable(tool.inputSchema) + '\n';
     md += '**Example**\n\n```json\n' + exampleRequest(tool) + '\n```\n\n';
     return md;
 }
 
 function build() {
-    const toc = [...MCP_TOOLS, ...MCP_TOOLS_ADMIN]
+    const toc = MCP_TOOLS
         .map(t => `- [\`${t.name}\`](#${t.name.replace(/_/g, '')})`).join('\n');
 
     let md = '';
@@ -81,20 +79,17 @@ function build() {
     md += '**Request** — set `msg.payload`:\n\n';
     md += '```json\n{ "tool": "<name>", "args": { /* tool-specific */ } }\n```\n\n';
     md += '`msg.tool` / `msg.args` override the payload fields when present. ';
-    md += 'An optional `msg.claims` object is forwarded to the tool (used for admin role checks).\n\n';
+    md += 'Arguments are not checked against the schema on this path: a flow is trusted to send what it means.\n\n';
     md += '**Response** — `msg.payload`:\n\n';
     md += '```json\n{ "ok": true, "result": /* tool output */ }\n```\n\n';
     md += 'On failure:\n\n```json\n{ "ok": false, "error": { "code": -32601, "message": "…" } }\n```\n\n';
-    md += 'Most tools return a JSON object in `result`. A few admin tools return plain text.\n\n';
-    md += 'Each tool below is tagged 👁 **read**, ✏️ **write** or 🔒 **admin**. Those classes are what the ';
+    md += 'Tools return a JSON object in `result`.\n\n';
+    md += 'Each tool below is tagged 👁 **read** or ✏️ **write**. Those classes are what the ';
     md += 'MCP server\'s [access gates](../README.md#access-control) act on, so a token can be allowed to ';
     md += 'observe the house without being allowed to change it. They are informational here: the hal2Api ';
-    md += 'node is a local flow node and gates only its admin tools, via its own checkbox.\n\n';
+    md += 'node is a local flow node and is not gated.\n\n';
     md += '## Tools\n\n' + toc + '\n\n';
-    for (const t of MCP_TOOLS)       md += section(t, false);
-    md += '## Admin tools\n\n';
-    md += 'These require **Allow admin tools** to be enabled on the hal2Api node.\n\n';
-    for (const t of MCP_TOOLS_ADMIN) md += section(t, true);
+    for (const t of MCP_TOOLS) md += section(t);
     return md;
 }
 
@@ -103,4 +98,4 @@ const outFile = path.join(outDir, 'API.md');
 fs.mkdirSync(outDir, { recursive: true });
 fs.writeFileSync(outFile, build(), 'utf8');
 console.log('Wrote ' + path.relative(path.join(__dirname, '..'), outFile) +
-    ' (' + (MCP_TOOLS.length + MCP_TOOLS_ADMIN.length) + ' tools)');
+    ' (' + MCP_TOOLS.length + ' tools)');

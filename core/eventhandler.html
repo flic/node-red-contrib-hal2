@@ -164,17 +164,17 @@
                     <input type="password" id="node-config-input-localDebugToken" placeholder="(optional — bypasses OAuth)" style="width:calc(100% - 185px)" autocomplete="off">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small><i class="fa fa-exclamation-triangle"></i> <b>Bypasses authentication.</b> A request carrying this token skips OAuth entirely on <b>every</b> MCP route of this event handler — public ones and the standalone MCP server nodes included. Despite the name it is not limited to localhost, and it never expires. Meant only for setups where the OAuth flow cannot be set up; clear it when done. A start-up warning names it in the log for as long as it is set.</small>
+                    <small><i class="fa fa-exclamation-triangle"></i> <b>Bypasses authentication.</b> A request carrying this token skips OAuth entirely on <b>every</b> MCP route of this event handler, public ones included. Despite the name it is not limited to localhost, and it never expires. Meant only for setups where the OAuth flow cannot be set up; clear it when done. A start-up warning names it in the log for as long as it is set.</small>
                 </div>
 
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
-                    <label for="node-config-input-localDebugGroups" style="width:150px"><i class="fa fa-users"></i> Debug groups</label>
+                    <label for="node-config-input-localDebugGroups" style="width:150px"><i class="fa fa-users"></i> Debug claim values</label>
                     <input type="text" id="node-config-input-localDebugGroups" placeholder="(none)" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                    <small>Comma-separated <code>groups</code> claim granted to the debug token's user, so the access gates below can be exercised without a real identity provider. Empty grants no groups. <code>admin</code> (or whatever the admin value below is) lets the token use the admin tools, <code>deploy_flow</code> among them. Only meaningful when the access claim below is <code>groups</code>.</small>
+                    <small>Comma-separated values of the <b>Access claim</b> below, given to the debug token's user so the gates &mdash; the read and write lists, and each tool call's own list &mdash; can be exercised without a real identity provider. With the claim <code>sub</code> the first value is the user's id. Empty grants nothing.</small>
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-tokenCacheTTL" style="width:150px"><i class="fa fa-clock-o"></i> Token cache TTL</label>
@@ -183,8 +183,8 @@
                 <hr style="margin:12px 0">
 
                 <div class="form-row">
-                    <label for="node-config-input-adminRequiredClaim" style="width:150px"><i class="fa fa-user-secret"></i> Access claim</label>
-                    <input type="text" id="node-config-input-adminRequiredClaim" placeholder="groups" style="width:calc(100% - 185px)">
+                    <label for="node-config-input-accessClaim" style="width:150px"><i class="fa fa-user-secret"></i> Access claim</label>
+                    <input type="text" id="node-config-input-accessClaim" placeholder="sub" style="width:calc(100% - 185px)">
                 </div>
                 <div class="form-row">
                     <label for="node-config-input-readRequiredValue" style="width:150px"><i class="fa fa-eye"></i> Read tools</label>
@@ -218,40 +218,6 @@
                     <small>What the <i>client</i> is authorized to do, checked with <b>AND</b> on top of
                     the claim above — so a read-only client cannot write for a user who may. Empty means
                     no constraint; a required scope the token lacks is refused.</small>
-                </div>
-                <hr style="margin:12px 0">
-
-                <div class="form-row">
-                    <label style="width:150px"><i class="fa fa-terminal"></i> Admin tools</label>
-                    <input type="checkbox" id="node-config-input-adminToolsEnabled" style="width:23px; margin:0">
-                    <label for="node-config-input-adminToolsEnabled" style="margin:0; width:auto;"> Enable Node-RED admin tools</label>
-                </div>
-                <div id="hal2eh-admin-details">
-                    <div class="form-row">
-                        <label for="node-config-input-adminToken" style="width:150px"><i class="fa fa-shield"></i> Admin token</label>
-                        <input type="password" id="node-config-input-adminToken" placeholder="NODE_RED_ADMIN_TOKEN" style="width:calc(100% - 185px)" autocomplete="off">
-                    </div>
-                    <div class="form-row">
-                        <label for="node-config-input-adminPort" style="width:150px"><i class="fa fa-plug"></i> Admin API port</label>
-                        <input type="number" id="node-config-input-adminPort" style="width:80px" min="1" max="65535" value="1880">
-                    </div>
-                    <div class="form-row">
-                        <label for="node-config-input-adminRequiredValue" style="width:150px"><i class="fa fa-check"></i> Admin tools</label>
-                        <input type="text" id="node-config-input-adminRequiredValue" placeholder="admin" style="width:calc(100% - 185px)">
-                    </div>
-                    <div class="form-tips" style="margin-left:150px; margin-bottom:8px;">
-                        <small>A comma-separated any-of list against the <b>Access claim</b> above, defaulting to
-                        <code>admin</code>. Leave it empty to allow any authenticated user. Unlike the read and write
-                        lists this one also guards the hal2Api node, which must present claims to reach admin tools
-                        at all.</small>
-                    </div>
-                    <div class="form-row" style="background:#fff8e1; border:1px solid #ffe082; border-radius:4px; padding:8px 12px; margin-top:4px;">
-                        <i class="fa fa-info-circle" style="color:#f9a825;"></i>
-                        <span style="font-size:12px; margin-left:6px;">
-                            Enabled admin tools: <strong>get_flow</strong>, <strong>deploy_flow</strong>.<br>
-                            These call the Node-RED admin API on localhost:&lt;port&gt;.
-                        </span>
-                    </div>
                 </div>
             </div>
         </div>
@@ -298,9 +264,11 @@
     server that exposes the device tool catalog to AI assistants such as Claude. Works with any
     standard OIDC identity provider (endpoints auto-discovered), carries a per-location identifier,
     and supports a debug token that bypasses OAuth on every route for setups where it cannot be set up. Callers can be gated per tool class — one claim, an any-of
-    value list each for read tools, write tools and the opt-in admin tools
-    (<code>get_flow</code>/<code>deploy_flow</code>) — so a token may be allowed to observe the house
-    without being allowed to change it.</li>
+    value list and a scope each for read tools and write tools — so a token may be allowed to
+    observe the house without being allowed to change it. Flows add tools of their own with
+    <b>tool call</b> and <b>tool result</b>, classed the same way, and every call's arguments are
+    checked against the tool's schema. Administering Node-RED over MCP is
+    node-red-contrib-mcp-server's MCP Admin node.</li>
     <li><strong>Heartbeat</strong>: per-thing liveness tracking surfaced as the <code>alive</code>
     flag in <code>get_all_states</code>.</li>
 
@@ -420,11 +388,8 @@
             mcpExtraScopes:    { value: '' },
             mcpAudience:       { value: '' },
             tokenCacheTTL:     { value: 300 },
-            adminToolsEnabled: { value: false },
-            adminPort:         { value: 1880 },
             localDebugGroups:  { value: '' },
-            adminRequiredClaim:{ value: 'groups' },
-            adminRequiredValue:{ value: 'admin' },
+            accessClaim:       { value: 'sub' },
             readRequiredValue: { value: '' },
             writeRequiredValue:{ value: '' },
             readRequiredScope: { value: '' },
@@ -434,7 +399,6 @@
             egressLibrary:     { value: [], required: false }
         },
         credentials: {
-            adminToken:           { type: 'password' },
             localDebugToken:      { type: 'password' }
         },
         label: function () {
@@ -903,16 +867,13 @@
             $('#node-config-input-mcpEnabled').on('change', toggleMcp);
             toggleMcp();
 
-            // ── Admin tools toggle ────────────────────────────────────────────
-            function toggleAdmin() {
-                if ($('#node-config-input-adminToolsEnabled').is(':checked')) {
-                    $('#hal2eh-admin-details').show();
-                } else {
-                    $('#hal2eh-admin-details').hide();
-                }
+            // ── Access claim ─────────────────────────────────────────────────
+            // Saved as adminRequiredClaim before 4.0.0. Shown here so the next save writes it
+            // under its new name, and the runtime, which still reads the old one, keeps working
+            // until then.
+            if (this.accessClaim === undefined && this.adminRequiredClaim !== undefined) {
+                $('#node-config-input-accessClaim').val(this.adminRequiredClaim);
             }
-            $('#node-config-input-adminToolsEnabled').on('change', toggleAdmin);
-            toggleAdmin();
 
             // ── Shared Function libraries (ingress + egress) ──────────────────
             function createLibraryList(fn_type, defaultBody) {
@@ -1025,7 +986,6 @@
             var node = this;
             node.mcpEnabled        = $('#node-config-input-mcpEnabled').is(':checked');
             node.mcpFilterHost     = $('#node-config-input-mcpFilterHost').is(':checked');
-            node.adminToolsEnabled = $('#node-config-input-adminToolsEnabled').is(':checked');
 
             node.groups = [];
             $("#node-config-eh-groups-list-items")

@@ -583,35 +583,6 @@ function deriveCategories(items) {
     return Object.keys(HA_TYPE_GROUPS).filter(c => present.has(c));
 }
 
-const MCP_TOOLS_ADMIN = [
-    {
-        name        : 'get_flow',
-        description : 'Lists all Node-RED tabs (ID and node count) when called without arguments. ' +
-                      'Returns full JSON configuration for a specific tab when called with an id.',
-        inputSchema : {
-            type       : 'object',
-            properties : {
-                id : { type: 'string', description: 'Flow/tab ID — omit to list all flows' }
-            }
-        }
-    },
-    {
-        name        : 'deploy_flow',
-        description : 'Creates or updates a Node-RED flow tab. Omit id to create new.',
-        inputSchema : {
-            type       : 'object',
-            required   : ['label', 'nodes'],
-            properties : {
-                id    : { type: 'string', description: 'Existing flow ID (omit for new flow)' },
-                label : { type: 'string', description: 'Flow tab label/name' },
-                nodes : { type: 'array',  description: 'Array of node objects' }
-            }
-        }
-    }
-];
-
-const MCP_ADMIN_TOOL_NAMES = new Set(MCP_TOOLS_ADMIN.map(t => t.name));
-
 // Which built-in tools only observe, and which change the house. The split cannot be
 // derived from the dispatch functions in eventhandler.js — get_scenes and get_alerts are
 // read-only but are handled inside dispatchControlTools — so it has to be stated here.
@@ -633,15 +604,11 @@ const MCP_WRITE_TOOL_NAMES = new Set([
 // added to the catalog without being classified is held to the stricter gate rather than
 // slipping through ungated; test/mcp-tools.test.js turns the omission into a build failure.
 function toolClass(name) {
-    if (MCP_ADMIN_TOOL_NAMES.has(name)) { return 'admin'; }
-    if (MCP_READ_TOOL_NAMES.has(name))  { return 'read'; }
-    return 'write';
+    return MCP_READ_TOOL_NAMES.has(name) ? 'read' : 'write';
 }
 
 module.exports = {
     MCP_TOOLS,
-    MCP_TOOLS_ADMIN,
-    MCP_ADMIN_TOOL_NAMES,
     MCP_READ_TOOL_NAMES,
     MCP_WRITE_TOOL_NAMES,
     toolClass,

@@ -1,12 +1,10 @@
 module.exports = function(RED) {
     function hal2Api(config) {
         RED.nodes.createNode(this, config);
+        // The event handler's catalogue: its built-in tools and those flows added with tool call.
+        // Before 4.0.0 this could also speak for a standalone hal2MCPServer; those servers are
+        // node-red-contrib-mcp-server's now, reached from a flow with its MCP Call node.
         this.eventHandler    = RED.nodes.getNode(config.eventHandler);
-        // Optional: an MCP server node whose endpoint this API node speaks for. Empty means the
-        // Event handler — built-in tools plus anything registered in embedded mode — which is
-        // what every node configured before this field existed has.
-        this.mcpServer       = config.mcpServer ? RED.nodes.getNode(config.mcpServer) : null;
-        this.allowAdminTools = config.allowAdminTools === true;
         this.field           = config.field || "payload";
         this.fieldType       = config.fieldType || "msg";
         var node = this;
@@ -40,13 +38,15 @@ module.exports = function(RED) {
                 deliver({ ok: false, error: { code: code || -32000, message: message } });
             };
 
-            // One API node speaks for one endpoint. A standalone MCP server answers with its own
-            // tools and nothing else, exactly as it does for an MCP client on its URL.
-            const target = node.mcpServer || node.eventHandler;
+            // A node still naming a hal2MCPServer meant that server's tools, not the event
+            // handler's: answering from the catalogue instead would call the wrong thing.
+            if (config.mcpServer) {
+                return fail('This node points at a hal2MCPServer, removed in 4.0.0. Convert the flows in the editor; '
+                    + 'a standalone server\'s tools are reached with MCP Call of node-red-contrib-mcp-server.');
+            }
+            const target = node.eventHandler;
             if (!target || typeof target.callTool !== 'function') {
-                return fail(node.mcpServer
-                    ? 'The selected MCP server is not available (or is misconfigured)'
-                    : 'No event handler connected (or it does not expose callTool)');
+                return fail('No event handler connected (or it does not expose callTool)');
             }
 
             // Accept { tool, args } on msg.payload; allow msg.tool / msg.args to override.
@@ -81,9 +81,7 @@ module.exports = function(RED) {
             node.status({ fill: 'blue', shape: 'dot', text: tool });
 
             try {
-                const out = await target.callTool(
-                    tool, args, msg.claims || null, { adminEnabled: node.allowAdminTools }
-                );
+                const out = await target.callTool(tool, args, msg.claims || null);
 
                 if (!out || out.ok !== true) {
                     return fail((out && out.message) || 'Tool call failed', out && out.code);
@@ -94,7 +92,7 @@ module.exports = function(RED) {
                     // MCP content array (images / dynamic tools) — pass through verbatim.
                     result = out.content;
                 } else {
-                    // Tool results are JSON strings; fall back to raw text (e.g. get_flow markdown).
+                    // Tool results are JSON strings; fall back to raw text (a flow tool answering in plain text).
                     try { result = JSON.parse(out.text); }
                     catch { result = out.text; }
                 }

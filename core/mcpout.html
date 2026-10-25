@@ -1,11 +1,15 @@
 <script type="text/html" data-template-name="hal2MCPOut">
+    <div class="form-tips" style="margin-bottom:12px;">
+        <b>Answers an MCP tool call</b> started by a <b>tool call</b> node on the same event handler,
+        sending the tool result back to the client.
+    </div>
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
     <div class="form-row">
-        <label for="node-input-mcpServer"><i class="fa fa-server"></i> MCP Server</label>
-        <input type="text" id="node-input-mcpServer">
+        <label for="node-input-eventHandler"><i class="fa fa-server"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler">
     </div>
     <div class="form-row">
         <label for="node-input-emptyMessage"><i class="fa fa-comment-o"></i> Empty response</label>
@@ -14,11 +18,11 @@
 </script>
 
 <script type="text/html" data-help-name="hal2MCPOut">
-    <p>Resolves a pending tool call started by a <code>hal2MCPIn</code> node, sending the
-    result back to the waiting MCP client. This is a terminal node — it has no output.</p>
+    <p>Answers a pending tool call started by a <b>tool call</b> node, sending the tool result
+    back to the waiting MCP client. This is a terminal node — it has no output.</p>
     <p>The input message must carry <code>msg._mcpCallId</code> unchanged from the
-    <code>hal2MCPIn</code> node that started the call, and this node's <b>MCP Server</b> must be
-    the <em>same</em> config node as that <code>hal2MCPIn</code>'s. If either doesn't match, the
+    <b>tool call</b> node that started the call, and this node's <b>Event handler</b> must be
+    the <em>same</em> config node as that tool call's. If either doesn't match, the
     call can never be found and resolved — the caller eventually sees a timeout, and this node
     logs an error if <code>_mcpCallId</code> is missing entirely.</p>
     <p><code>msg.payload</code> is converted to the tool result based on its shape:</p>
@@ -30,7 +34,7 @@
         <li>object — sent as a JSON string.</li>
     </ul>
     <p>No timeout handling is needed here — if this node never receives the matching message,
-    the <code>hal2MCPIn</code> node's own <b>Timeout</b> setting eventually fails the call on the
+    the tool call node's own <b>Timeout</b> setting eventually fails the call on the
     client's behalf.</p>
 </script>
 
@@ -40,13 +44,13 @@
         color: '#b3b3ff',
         defaults  : {
             name        : { value: '' },
-            mcpServer   : { value: '', type: 'hal2MCPServer', required: true },
+            eventHandler: { value: '', type: 'hal2EventHandler', required: true },
             emptyMessage: { value: 'No results found.' }
         },
         inputs    : 1,
         outputs   : 0,
         icon      : 'font-awesome/fa-sign-in',
-        paletteLabel: 'MCP Out',
-        label     : function () { return this.name || 'MCP Out'; }
+        paletteLabel: 'tool result',
+        label     : function () { return this.name || 'tool result'; }
     });
 </script>

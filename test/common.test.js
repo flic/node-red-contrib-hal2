@@ -275,25 +275,3 @@ describe('lib/common command refusals name the sender', function () {
         assert.strictEqual(common.describeSender(undefined), 'an unknown sender');
     });
 });
-
-describe('lib/common adminPathPrefix', function () {
-    // The admin API lives under httpAdminRoot. An editor moved off '/' so that a proxy can
-    // publish only the editor must not leave get_flow/deploy_flow calling /flows at the root.
-    it('prefixes with httpAdminRoot in the normalised form Node-RED hands nodes', function () {
-        assert.strictEqual(common.adminPathPrefix('/editor/') + '/flows', '/editor/flows');
-    });
-
-    it('accepts the root without a trailing slash too', function () {
-        assert.strictEqual(common.adminPathPrefix('/editor') + '/flow/abc', '/editor/flow/abc');
-    });
-
-    it('stays at the root for "/" and when unset', function () {
-        for (const root of ['/', undefined, '']) {
-            assert.strictEqual(common.adminPathPrefix(root) + '/flows', '/flows', String(root));
-        }
-    });
-
-    it('is null when the admin API is disabled', function () {
-        assert.strictEqual(common.adminPathPrefix(false), null);
-    });
-});

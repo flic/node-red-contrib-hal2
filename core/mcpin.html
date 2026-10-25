@@ -1,11 +1,15 @@
 <script type="text/html" data-template-name="hal2MCPIn">
+    <div class="form-tips" style="margin-bottom:12px;" id="hal2-toolcall-where">
+        <b>MCP tool in this location's hal2 catalogue.</b> Runs when an MCP client calls the tool
+        (<code>tools/call</code>). Wire the flow to a <b>tool result</b> node, which sends the answer back.
+    </div>
     <div class="form-row">
         <label for="node-input-name"><i class="fa fa-tag"></i> Name</label>
         <input type="text" id="node-input-name" placeholder="Name">
     </div>
     <div class="form-row">
-        <label for="node-input-mcpServer"><i class="fa fa-server"></i> MCP Server</label>
-        <input type="text" id="node-input-mcpServer">
+        <label for="node-input-eventHandler"><i class="fa fa-server"></i> Event handler</label>
+        <input type="text" id="node-input-eventHandler">
     </div>
     <div class="form-row">
         <label for="node-input-toolName"><i class="fa fa-terminal"></i> Tool name</label>
@@ -13,11 +17,19 @@
     </div>
     <div class="form-row">
         <label for="node-input-description"><i class="fa fa-comment"></i> Description</label>
-        <textarea id="node-input-description" rows="3" style="width:calc(100% - 105px);" placeholder="Describe what this tool does so Claude knows when to use it."></textarea>
+        <textarea id="node-input-description" rows="3" style="width:calc(100% - 105px);" placeholder="Describe what this tool does so the model knows when to use it."></textarea>
     </div>
     <div class="form-row">
         <label for="node-input-inputSchema" style="vertical-align:top; margin-top:4px"><i class="fa fa-code"></i> Parameters</label>
         <textarea id="node-input-inputSchema" rows="8" style="width:calc(100% - 105px); font-family:monospace; font-size:12px;"></textarea>
+    </div>
+    <div class="form-row">
+        <label for="node-input-validateArgs"><i class="fa fa-check-square-o"></i> Validate</label>
+        <input type="checkbox" id="node-input-validateArgs" style="width:23px; margin:0">
+        <label for="node-input-validateArgs" style="margin:0; width:auto;"> Refuse calls whose arguments do not match the parameters schema</label>
+    </div>
+    <div class="form-tips" style="margin-left:105px; margin-bottom:8px;">
+        <small>Checked before the flow runs: types, required, enum, minimum/maximum, length, pattern, items, and <code>additionalProperties: false</code>. A caller sending text where the schema says integer gets an error, not a request built from it. Turn off only for a tool whose schema cannot describe what it takes.</small>
     </div>
     <div class="form-row">
         <label for="node-input-topic"><i class="fa fa-tag"></i> msg.topic</label>
@@ -30,17 +42,27 @@
     <hr style="margin:12px 0">
 
     <div class="form-row">
+        <label for="node-input-access"><i class="fa fa-bolt"></i> Kind</label>
+        <select id="node-input-access" style="width:calc(100% - 105px)">
+            <option value="write">Changes something (write tool)</option>
+            <option value="read">Only reads (read tool)</option>
+        </select>
+    </div>
+    <div class="form-tips" style="margin-left:105px; margin-bottom:8px;">
+        <small>Which of the event handler's gates a call must clear, as for the built-in tools: a read tool needs <b>Read tools</b> and <b>Read scope</b>, a write tool those and <b>Write tools</b> and <b>Write scope</b> as well. Write is the default, so a tool nobody classified is held to the stricter gate.</small>
+    </div>
+    <div class="form-row">
         <label for="node-input-requiredValue"><i class="fa fa-check"></i> Tool access</label>
         <input type="text" id="node-input-requiredValue" placeholder="(empty = no extra restriction)" style="width:calc(100% - 105px)">
     </div>
     <div class="form-tips" style="margin-left:105px; margin-bottom:8px;">
-        <small>Per-tool access gate. Comma-separated values of the MCP Server node's <b>Required claim</b> (<span id="hal2-mcp-in-claim-name"><code>groups</code></span>) — the caller's claim must contain <b>at least one</b> of them for this tool to be listed or callable. Applied <b>on top of</b> that server's own <b>Required value</b> list, not instead of it: callers must clear both.</small>
+        <small>Comma-separated values of the event handler's <b>Access claim</b> (<span id="hal2-mcp-in-claim-name"><code>sub</code></span>) — the caller's claim must contain <b>at least one</b> of them for this tool to be listed or callable. Applied <b>on top of</b> the gates above, not instead of them.</small>
     </div>
 
     <hr style="margin:12px 0">
 
     <div class="form-row">
-        <label for="node-input-exposeClaims" style="width:auto"><i class="fa fa-id-card-o"></i> Expose JWT claims</label>
+        <label for="node-input-exposeClaims"><i class="fa fa-id-card-o"></i> JWT claims</label>
         <input type="checkbox" id="node-input-exposeClaims" style="width:23px; margin:0">
         <label for="node-input-exposeClaims" style="margin:0; width:auto;"> Set msg.jwtClaims with the verified JWT payload</label>
     </div>
@@ -50,32 +72,29 @@
 </script>
 
 <script type="text/html" data-help-name="hal2MCPIn">
-    <p>Defines one MCP tool. When Claude (or another MCP client) calls it, this node fires a
-    message out of its single output — there's nothing to wire into it, it's a call trigger,
-    not a regular flow step.</p>
+    <p>Adds a tool of your own to this location's MCP server — the event handler's
+    <code>/mcp</code>, next to the built-in tools — and runs when an MCP client calls it
+    (<code>tools/call</code>). There's nothing to wire into it: it's a call trigger, not a regular
+    flow step. Finish the flow with a <b>tool result</b> node, which sends the answer back.</p>
     <p>The output message carries:</p>
     <ul>
-        <li><code>msg.payload</code> — the tool call arguments, shaped by <b>Parameters</b> below.</li>
+        <li><code>msg.payload</code> — the tool call arguments, shaped by <b>Parameters</b> and, with
+        <b>Validate</b> on, checked against it.</li>
         <li><code>msg._mcpCallId</code> — an opaque id identifying this specific call.</li>
         <li><code>msg.topic</code> — set to the <b>msg.topic</b> field below, or the tool name if left blank.</li>
-        <li><code>msg.jwtClaims</code> — the caller's verified JWT claims, only when <b>Expose JWT claims</b> is on.</li>
+        <li><code>msg.jwtClaims</code> — the caller's verified JWT claims, only when <b>JWT claims</b> is on.</li>
     </ul>
-    <p>Wire the rest of the flow to do the actual work, then finish with a <code>hal2MCPOut</code>
-    node pointed at the <em>same</em> MCP Server. <code>msg._mcpCallId</code> must reach that
-    <code>hal2MCPOut</code> unchanged — if a function node rebuilds <code>msg</code> from scratch
-    instead of mutating/returning the original, carry this property over explicitly, or the
-    call can never be resolved and the caller sees a timeout.</p>
-    <p>Only wire one <code>hal2MCPOut</code> to eventually receive each call — the first message
-    that arrives with a given <code>_mcpCallId</code> resolves the call; any later one for the
-    same id is silently dropped.</p>
-    <p><b>Tool name</b> must be unique among the tools on the same MCP Server; it's the literal
-    name Claude calls. <b>Description</b> is shown to Claude and is the main signal it uses to
-    decide when to invoke this tool — be specific about what it does and when to use it.
-    <b>Parameters</b> is a JSON-Schema object describing the call arguments (becomes
-    <code>msg.payload</code>'s shape). <b>Timeout</b> is how long the flow has to reach a
-    <code>hal2MCPOut</code> before the client is told the call timed out.</p>
-    <p>See the <a href="https://github.com/flic/node-red-contrib-hal2#readme" target="_blank">project README</a>
-    for a worked example (<code>examples/jellyfin-mcp.json</code>).</p>
+    <p><code>msg._mcpCallId</code> must reach the <b>tool result</b> node unchanged — if a function
+    node rebuilds <code>msg</code> from scratch instead of mutating/returning the original, carry
+    this property over explicitly, or the call can never be resolved and the caller sees a timeout.
+    Only one tool result should receive each call: the first message with a given id answers it.</p>
+    <p><b>Tool name</b> must be unique among this event handler's tools, built-in ones included;
+    it's the literal name the client calls. <b>Description</b> is the model's main signal for when
+    to call the tool — be specific. <b>Parameters</b> is a JSON-Schema object describing the
+    arguments. Validation checks a subset of JSON Schema; keywords outside it are named in the log
+    once. <b>Kind</b> decides which of the event handler's read and write gates apply.
+    <b>Timeout</b> is how long the flow has to answer before the client is told the call timed out.</p>
+    <p>For a tool on an MCP server of its own, use node-red-contrib-mcp-server instead.</p>
 </script>
 
 <script type="text/javascript">
@@ -84,10 +103,12 @@
         color: '#b3b3ff',
         defaults  : {
             name        : { value: '' },
-            mcpServer   : { value: '', type: 'hal2MCPServer', required: true },
+            eventHandler: { value: '', type: 'hal2EventHandler', required: true },
             toolName    : { value: '', required: true },
             description : { value: '' },
             inputSchema : { value: '' },
+            validateArgs: { value: true },
+            access      : { value: 'write' },
             topic       : { value: '' },
             timeout     : { value: 30 },
             requiredValue: { value: '' },
@@ -96,18 +117,31 @@
         inputs    : 0,
         outputs   : 1,
         icon      : 'font-awesome/fa-sign-out',
-        paletteLabel: 'MCP In',
-        label     : function () { return this.name || this.toolName || 'MCP In'; },
+        paletteLabel: 'tool call',
+        label     : function () { return this.name || this.toolName || 'tool call'; },
         oneditprepare: function () {
-            // Show the selected server's actual claim name in the Tool access tip — the values
-            // typed here are values *of that claim*, and it is configured on a different node.
-            function updateClaimName() {
-                var server = RED.nodes.node($('#node-input-mcpServer').val());
-                var claim  = (server && server.requiredClaim) || 'groups';
-                $('#hal2-mcp-in-claim-name').html($('<code>').text(claim));
+            // On unless switched off; write unless set to read — also for a node saved before
+            // these fields existed, which the editor would otherwise show unset and save so.
+            $('#node-input-validateArgs').prop('checked', this.validateArgs !== false);
+            $('#node-input-access').val(this.access === 'read' ? 'read' : 'write');
+
+            // Name where the tool lands and the claim its access list matches, both read off the
+            // chosen event handler — they are configured on a different node.
+            function updateFromHandler() {
+                var eh = RED.nodes.node($('#node-input-eventHandler').val());
+                $('#hal2-mcp-in-claim-name').html($('<code>').text(
+                    (eh && (eh.accessClaim !== undefined ? eh.accessClaim : eh.adminRequiredClaim)) || 'sub'));
+                var where = $('#hal2-toolcall-where');
+                where.find('.hal2-url').remove();
+                if (eh) {
+                    var url = (eh.mcpServerUrl || '').replace(/\/$/, '') + (eh.httpPathPrefix || '').replace(/\/$/, '') + '/mcp';
+                    where.append($('<div class="hal2-url" style="margin-top:4px">').append(eh.mcpEnabled
+                        ? $('<span>').text('Served at ').append($('<code>').text(url))
+                        : $('<span>').text('MCP is off on this event handler: the tool is not served until it is switched on.')));
+                }
             }
-            $('#node-input-mcpServer').on('change', updateClaimName);
-            updateClaimName();
+            $('#node-input-eventHandler').on('change', updateFromHandler);
+            updateFromHandler();
 
             if (!this.inputSchema) {
                 $('#node-input-inputSchema').val(JSON.stringify({

@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { readClaim, grants, claimAllows, createToolGate, visibleTools, gateReadsClaim } = require('../lib/claim-gate');
+const { readClaim, grants, claimAllows, createToolGate, visibleTools, tokenScopes, scopeAllows, requiredScopeChallenge, advertisedScopes, gateReadsClaim } = require('../lib/claim-gate');
 
 describe('lib/claim-gate grants', function () {
     it('grants nothing for an empty or absent list', function () {
@@ -203,11 +203,110 @@ describe('lib/claim-gate visibleTools', function () {
     });
 });
 
+
+describe('claim-gate scope axis', function () {
+    it('reads a space-delimited scope string, as OAuth defines it', function () {
+        assert.deepStrictEqual(tokenScopes({ scope: 'openid  mcp:read ' }), ['openid', 'mcp:read']);
+        assert.deepStrictEqual(tokenScopes({ scope: ['a', 'b'] }), ['a', 'b']);
+    });
+
+    it('falls back to scp only when scope is absent, as Entra and Okta name it', function () {
+        // Deterministic on purpose: the answer never depends on which of two claims looked better.
+        assert.deepStrictEqual(tokenScopes({ scp: ['a', 'b'] }), ['a', 'b']);
+        assert.deepStrictEqual(tokenScopes({ scope: 'a', scp: 'b' }), ['a']);
+        assert.deepStrictEqual(tokenScopes({ scope: 42, scp: 'b' }), []);
+    });
+
+    it('is empty for a missing or non-string claim', function () {
+        assert.deepStrictEqual(tokenScopes({}), []);
+        assert.deepStrictEqual(tokenScopes({ scope: 42 }), []);
+    });
+
+    it('imposes nothing when the field is empty, and fails closed when it is not', function () {
+        assert.strictEqual(scopeAllows({ scope: 'x' }, ''), true);
+        assert.strictEqual(scopeAllows({}, ''), true);
+        assert.strictEqual(scopeAllows({}, 'mcp:read'), false);
+    });
+
+    it('matches any-of against a comma-separated field', function () {
+        assert.strictEqual(scopeAllows({ scope: 'openid mcp:read' }, 'mcp:write, mcp:read'), true);
+        assert.strictEqual(scopeAllows({ scope: 'openid' }, 'mcp:write, mcp:read'), false);
+    });
+
+    it('does not split a group claim on whitespace', function () {
+        // The reason scopes got their own matcher: a group name may contain spaces, and the
+        // claim axis must keep comparing it whole.
+        assert.strictEqual(grants({ groups: 'Home Admins' }, 'groups', 'Home Admins'), true);
+        assert.strictEqual(grants({ groups: 'Home Admins' }, 'groups', 'Home'), false);
+    });
+});
+
+describe('claim-gate two axes compose with AND', function () {
+    const gate = (claims, serverValue, serverScope) =>
+        createToolGate({ claims, claimName: 'groups', serverValue, serverScope });
+
+    it('needs both to pass', function () {
+        const claims = { groups: ['ops'], scope: 'mcp:read' };
+        assert.strictEqual(gate(claims, 'ops', 'mcp:read').serverGranted, true);
+        assert.strictEqual(gate(claims, 'ops', 'mcp:write').serverGranted, false);
+        assert.strictEqual(gate(claims, 'admin', 'mcp:read').serverGranted, false);
+    });
+
+    it('applies both to a per-tool list as well', function () {
+        const g = gate({ groups: ['ops'], scope: 'mcp:read' }, 'ops', 'mcp:read');
+        assert.strictEqual(g.allows('ops', 'mcp:read'), true);
+        assert.strictEqual(g.allows('ops', 'mcp:write'), false);
+        assert.strictEqual(g.allows('admin', 'mcp:read'), false);
+    });
+});
+
+describe('requiredScopeChallenge', function () {
+    it('joins the gate fields into the header\'s space-delimited grammar', function () {
+        assert.strictEqual(requiredScopeChallenge(['read:ha', 'write:ha']), 'read:ha write:ha');
+    });
+
+    it('flattens any-of fields and drops duplicates, keeping configured order', function () {
+        assert.strictEqual(requiredScopeChallenge(['a, b', 'b, c']), 'a b c');
+    });
+
+    it('is empty when nothing is required, so no scope parameter is sent at all', function () {
+        assert.strictEqual(requiredScopeChallenge(['', '']), '');
+        assert.strictEqual(requiredScopeChallenge([]), '');
+        assert.strictEqual(requiredScopeChallenge(undefined), '');
+    });
+});
+
+describe('advertisedScopes', function () {
+    it('adds the required scopes to the configured ones', function () {
+        // RFC 9728: scopes_supported is what a client should request for this resource, and a
+        // scope the gate requires is one of those by definition. Deriving it removes the state
+        // where a server demands a scope no client is ever told to ask for.
+        assert.deepStrictEqual(
+            advertisedScopes(['openid', 'profile'], 'read:ha write:ha'),
+            ['openid', 'profile', 'read:ha', 'write:ha']);
+    });
+
+    it('does not duplicate one that was already configured', function () {
+        assert.deepStrictEqual(advertisedScopes(['openid', 'read:ha'], 'read:ha'),
+                               ['openid', 'read:ha']);
+    });
+
+    it('is unchanged when no scope is required', function () {
+        assert.deepStrictEqual(advertisedScopes(['openid'], ''), ['openid']);
+        assert.deepStrictEqual(advertisedScopes(['openid'], undefined), ['openid']);
+    });
+
+    it('survives an empty or missing configured list', function () {
+        assert.deepStrictEqual(advertisedScopes([], 'read:ha'), ['read:ha']);
+        assert.deepStrictEqual(advertisedScopes(undefined, 'read:ha'), ['read:ha']);
+    });
+});
+
 describe('lib/claim-gate gateReadsClaim', function () {
     // Decides whether a token without the claim is worth a warning. Every gate that reads the
     // claim counts, not just the whole-server list: with that list empty, a token without the
-    // claim used to hide the admin tools with nothing in the log.
-    const none = { serverValue: '', adminToolsEnabled: false, adminValue: 'admin', tools: {} };
+    // claim would hide every tool with a list of its own, with nothing in the log.
+    const none = { serverValue: '', tools: {} };
 
     it('is false when no gate has a list', function () {
         assert.strictEqual(gateReadsClaim(none), false);
@@ -216,11 +315,6 @@ describe('lib/claim-gate gateReadsClaim', function () {
 
     it('counts the whole-server list', function () {
         assert.strictEqual(gateReadsClaim(Object.assign({}, none, { serverValue: 'ops' })), true);
-    });
-
-    it('counts the admin list only while admin tools are on', function () {
-        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { adminToolsEnabled: true })), true);
-        assert.strictEqual(gateReadsClaim(Object.assign({}, none, { adminToolsEnabled: true, adminValue: '' })), false);
     });
 
     it('counts a registered tool with its own list', function () {

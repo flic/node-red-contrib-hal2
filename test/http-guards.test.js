@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { createHttpGuards, hostFilter, removeOwnedRoutes } = require('../lib/httpGuards');
+const { createHttpGuards, hostFilter, hostRegistry, removeOwnedRoutes } = require('../lib/httpGuards');
 
 function mockRes() {
     return {
@@ -154,6 +154,63 @@ describe('lib/httpGuards removeOwnedRoutes', function () {
     it('tolerates a missing or shapeless router', function () {
         assert.doesNotThrow(() => removeOwnedRoutes(undefined, 'post', '/mcp', 'x'));
         assert.doesNotThrow(() => removeOwnedRoutes({}, 'post', '/mcp', 'x'));
+    });
+});
+
+describe('lib/httpGuards host registry', function () {
+    // Express in miniature: routes tried in registration order, next('route') moves on, plain
+    // next() means this route answers.
+    function dispatch(routes, host, method = 'POST', path = '/mcp') {
+        for (const r of routes) {
+            if (r.path !== path) continue;
+            let arg = 'NOT_CALLED';
+            r.mw({ headers: { host }, method, route: { path } }, mockRes(), a => { arg = a; });
+            if (arg === undefined) return r.name;
+        }
+        return null;
+    }
+    function setup(order) {
+        const registry = hostRegistry({});
+        const make = {
+            filtered  : () => { registry.claim('f', 'admin.example.com', [['POST', '/mcp']]);
+                return { name: 'filtered', path: '/mcp', mw: hostFilter('admin.example.com', registry) }; },
+            unfiltered: () => { registry.claim('u', '', [['POST', '/mcp']]);
+                return { name: 'unfiltered', path: '/mcp', mw: hostFilter('', registry) }; }
+        };
+        return { registry, routes: order.map(n => make[n]()) };
+    }
+
+    for (const order of [['filtered', 'unfiltered'], ['unfiltered', 'filtered']]) {
+        it('lets the filtered server win its hostname with ' + order[0] + ' registered first', function () {
+            const { routes } = setup(order);
+            assert.strictEqual(dispatch(routes, 'admin.example.com'), 'filtered');
+            assert.strictEqual(dispatch(routes, 'ADMIN.example.com'), 'filtered');
+            assert.strictEqual(dispatch(routes, 'other.example.com'), 'unfiltered');
+        });
+    }
+
+    it('gives the hostname back to the unfiltered server once the filtered one releases it', function () {
+        const { registry, routes } = setup(['unfiltered', 'filtered']);
+        registry.release('f');
+        assert.strictEqual(dispatch(routes.filter(r => r.name === 'unfiltered'), 'admin.example.com'), 'unfiltered');
+    });
+
+    it('scopes a claim to its own routes, and treats HEAD as GET', function () {
+        const registry = hostRegistry({});
+        registry.claim('f', 'admin.example.com', [['GET', '/.well-known/x']]);
+        assert.strictEqual(registry.claimed('POST /mcp', 'admin.example.com'), false);
+        assert.strictEqual(registry.claimed('GET /.well-known/x', 'admin.example.com'), true);
+        const mw = hostFilter('', registry);
+        let arg = 'NOT_CALLED';
+        mw({ headers: { host: 'admin.example.com' }, method: 'HEAD', route: { path: '/.well-known/x' } }, mockRes(), a => { arg = a; });
+        assert.strictEqual(arg, 'route');
+    });
+
+    it('is one registry per router holder, found again by its symbol', function () {
+        const holder = {};
+        assert.strictEqual(hostRegistry(holder), hostRegistry(holder));
+        assert.strictEqual(holder[Symbol.for('node-red-mcp.hostRegistry')], hostRegistry(holder));
+        assert.notStrictEqual(hostRegistry({}), hostRegistry(holder));
     });
 });
 

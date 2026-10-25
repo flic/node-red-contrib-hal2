@@ -18,7 +18,7 @@ const nodeGlobals = { ...globals.node };
 module.exports = [
     {
         // Runtime: what Node-RED loads. The reason this file exists.
-        files: ['core/**/*.js', 'lib/**/*.js'],
+        files: ['core/**/*.js', 'lib/**/*.js', 'plugins/**/*.js'],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'commonjs',
