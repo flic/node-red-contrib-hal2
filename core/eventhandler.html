@@ -390,6 +390,9 @@
             tokenCacheTTL:     { value: 300 },
             localDebugGroups:  { value: '' },
             accessClaim:       { value: 'sub' },
+            // 3.x name of accessClaim. The editor saves only fields named here, so it stays until
+            // 5.0.0: dropped, an old event handler would fall back from its claim to sub.
+            adminRequiredClaim:{},
             readRequiredValue: { value: '' },
             writeRequiredValue:{ value: '' },
             readRequiredScope: { value: '' },

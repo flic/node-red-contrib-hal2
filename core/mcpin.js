@@ -36,7 +36,7 @@ module.exports = function (RED) {
         // the defaults.
         eventHandler.registerMCPTool(toolName, config.description, schema, timeoutSec,
             (config.requiredValue || '').trim(), node.id,
-            { access: config.access === 'read' ? 'read' : 'write', validate: config.validateArgs !== false });
+            { access: config.access, validate: config.validateArgs });
 
         const exposeClaims = config.exposeClaims === true;
 

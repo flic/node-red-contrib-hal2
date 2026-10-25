@@ -1,5 +1,5 @@
 <script type="text/html" data-template-name="hal2MCPOut">
-    <div class="form-tips" style="margin-bottom:12px;">
+    <div class="form-tips" style="margin-left:105px; margin-bottom:12px;">
         <b>Answers an MCP tool call</b> started by a <b>tool call</b> node on the same event handler,
         sending the tool result back to the client.
     </div>
@@ -45,7 +45,8 @@
         defaults  : {
             name        : { value: '' },
             eventHandler: { value: '', type: 'hal2EventHandler', required: true },
-            emptyMessage: { value: 'No results found.' }
+            emptyMessage: { value: 'No results found.' },
+            mcpServer   : { value: '' }   // 3.x: a hal2MCPServer. The editor saves only fields named here, so it stays until 5.0.0 for the conversion to find.
         },
         inputs    : 1,
         outputs   : 0,

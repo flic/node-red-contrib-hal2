@@ -29,7 +29,7 @@ function paramsTable(schema) {
     for (const name of names) {
         const p = props[name];
         const type = p.enum ? p.enum.map(v => '`' + v + '`').join(' \\| ')
-                            : '`' + (p.type || 'any') + '`';
+                            : [].concat(p.type || 'any').map(t => '`' + t + '`').join(' \\| ');
         const desc = (p.description || '').replace(/\|/g, '\\|');
         out += `| \`${name}\` | ${type} | ${required.has(name) ? 'yes' : 'no'} | ${desc} |\n`;
     }

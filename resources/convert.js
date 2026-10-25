@@ -56,20 +56,26 @@
 
     // A wired group node becomes what its wires meant: an Action broadcasting to the group (its
     // input), an Event on any member change (its output), or both — the Action keeps the id, so
-    // wires into it still land, and a new Event carries the output wires.
+    // wires into it still land, and a new Event carries the output wires. Both keep the group's
+    // disabled flag and group box: a disabled group must not come back as an Action that commands.
+    var keepState = function (node, g) {
+        if (own(g, 'd')) { node.d = g.d; }
+        if (own(g, 'g')) { node.g = g.g; }
+        return node;
+    };
     function groupAction(g) {
-        return { id: g.id, type: 'hal2Action', z: g.z, x: g.x, y: g.y, name: g.name, eventHandler: g.eventHandler,
+        return keepState({ id: g.id, type: 'hal2Action', z: g.z, x: g.x, y: g.y, name: g.name, eventHandler: g.eventHandler,
             commandset: [{ category: 'hal2Group', thing: g.id, item: g.id, value: 'payload', type: 'msg', onchange: false }],
-            ratelimit: 0, passthru: false, outputs: 0, wires: [] };
+            ratelimit: 0, passthru: false, outputs: 0, wires: [] }, g);
     }
     function groupEvent(id, g, y, name, wires) {
-        return { id: id, type: 'hal2Event', z: g.z, x: g.x, y: y, name: name, eventHandler: g.eventHandler, topic: '',
+        return keepState({ id: id, type: 'hal2Event', z: g.z, x: g.x, y: y, name: name, eventHandler: g.eventHandler, topic: '',
             thing: g.id, typeSel: 'hal2Group', item: g.id,
             operator: 'always', change: '0', compareValue: '', compareType: 'num',
             outputValue: 'payload', outputType: 'state',
             ratelimit: false, ratetype: 'all', rate: '1', rateUnits: 'hour',
             delay: false, delayExtend: false, delayReset: false, delayValue: 5,
-            wires: (wires && wires.length) ? wires : [[]] };
+            wires: (wires && wires.length) ? wires : [[]] }, g);
     }
 
     // → { flows, changed: [ids], notes: [text] }. Never mutates its input.
@@ -159,9 +165,17 @@
             else { pending.push(serverName(s)); }
         });
 
-        var out = [];
+        var out = [], embeddedTools = [];
+        var mark = function (id) { if (changed.indexOf(id) === -1) { changed.push(id); } };
         (flows || []).forEach(function (n) {
             if (!n || typeof n !== 'object') { out.push(n); return; }
+            // The access claim was saved as adminRequiredClaim before 4.0.0.
+            if (n.type === 'hal2EventHandler' && n.accessClaim === undefined && n.adminRequiredClaim !== undefined) {
+                var eh = copy(n);
+                eh.accessClaim = n.adminRequiredClaim;
+                delete eh.adminRequiredClaim;
+                out.push(eh); mark(n.id); return;
+            }
             var target = n.mcpServer && plan[n.mcpServer];
             var s = n.mcpServer && servers[n.mcpServer];
 
@@ -172,7 +186,8 @@
                     var conv = pick(n, PLACE.concat(['instructions']));
                     conv.type = 'ftb-mcp-server';
                     delete conv.wires;
-                    conv.path = n.path || '';
+                    // 3.x served an empty path as /mcp/server; '' would now take hal2's own /mcp.
+                    conv.path = n.path || 'server';
                     conv.serverUrl = e.mcpServerUrl || '';
                     conv.filterHost = e.mcpFilterHost === true;
                     conv.issuerUrl = e.pocketidUrl || '';
@@ -194,6 +209,7 @@
                 var c = copy(n);
                 c.eventHandler = s.eventHandler;
                 delete c.mcpServer;
+                if (n.type === 'hal2MCPIn') { embeddedTools.push(n.toolName || n.name || n.id); }
                 out.push(c); changed.push(n.id); return;
             }
             if (n.type === 'hal2MCPIn' && target === 'standalone') {
@@ -230,6 +246,10 @@
                 + 'resource, and clients connected to them must sign in again. Arguments are now checked against '
                 + 'each tool\'s schema; switch Validate off on a tool whose schema does not describe what it takes.');
         }
+        if (embeddedTools.length) {
+            notes.push('Embedded tools are write tools unless set to read: ' + embeddedTools.join(', ') + '. They now '
+                + 'clear the event handler\'s write gates as well as the read gates; set Kind to read on those that only read.');
+        }
         if (pending.length) {
             notes.push('Not converted, because @frtnbach/node-red-contrib-mcp-server 3 or later is not installed: '
                 + pending.join(', ') + '. Install it, then convert again.');
@@ -246,6 +266,7 @@
     function needsConversion(flows) {
         return (flows || []).some(function (n) {
             return n && (n.type === 'hal2MCPServer' || n.type === 'hal2Group'
+                || (n.type === 'hal2EventHandler' && n.accessClaim === undefined && n.adminRequiredClaim !== undefined)
                 || ((n.type === 'hal2MCPIn' || n.type === 'hal2MCPOut') && n.mcpServer && !n.eventHandler)
                 || (n.type === 'hal2Api' && n.mcpServer));
         });

@@ -1,5 +1,5 @@
 <script type="text/html" data-template-name="hal2MCPIn">
-    <div class="form-tips" style="margin-bottom:12px;" id="hal2-toolcall-where">
+    <div class="form-tips" style="margin-left:105px; margin-bottom:12px;" id="hal2-toolcall-where">
         <b>MCP tool in this location's hal2 catalogue.</b> Runs when an MCP client calls the tool
         (<code>tools/call</code>). Wire the flow to a <b>tool result</b> node, which sends the answer back.
     </div>
@@ -112,7 +112,8 @@
             topic       : { value: '' },
             timeout     : { value: 30 },
             requiredValue: { value: '' },
-            exposeClaims: { value: false }
+            exposeClaims: { value: false },
+            mcpServer   : { value: '' }   // 3.x: a hal2MCPServer. The editor saves only fields named here, so it stays until 5.0.0 for the conversion to find.
         },
         inputs    : 0,
         outputs   : 1,

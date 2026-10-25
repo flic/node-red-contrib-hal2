@@ -209,7 +209,7 @@ describe('lib/httpGuards host registry', function () {
     it('is one registry per router holder, found again by its symbol', function () {
         const holder = {};
         assert.strictEqual(hostRegistry(holder), hostRegistry(holder));
-        assert.strictEqual(holder[Symbol.for('node-red-mcp.hostRegistry')], hostRegistry(holder));
+        assert.strictEqual(holder[Symbol.for('node-red-mcp.hostRegistry.v1')], hostRegistry(holder));
         assert.notStrictEqual(hostRegistry({}), hostRegistry(holder));
     });
 });

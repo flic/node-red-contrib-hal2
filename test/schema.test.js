@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert');
-const { validateArgs, unsupportedKeywords } = require('../lib/schema');
+const { validateArgs, unsupportedKeywords, invalidPatterns } = require('../lib/schema');
 
 // The Seerr and Calibre example schemas, the kind that built URLs from unchecked values in 2.x.
 const seerrGetTv = { type: 'object', required: ['tmdbId'], properties: { tmdbId: { type: 'integer', description: 'TMDB ID' } } };
@@ -66,6 +66,18 @@ describe('lib/schema validateArgs', function () {
         assert.ok(validateArgs(seerrGetTv, 'x')[0].startsWith('arguments must be an object'));
     });
 
+    it('takes null for an optional argument as not sent, but not for a required one', function () {
+        const s = { type: 'object', required: ['id'], properties: { id: { type: 'string' }, room: { type: 'string' } } };
+        assert.deepStrictEqual(validateArgs(s, { id: 'a', room: null }), []);
+        assert.ok(validateArgs(s, { id: null })[0].startsWith('id must be a string, got null'));
+    });
+
+    it('compiles a pattern valid only outside unicode mode, such as an escaped dash', function () {
+        const s = { type: 'object', properties: { d: { type: 'string', pattern: '^\\d{4}\\-\\d{2}$' } } };
+        assert.deepStrictEqual(validateArgs(s, { d: '2026-10' }), []);
+        assert.ok(validateArgs(s, { d: '2026/10' })[0].includes('must match'));
+    });
+
     it('reports a pattern that is not a regular expression instead of throwing', function () {
         assert.ok(validateArgs({ type: 'object', properties: { s: { type: 'string', pattern: '(' } } }, { s: 'a' })[0].includes('not a valid regular expression'));
     });
@@ -81,5 +93,13 @@ describe('lib/schema unsupportedKeywords', function () {
         assert.deepStrictEqual(unsupportedKeywords(seerrRequest), []);
         assert.deepStrictEqual(unsupportedKeywords({ type: 'object', properties: {
             a: { type: 'string', format: 'email', description: 'x' }, b: { anyOf: [] } } }).sort(), ['anyOf', 'format']);
+    });
+});
+
+describe('lib/schema invalidPatterns', function () {
+    it('names patterns that compile in neither syntax, nested too', function () {
+        assert.deepStrictEqual(invalidPatterns({ type: 'object', properties: {
+            a: { type: 'string', pattern: '\\-' }, b: { type: 'array', items: { type: 'string', pattern: '(' } } } }), ['(']);
+        assert.deepStrictEqual(invalidPatterns(seerrRequest), []);
     });
 });

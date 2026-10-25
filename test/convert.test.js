@@ -86,6 +86,28 @@ describe('resources/convert', function () {
         assert.ok(notes.some(t => t.includes('Admin tools') && t.includes('Hemma') && t.includes('MCP Admin')));
     });
 
+    it('keeps a 3.x server without a path on /mcp/server, off hal2\'s own /mcp', function () {
+        const flows = fixture();
+        delete byId(flows).sa.path;
+        assert.strictEqual(byId(convertFlows(flows, { mcpServerInstalled: true }).flows).sa.path, 'server');
+    });
+
+    it('renames the 3.x access claim, so an event handler gating on groups keeps doing so', function () {
+        const flows = fixture();
+        byId(flows).eh.adminRequiredClaim = 'groups';
+        assert.ok(needsConversion([byId(flows).eh]));
+        const { flows: out, changed } = convertFlows(flows, { mcpServerInstalled: true });
+        const eh = byId(out).eh;
+        assert.deepStrictEqual([eh.accessClaim, 'adminRequiredClaim' in eh], ['groups', false]);
+        assert.strictEqual(changed.filter(id => id === 'eh').length, 1);
+        assert.ok(!needsConversion([eh]));
+    });
+
+    it('says that embedded tools are now write tools', function () {
+        const { notes } = convertFlows(fixture(), { mcpServerInstalled: true });
+        assert.ok(notes.some(t => t.includes('write tools') && t.includes('fw')));
+    });
+
     it('leaves nothing to convert, changes nothing on a second run, and does not mutate its input', function () {
         const input = fixture();
         const before = JSON.stringify(input);
@@ -147,6 +169,15 @@ describe('resources/convert groups', function () {
         assert.deepStrictEqual([extra[0].wires, extra[0].y, extra[0].name], [[['w']], 50, 'Both (event)']);
         assert.ok(changed.includes(extra[0].id));
         assert.deepStrictEqual(n.act, groupFixture().find(x => x.id === 'act'));
+    });
+
+    it('keeps a wired group\'s disabled flag and group box on what it becomes', function () {
+        const flows = groupFixture();
+        Object.assign(flows.find(n => n.id === 'gboth'), { d: true, g: 'box' });
+        const out = convertGroups(flows).flows.filter(n => n.id === 'gboth' || n.thing === 'gboth');
+        assert.strictEqual(out.length, 2);
+        for (const n of out) { assert.deepStrictEqual([n.d, n.g], [true, 'box'], n.type); }
+        assert.ok(!('d' in byId(convertGroups(groupFixture()).flows).gin));
     });
 
     it('leaves a group without an event handler, and says so', function () {

@@ -19,12 +19,14 @@
         }, function () { return false; });
     }
 
-    function readAll() {
-        return $.when($.ajax({ url: 'flows', headers: API_HEADERS, dataType: 'json' }), mcpServerInstalled())
-            .then(function (flowsAnswer, installed) {
-                var current = flowsAnswer[0];
-                return { current: current, result: window.hal2Convert4.convertFlows(current.flows, { mcpServerInstalled: installed }) };
-            });
+    // The conversion of `current`, or of a fresh read when there is none: the Convert button
+    // reads again, so it never writes what it read before the user decided.
+    function readAll(current) {
+        var flows = current ? $.Deferred().resolve(current) : $.ajax({ url: 'flows', headers: API_HEADERS, dataType: 'json' });
+        return $.when(flows, mcpServerInstalled()).then(function (answer, installed) {
+            current = current || answer[0];
+            return { current: current, result: window.hal2Convert4.convertFlows(current.flows, { mcpServerInstalled: installed }) };
+        });
     }
 
     function convert() {
@@ -56,18 +58,22 @@
     function check() {
         $.ajax({ url: 'flows', headers: API_HEADERS, dataType: 'json' }).done(function (current) {
             if (notification || !window.hal2Convert4.needsConversion(current.flows)) { return; }
-            readAll().then(function (r) {
+            readAll(current).then(function (r) {
                 var count = r.result.changed.length;
-                notification = RED.notify(
-                    '<p><strong>hal2 4.0</strong></p><p>hal2MCPServer and hal2Group were removed: tools and '
-                    + 'groups on them do nothing until the flows are converted. ' + (count ? count + ' node(s) can be converted now.' : 'Nothing can be converted yet.')
-                    + '</p>' + r.result.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join(''), {
-                        type   : 'warning',
-                        fixed  : true,
-                        buttons: [
-                            { text: 'Later', click: function () { notification.close(); notification = null; } }
-                        ].concat(count ? [{ text: 'Convert', class: 'primary', click: convert }] : [])
-                    });
+                var text = '<p><strong>hal2 4.0</strong></p><p>These flows were made for hal2 3.x: hal2MCPServer and '
+                    + 'hal2Group were removed, and some settings were renamed. Tools and groups on the removed nodes do '
+                    + 'nothing until the flows are converted. ' + (count ? count + ' node(s) can be converted now.' : 'Nothing can be converted yet.')
+                    + '</p>' + r.result.notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('');
+                // Only something to act on stays up; what cannot be converted yet is said and goes away.
+                if (!count) { RED.notify(text, { type: 'warning', timeout: 15000 }); return; }
+                notification = RED.notify(text, {
+                    type   : 'warning',
+                    fixed  : true,
+                    buttons: [
+                        { text: 'Later', click: function () { notification.close(); notification = null; } },
+                        { text: 'Convert', class: 'primary', click: convert }
+                    ]
+                });
             });
         });
     }

@@ -93,10 +93,11 @@ describe('tool call / tool result', function () {
         return eh;
     }
 
-    it('registers on the event handler with write and validation by default', function () {
+    it('hands its kind and validation to the event handler as configured, which holds the defaults', function () {
+        // The one defaulting rule — write unless read, validate unless false — is registerMCPTool's.
         const eh = stubEventHandler();
         load(IN, { id: 'i1', eventHandler: 'eh', toolName: 'fw', description: 'd', inputSchema: '{"type":"object"}' }, { eh });
-        assert.deepStrictEqual(eh.tools.fw.opts, { access: 'write', validate: true });
+        assert.deepStrictEqual(eh.tools.fw.opts, { access: undefined, validate: undefined });
         load(IN, { id: 'i2', eventHandler: 'eh', toolName: 'stats', access: 'read', validateArgs: false }, { eh });
         assert.deepStrictEqual(eh.tools.stats.opts, { access: 'read', validate: false });
     });

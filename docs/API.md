@@ -104,10 +104,10 @@ Returns logged historical values for a specific device item — temperature and 
 | `item_name` | `string` | no | Item name, partial case-insensitive match (alternative to item_id). Must be an item name (e.g. "Temperature"), not the device name. |
 | `ha_type` | `string` | no | Resolve the item by its ha_type within the thing (e.g. "temperature", "humidity", "power"). Convenient when you know the device but not the item name. Aliases like "climate"/"light" expand. |
 | `tag` | `string` | no | Disambiguate items of the same ha_type within the thing by tag (e.g. ha_type="temperature" + tag="outdoor"). Can also be used alone. Item tags appear in available_items. |
-| `hours` | `number` | no | Hours back from now (default: 24). Ignored if from/to/at are provided. |
-| `from` | `string` | no | Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms as string |
-| `to` | `string` | no | End of time window — ISO datetime string or epoch ms as string. Defaults to now if omitted. |
-| `at` | `string` | no | Point-in-time lookup — ISO datetime string or epoch ms. Returns the single most recent record at or before this moment. |
+| `hours` | `number` | no | Hours back from now (default: 24), fractions too. Ignored if from/to/at are provided. |
+| `from` | `string` \| `number` | no | Start of time window — ISO datetime string (e.g. "2026-05-01T06:00:00") or epoch ms |
+| `to` | `string` \| `number` | no | End of time window — ISO datetime string or epoch ms. Defaults to now if omitted. |
+| `at` | `string` \| `number` | no | Point-in-time lookup — ISO datetime string or epoch ms. Returns the single most recent record at or before this moment. |
 | `bucket` | `raw` \| `minute` \| `hour` \| `day` | no | Downsampling resolution. "raw" (default) returns individual records; "minute"/"hour"/"day" return server-aggregated avg/min/max/count per local-time bucket (numeric items only). |
 | `bucket_seconds` | `integer` | no | Custom bucket size in seconds (epoch-aligned). Overrides bucket. Numeric items only. |
 | `numeric_precision` | `integer` | no | Decimal places for avg/min/max when bucketing (default 2). |

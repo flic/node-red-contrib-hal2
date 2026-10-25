@@ -6,7 +6,7 @@ const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
 const oauthDiscovery = require('../lib/oauth-discovery');
 const { createHttpGuards, hostFilter, hostRegistry, removeOwnedRoutes } = require('../lib/httpGuards');
-const { validateArgs, unsupportedKeywords } = require('../lib/schema');
+const { validateArgs, unsupportedKeywords, invalidPatterns } = require('../lib/schema');
 
 const {
     MCP_TOOLS, toolClass,
@@ -125,6 +125,11 @@ module.exports = function(RED) {
             if (unchecked.length) {
                 node.warn('MCP tool "' + toolName + '": the input schema uses ' + unchecked.join(', ')
                     + ', which argument validation does not check. Everything else in it is checked.');
+            }
+            const broken = validate ? invalidPatterns(schema) : [];
+            if (broken.length) {
+                node.warn('MCP tool "' + toolName + '": the input schema\'s pattern ' + broken.join(', ')
+                    + ' is not a valid regular expression, so every call naming that argument is refused. Fix the pattern.');
             }
             node.mcpRegisteredTools[toolName] = {
                 description, schema, timeoutMs: (timeoutSec || 30) * 1000,
