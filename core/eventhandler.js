@@ -6,7 +6,7 @@ const common          = require('../lib/common');
 const { createMcpAuth } = require('./mcp-auth');
 const oauthDiscovery = require('../lib/oauth-discovery');
 const { createHttpGuards, hostFilter, hostRegistry, removeOwnedRoutes } = require('../lib/httpGuards');
-const { validateArgs, unsupportedKeywords, invalidPatterns } = require('../lib/schema');
+const { validateArgs, withoutNulls, unsupportedKeywords, invalidPatterns } = require('../lib/schema');
 
 const {
     MCP_TOOLS, toolClass,
@@ -1968,6 +1968,7 @@ module.exports = function(RED) {
                     return rpcErr(-32602, 'Invalid arguments for "' + toolName + '": ' + problems.join('; ')
                         + '. Check the tool\'s input schema and call again.');
                 }
+                if (schema) { args = withoutNulls(schema, args); }
             }
 
             const notConfigured = getNotConfiguredError(toolName);
