@@ -458,7 +458,8 @@ presence sensor that already reports "home" from the street corner is not enough
 combined with the front door opening and closing and movement in the hallway, it becomes
 convincing. The node is an anonymous estimator: it knows nothing about people, it just fuses
 evidence. Use one node per hypothesis (one per person) and wire its output onward like any
-other message — e.g. into a Scene-type sensor representing the person.
+other message — e.g. into a Scene-type sensor representing the person. See
+`examples/bayes-presence.json` for exactly that case, with inject nodes standing in for the sensors.
 
 ### Comparing against another source
 
@@ -719,6 +720,12 @@ nearly there or nowhere near; the share does, in the unit the rules were tuned i
 ## Other recent additions
 
 - **hal2Bayes — probabilistic binary-state estimation** (see [Bayes node](#bayes-node)).
+
+- **hal2Emit — state changes to an external subscriber.** Sends a fixed envelope per matching
+  Thing, Item or Group update, with `msg.topic` from a template such as
+  `hal2/<site>/event/<room>/<thing>/<item>`, for an `mqtt out` or `websocket out` after it. Filter
+  rows select by Thing, ThingType, HA type or Group, on update or on change. See
+  `examples/emit-mqtt.json`.
 
 - **hal2Event — a level output** (`trigger true/false`). The Event node has always reported the
   *rising* edge: it fires when the trigger rule starts holding and says nothing when it stops, so a

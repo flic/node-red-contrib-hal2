@@ -1,0 +1,599 @@
+[
+    {
+        "id": "ex-bayes-tab",
+        "type": "tab",
+        "label": "hal2 Bayes presence",
+        "disabled": false,
+        "info": "Example: estimate whether someone is home with the **hal2Bayes** node, from three sensors that are each unreliable on their own.\n\n- **Phone** reports home/away, sometimes from the street corner.\n- **Front door** reports open (`true`) and closed (`false`).\n- **Hallway motion** reports motion.\n\nThe inject nodes stand in for the sensors' MQTT messages, so the flow runs without hardware: *phone home* alone gives about 0.71, short of the 0.85 that turns the estimate on; *door opens*, *door closes* and *motion* after it take it over. In a real flow, wire an `mqtt in` to the Things instead and set their topic filters.\n\nThe node's rules:\n\n1. *While* the phone is home: strong evidence for home, as long as it lasts.\n2. *When* the front door opens and closes, *then* the hallway sees motion within 2 minutes: moderate evidence for home — someone came in. It fades quickly.\n3. *While* the phone has been away for 10 minutes or more: certain evidence for away. A short trip out of range does not count; staying away does.\n\nOutput 1 sends `msg.payload` true/false when the estimate crosses its thresholds; output 2 sends a snapshot explaining the estimate — the probability and what each rule contributes."
+    },
+    {
+        "id": "ex-bayes-eh",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "locationName": "Home",
+        "maxlisteners": "50",
+        "heartbeat": "3600"
+    },
+    {
+        "id": "ex-bayes-tt-phone",
+        "type": "hal2ThingType",
+        "name": "Phone presence",
+        "contextStore": "",
+        "nodestatus": "%Presence%",
+        "nodestatusType": "str",
+        "statusFn": "",
+        "items": [
+            {
+                "name": "Presence",
+                "id": "presence",
+                "topicFilters": [],
+                "topicFilterMode": "and",
+                "topicSuffix": "",
+                "type": "status",
+                "haType": "",
+                "ingress": "ex-pass",
+                "egress": "",
+                "notes": "",
+                "tags": [],
+                "output": "1",
+                "history": false,
+                "historyAllUpdates": false
+            }
+        ],
+        "attributes": [],
+        "metadata": [],
+        "ingress": [
+            {
+                "id": "ex-pass",
+                "name": "Pass-through",
+                "fn": "// The sensor publishes true/false as the payload.\nreturn msg.payload;"
+            }
+        ],
+        "egress": [],
+        "thingStatus": true,
+        "thingCommand": false,
+        "thingOutput": false,
+        "outputs": 0,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": 3600,
+        "hbLWT": "",
+        "hbFilters": []
+    },
+    {
+        "id": "ex-bayes-tt-contact",
+        "type": "hal2ThingType",
+        "name": "Contact sensor",
+        "contextStore": "",
+        "nodestatus": "%Contact%",
+        "nodestatusType": "str",
+        "statusFn": "",
+        "items": [
+            {
+                "name": "Contact",
+                "id": "contact",
+                "topicFilters": [],
+                "topicFilterMode": "and",
+                "topicSuffix": "",
+                "type": "status",
+                "haType": "contact",
+                "ingress": "ex-pass",
+                "egress": "",
+                "notes": "",
+                "tags": [],
+                "output": "1",
+                "history": false,
+                "historyAllUpdates": false
+            }
+        ],
+        "attributes": [],
+        "metadata": [],
+        "ingress": [
+            {
+                "id": "ex-pass",
+                "name": "Pass-through",
+                "fn": "// The sensor publishes true/false as the payload.\nreturn msg.payload;"
+            }
+        ],
+        "egress": [],
+        "thingStatus": true,
+        "thingCommand": false,
+        "thingOutput": false,
+        "outputs": 0,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": 3600,
+        "hbLWT": "",
+        "hbFilters": []
+    },
+    {
+        "id": "ex-bayes-tt-motion",
+        "type": "hal2ThingType",
+        "name": "Motion sensor",
+        "contextStore": "",
+        "nodestatus": "%Motion%",
+        "nodestatusType": "str",
+        "statusFn": "",
+        "items": [
+            {
+                "name": "Motion",
+                "id": "motion",
+                "topicFilters": [],
+                "topicFilterMode": "and",
+                "topicSuffix": "",
+                "type": "status",
+                "haType": "motion",
+                "ingress": "ex-pass",
+                "egress": "",
+                "notes": "",
+                "tags": [],
+                "output": "1",
+                "history": false,
+                "historyAllUpdates": false
+            }
+        ],
+        "attributes": [],
+        "metadata": [],
+        "ingress": [
+            {
+                "id": "ex-pass",
+                "name": "Pass-through",
+                "fn": "// The sensor publishes true/false as the payload.\nreturn msg.payload;"
+            }
+        ],
+        "egress": [],
+        "thingStatus": true,
+        "thingCommand": false,
+        "thingOutput": false,
+        "outputs": 0,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": 3600,
+        "hbLWT": "",
+        "hbFilters": []
+    },
+    {
+        "id": "ex-bayes-phone",
+        "type": "hal2Thing",
+        "z": "ex-bayes-tab",
+        "eventHandler": "ex-bayes-eh",
+        "thingType": "ex-bayes-tt-phone",
+        "name": "Phone",
+        "attributes": [],
+        "topicFilters": [
+            {
+                "field": "topic",
+                "matchType": "str",
+                "value": "example/phone"
+            }
+        ],
+        "topicFilterMode": "and",
+        "topicFilter": "",
+        "topicFilterType": "",
+        "topicPrefix": "example/phone",
+        "notes": "A phone, not a person: it can be home while its owner is not.",
+        "tags": "",
+        "room": "",
+        "groups": [],
+        "itemFacts": [],
+        "outputs": 0,
+        "x": 420,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "ex-bayes-door",
+        "type": "hal2Thing",
+        "z": "ex-bayes-tab",
+        "eventHandler": "ex-bayes-eh",
+        "thingType": "ex-bayes-tt-contact",
+        "name": "Front door",
+        "attributes": [],
+        "topicFilters": [
+            {
+                "field": "topic",
+                "matchType": "str",
+                "value": "example/front-door"
+            }
+        ],
+        "topicFilterMode": "and",
+        "topicFilter": "",
+        "topicFilterType": "",
+        "topicPrefix": "example/front-door",
+        "notes": "",
+        "tags": "",
+        "room": "",
+        "groups": [],
+        "itemFacts": [],
+        "outputs": 0,
+        "x": 420,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "ex-bayes-motion",
+        "type": "hal2Thing",
+        "z": "ex-bayes-tab",
+        "eventHandler": "ex-bayes-eh",
+        "thingType": "ex-bayes-tt-motion",
+        "name": "Hallway motion",
+        "attributes": [],
+        "topicFilters": [
+            {
+                "field": "topic",
+                "matchType": "str",
+                "value": "example/hallway-motion"
+            }
+        ],
+        "topicFilterMode": "and",
+        "topicFilter": "",
+        "topicFilterType": "",
+        "topicPrefix": "example/hallway-motion",
+        "notes": "",
+        "tags": "",
+        "room": "",
+        "groups": [],
+        "itemFacts": [],
+        "outputs": 0,
+        "x": 420,
+        "y": 320,
+        "wires": []
+    },
+    {
+        "id": "ex-bayes-i1",
+        "type": "inject",
+        "z": "ex-bayes-tab",
+        "name": "phone home",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/phone",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 80,
+        "wires": [
+            [
+                "ex-bayes-phone"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-i2",
+        "type": "inject",
+        "z": "ex-bayes-tab",
+        "name": "phone away",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/phone",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 120,
+        "wires": [
+            [
+                "ex-bayes-phone"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-i3",
+        "type": "inject",
+        "z": "ex-bayes-tab",
+        "name": "door opens",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/front-door",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 200,
+        "wires": [
+            [
+                "ex-bayes-door"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-i4",
+        "type": "inject",
+        "z": "ex-bayes-tab",
+        "name": "door closes",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/front-door",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 240,
+        "wires": [
+            [
+                "ex-bayes-door"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-i5",
+        "type": "inject",
+        "z": "ex-bayes-tab",
+        "name": "motion",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/hallway-motion",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 300,
+        "wires": [
+            [
+                "ex-bayes-motion"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-i6",
+        "type": "inject",
+        "z": "ex-bayes-tab",
+        "name": "no motion",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/hallway-motion",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 340,
+        "wires": [
+            [
+                "ex-bayes-motion"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-node",
+        "type": "hal2Bayes",
+        "z": "ex-bayes-tab",
+        "eventHandler": "ex-bayes-eh",
+        "name": "Someone home",
+        "advanced": false,
+        "topic": "home/occupied",
+        "prior": 0.2,
+        "pOn": 0.85,
+        "pOff": 0.3,
+        "clamp": 6,
+        "halfLife": 1200,
+        "tickInterval": 30,
+        "rules": [
+            {
+                "id": "ex-bayes-r1",
+                "steps": [
+                    {
+                        "src": "thing",
+                        "thing": "ex-bayes-phone",
+                        "group": "",
+                        "cmp": null,
+                        "groupFunction": "",
+                        "item": "presence",
+                        "prop": "",
+                        "operator": "true",
+                        "value": "",
+                        "valueHigh": "",
+                        "valueType": "str",
+                        "pattern": "is",
+                        "cycleMax": "180",
+                        "hold": "600",
+                        "window": "120"
+                    }
+                ],
+                "direction": "true",
+                "strength": "strong",
+                "fade": "normal",
+                "repeat": "refresh",
+                "lr": "",
+                "scale": {
+                    "fromValue": "20",
+                    "fromShare": "100",
+                    "toValue": "60",
+                    "toShare": "0"
+                },
+                "halfLife": ""
+            },
+            {
+                "id": "ex-bayes-r2",
+                "steps": [
+                    {
+                        "src": "thing",
+                        "thing": "ex-bayes-door",
+                        "group": "",
+                        "cmp": null,
+                        "groupFunction": "",
+                        "item": "contact",
+                        "prop": "",
+                        "operator": "true",
+                        "value": "",
+                        "valueHigh": "",
+                        "valueType": "str",
+                        "pattern": "cycle",
+                        "cycleMax": "180",
+                        "hold": "600",
+                        "window": "120"
+                    },
+                    {
+                        "src": "thing",
+                        "thing": "ex-bayes-motion",
+                        "group": "",
+                        "cmp": null,
+                        "groupFunction": "",
+                        "item": "motion",
+                        "prop": "",
+                        "operator": "true",
+                        "value": "",
+                        "valueHigh": "",
+                        "valueType": "str",
+                        "pattern": "becomes",
+                        "cycleMax": "180",
+                        "hold": "600",
+                        "window": "120"
+                    }
+                ],
+                "direction": "true",
+                "strength": "moderate",
+                "fade": "quick",
+                "repeat": "refresh",
+                "lr": "",
+                "scale": {
+                    "fromValue": "20",
+                    "fromShare": "100",
+                    "toValue": "60",
+                    "toShare": "0"
+                },
+                "halfLife": ""
+            },
+            {
+                "id": "ex-bayes-r3",
+                "steps": [
+                    {
+                        "src": "thing",
+                        "thing": "ex-bayes-phone",
+                        "group": "",
+                        "cmp": null,
+                        "groupFunction": "",
+                        "item": "presence",
+                        "prop": "",
+                        "operator": "false",
+                        "value": "",
+                        "valueHigh": "",
+                        "valueType": "str",
+                        "pattern": "held",
+                        "cycleMax": "180",
+                        "hold": "600",
+                        "window": "900"
+                    }
+                ],
+                "direction": "false",
+                "strength": "certain",
+                "fade": "normal",
+                "repeat": "refresh",
+                "lr": "",
+                "scale": {
+                    "fromValue": "20",
+                    "fromShare": "100",
+                    "toValue": "60",
+                    "toShare": "0"
+                },
+                "halfLife": ""
+            }
+        ],
+        "latch": false,
+        "maxHold": "",
+        "emitOn": "change",
+        "x": 700,
+        "y": 200,
+        "wires": [
+            [
+                "ex-bayes-d1"
+            ],
+            [
+                "ex-bayes-d2"
+            ]
+        ]
+    },
+    {
+        "id": "ex-bayes-d1",
+        "type": "debug",
+        "z": "ex-bayes-tab",
+        "name": "occupied",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 920,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "ex-bayes-d2",
+        "type": "debug",
+        "z": "ex-bayes-tab",
+        "name": "explanation",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "msg",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 930,
+        "y": 220,
+        "wires": []
+    }
+]

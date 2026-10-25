@@ -273,6 +273,12 @@
             [
                 "22338508bb8b110b"
             ]
+        ],
+        "groups": [
+            {
+                "item": "45880dc6.a24df4",
+                "group": "0f70d712949e4336"
+            }
         ]
     },
     {
@@ -334,32 +340,13 @@
             [
                 "22338508bb8b110b"
             ]
-        ]
-    },
-    {
-        "id": "0f70d712949e4336",
-        "type": "hal2Group",
-        "z": "a12b67b864e2c98f",
-        "eventHandler": "e228014191d14be6",
-        "name": "All the lights in Example room",
-        "group": [
-            {
-                "thing": "14bb92e74ff2c329",
-                "item": "263efd12.ebadc2"
-            },
-            {
-                "thing": "b926682edf660d08",
-                "item": "45880dc6.a24df4"
-            }
         ],
-        "ratelimit": 0,
-        "output": false,
-        "input": false,
-        "outputs": 0,
-        "inputs": 0,
-        "x": 160,
-        "y": 700,
-        "wires": []
+        "groups": [
+            {
+                "item": "263efd12.ebadc2",
+                "group": "0f70d712949e4336"
+            }
+        ]
     },
     {
         "id": "2a9664b208d86d2e",
@@ -919,7 +906,16 @@
         "type": "hal2EventHandler",
         "name": "Event handler",
         "maxlisteners": "50",
-        "heartbeat": "10"
+        "heartbeat": "10",
+        "groups": [
+            {
+                "id": "0f70d712949e4336",
+                "name": "All the lights in Example room",
+                "haType": "other",
+                "ratelimit": 0,
+                "notes": ""
+            }
+        ]
     },
     {
         "id": "91f12b937636f697",

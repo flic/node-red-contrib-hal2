@@ -1,0 +1,356 @@
+[
+    {
+        "id": "ex-emit-tab",
+        "type": "tab",
+        "label": "hal2 emit to MQTT",
+        "disabled": false,
+        "info": "Example: publish hal2's state changes to an external subscriber with the **hal2Emit** node.\n\nThe emit node listens on the Event handler and sends one envelope per matching update — `{v, type:\"event\", site, boot, seq, ts, thing, item, new, old, last_change}` — with `msg.topic` built from its template, here `hal2/home/event/<room>/<thing>/<item>`.\n\nA Thing without a room gets `_` in that place. Its two filter rows send every **light** and every **motion** item, on change only, whichever Thing it belongs to: add a lamp and it is published without touching this node.\n\nSet a broker on the `mqtt out` node to publish; the debug node shows the envelopes either way. The inject nodes stand in for the devices' own reports."
+    },
+    {
+        "id": "ex-emit-eh",
+        "type": "hal2EventHandler",
+        "name": "Event handler",
+        "locationName": "Home",
+        "maxlisteners": "50",
+        "heartbeat": "3600"
+    },
+    {
+        "id": "ex-emit-tt-light",
+        "type": "hal2ThingType",
+        "name": "Lamp",
+        "contextStore": "",
+        "nodestatus": "%On%",
+        "nodestatusType": "str",
+        "statusFn": "",
+        "items": [
+            {
+                "name": "On",
+                "id": "on",
+                "topicFilters": [],
+                "topicFilterMode": "and",
+                "topicSuffix": "/set",
+                "type": "both",
+                "haType": "light",
+                "ingress": "ex-pass",
+                "egress": "ex-egress",
+                "notes": "",
+                "tags": [],
+                "output": "1",
+                "history": false,
+                "historyAllUpdates": false
+            }
+        ],
+        "attributes": [],
+        "metadata": [],
+        "ingress": [
+            {
+                "id": "ex-pass",
+                "name": "Pass-through",
+                "fn": "// The sensor publishes true/false as the payload.\nreturn msg.payload;"
+            }
+        ],
+        "egress": [
+            {
+                "id": "ex-egress",
+                "name": "Pass-through",
+                "fn": "return msg;"
+            }
+        ],
+        "thingStatus": true,
+        "thingCommand": true,
+        "thingOutput": true,
+        "outputs": 1,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": 3600,
+        "hbLWT": "",
+        "hbFilters": []
+    },
+    {
+        "id": "ex-emit-tt-motion",
+        "type": "hal2ThingType",
+        "name": "Motion sensor",
+        "contextStore": "",
+        "nodestatus": "%Motion%",
+        "nodestatusType": "str",
+        "statusFn": "",
+        "items": [
+            {
+                "name": "Motion",
+                "id": "motion",
+                "topicFilters": [],
+                "topicFilterMode": "and",
+                "topicSuffix": "",
+                "type": "status",
+                "haType": "motion",
+                "ingress": "ex-pass",
+                "egress": "",
+                "notes": "",
+                "tags": [],
+                "output": "1",
+                "history": false,
+                "historyAllUpdates": false
+            }
+        ],
+        "attributes": [],
+        "metadata": [],
+        "ingress": [
+            {
+                "id": "ex-pass",
+                "name": "Pass-through",
+                "fn": "// The sensor publishes true/false as the payload.\nreturn msg.payload;"
+            }
+        ],
+        "egress": [],
+        "thingStatus": true,
+        "thingCommand": false,
+        "thingOutput": false,
+        "outputs": 0,
+        "hbCheck": false,
+        "hbType": "lwt",
+        "hbTTL": 3600,
+        "hbLWT": "",
+        "hbFilters": []
+    },
+    {
+        "id": "ex-emit-lamp",
+        "type": "hal2Thing",
+        "z": "ex-emit-tab",
+        "eventHandler": "ex-emit-eh",
+        "thingType": "ex-emit-tt-light",
+        "name": "Kitchen lamp",
+        "attributes": [],
+        "topicFilters": [
+            {
+                "field": "topic",
+                "matchType": "str",
+                "value": "example/kitchen-lamp"
+            }
+        ],
+        "topicFilterMode": "and",
+        "topicFilter": "",
+        "topicFilterType": "",
+        "topicPrefix": "example/kitchen-lamp",
+        "notes": "",
+        "tags": "",
+        "room": "",
+        "groups": [],
+        "itemFacts": [],
+        "outputs": 1,
+        "x": 420,
+        "y": 100,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ex-emit-motion",
+        "type": "hal2Thing",
+        "z": "ex-emit-tab",
+        "eventHandler": "ex-emit-eh",
+        "thingType": "ex-emit-tt-motion",
+        "name": "Hallway motion",
+        "attributes": [],
+        "topicFilters": [
+            {
+                "field": "topic",
+                "matchType": "str",
+                "value": "example/hallway-motion"
+            }
+        ],
+        "topicFilterMode": "and",
+        "topicFilter": "",
+        "topicFilterType": "",
+        "topicPrefix": "example/hallway-motion",
+        "notes": "",
+        "tags": "",
+        "room": "",
+        "groups": [],
+        "itemFacts": [],
+        "outputs": 0,
+        "x": 420,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "ex-emit-i1",
+        "type": "inject",
+        "z": "ex-emit-tab",
+        "name": "lamp on",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/kitchen-lamp",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 80,
+        "wires": [
+            [
+                "ex-emit-lamp"
+            ]
+        ]
+    },
+    {
+        "id": "ex-emit-i2",
+        "type": "inject",
+        "z": "ex-emit-tab",
+        "name": "lamp off",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/kitchen-lamp",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 120,
+        "wires": [
+            [
+                "ex-emit-lamp"
+            ]
+        ]
+    },
+    {
+        "id": "ex-emit-i3",
+        "type": "inject",
+        "z": "ex-emit-tab",
+        "name": "motion",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/hallway-motion",
+        "payload": "true",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 200,
+        "wires": [
+            [
+                "ex-emit-motion"
+            ]
+        ]
+    },
+    {
+        "id": "ex-emit-i4",
+        "type": "inject",
+        "z": "ex-emit-tab",
+        "name": "no motion",
+        "props": [
+            {
+                "p": "payload"
+            },
+            {
+                "p": "topic",
+                "vt": "str"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "example/hallway-motion",
+        "payload": "false",
+        "payloadType": "bool",
+        "x": 160,
+        "y": 240,
+        "wires": [
+            [
+                "ex-emit-motion"
+            ]
+        ]
+    },
+    {
+        "id": "ex-emit-node",
+        "type": "hal2Emit",
+        "z": "ex-emit-tab",
+        "eventHandler": "ex-emit-eh",
+        "name": "lights and motion",
+        "topic": "hal2/<site>/event/<room>/<thing>/<item>",
+        "filters": [
+            {
+                "scope": "hatype",
+                "target": "light",
+                "item": "",
+                "mode": "change"
+            },
+            {
+                "scope": "hatype",
+                "target": "motion",
+                "item": "",
+                "mode": "change"
+            }
+        ],
+        "x": 170,
+        "y": 320,
+        "wires": [
+            [
+                "ex-emit-mqtt",
+                "ex-emit-debug"
+            ]
+        ]
+    },
+    {
+        "id": "ex-emit-mqtt",
+        "type": "mqtt out",
+        "z": "ex-emit-tab",
+        "name": "",
+        "topic": "",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "",
+        "x": 410,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "ex-emit-debug",
+        "type": "debug",
+        "z": "ex-emit-tab",
+        "name": "envelope",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "msg",
+        "statusVal": "payload",
+        "statusType": "auto",
+        "x": 420,
+        "y": 340,
+        "wires": []
+    }
+]
