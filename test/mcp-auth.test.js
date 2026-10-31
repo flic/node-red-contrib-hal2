@@ -494,3 +494,59 @@ describe('core/mcp-auth requireBearer', function () {
         assert.strictEqual(claims.sub, 'abc');
     });
 });
+
+describe('core/mcp-auth stale JWKS fallback', function () {
+    // A remote key set as jose builds one: callable, with `fresh` and `jwks()` beside it.
+    function remoteSet({ fresh, last, error }) {
+        const fn = async () => { throw error; };
+        Object.defineProperty(fn, 'fresh', { get: () => fresh });
+        fn.jwks = () => last;
+        return fn;
+    }
+    // jwtVerify that asks for the key the way jose does, so the wrapper is exercised.
+    function verifying(state) {
+        return async (token, getKey) => {
+            state.key = await getKey({ alg: 'RS256', kid: 'k1' }, {});
+            return { payload: { sub: 'abc', exp: Math.floor(Date.now() / 1000) + 3600 } };
+        };
+    }
+
+    it('verifies with the keys fetched before when a reload fails', async function () {
+        const warns = [], used = [], state = {};
+        const { auth } = build({
+            warn: m => warns.push(m),
+            createRemoteJWKSet: () => remoteSet({ fresh: false, last: { keys: [{ kid: 'k1' }] }, error: new Error('request timed out') }),
+            createLocalJWKSet: jwks => { used.push(jwks); return async () => 'stale-key'; },
+            jwtVerify: verifying(state)
+        });
+        assert.strictEqual((await auth.validateToken('t1')).sub, 'abc');
+        assert.strictEqual(state.key, 'stale-key');
+        assert.deepStrictEqual(used, [{ keys: [{ kid: 'k1' }] }]);
+        await auth.validateToken('t2');
+        assert.strictEqual(warns.filter(w => w.includes('JWKS reload failed')).length, 1, 'said once, not per token');
+    });
+
+    it('refuses as before when the key set is fresh, or nothing was ever fetched', async function () {
+        for (const set of [{ fresh: true, last: { keys: [] } }, { fresh: false, last: undefined }]) {
+            let used = false;
+            const { auth } = build({
+                warn: () => {},
+                createRemoteJWKSet: () => remoteSet(Object.assign({ error: new Error('no matching key') }, set)),
+                createLocalJWKSet: () => { used = true; return async () => 'stale-key'; },
+                jwtVerify: verifying({})
+            });
+            assert.strictEqual(await auth.validateToken('t'), null, JSON.stringify(set));
+            assert.strictEqual(used, false);
+        }
+    });
+});
+
+describe('core/mcp-auth audience rejection log', function () {
+    it('names the client and the user, so a client holding a token for another resource can be found', async function () {
+        const warns = [];
+        const { auth } = build({ warn: m => warns.push(m), resourceUrl: 'https://mcp.example.com/mcp/media' },
+            { aud: ['https://mcp.example.com/mcp'], azp: 'https://claude.ai/oauth/mcp-oauth-client-metadata', sub: 'u-1' });
+        assert.strictEqual(await auth.validateToken('t'), null);
+        assert.ok(warns.some(w => w.includes('is not this server (client=https://claude.ai/oauth/mcp-oauth-client-metadata, sub=u-1)')), warns.join('\n'));
+    });
+});

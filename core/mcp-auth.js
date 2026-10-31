@@ -106,7 +106,8 @@ function createMcpAuth(opts) {
         warn               = () => {},
         // Injectable for tests; default to the real jose primitives.
         jwtVerify          = jose.jwtVerify,
-        createRemoteJWKSet = jose.createRemoteJWKSet
+        createRemoteJWKSet = jose.createRemoteJWKSet,
+        createLocalJWKSet  = jose.createLocalJWKSet
     } = opts || {};
 
     if (typeof httpGet !== 'function') {
@@ -184,13 +185,36 @@ function createMcpAuth(opts) {
         return oidcConfigPromise;
     }
 
+    // jose reloads the key set once it is older than its cache age (10 minutes) and refuses the
+    // token when that reload fails, although the keys it already holds are the provider's: a
+    // timeout or network blip at the moment a token arrives was enough. Signing keys rotate
+    // seldom and a provider publishes a new one before it signs with it, so the keys fetched last
+    // still verify. Only a stale set falls back — a fresh one that has no matching key refuses as
+    // before, and with nothing fetched yet there is nothing to fall back on.
+    let staleWarnAt = 0;
+    function withStaleFallback(remote) {
+        return async (protectedHeader, token) => {
+            try {
+                return await remote(protectedHeader, token);
+            } catch (e) {
+                const last = typeof remote.jwks === 'function' ? remote.jwks() : undefined;
+                if (remote.fresh || !last) throw e;
+                if (Date.now() >= staleWarnAt) {
+                    staleWarnAt = Date.now() + 10 * 60 * 1000;
+                    warn('MCP JWKS reload failed (' + e.message + ') — verifying with the keys fetched before');
+                }
+                return createLocalJWKSet(last)(protectedHeader, token);
+            }
+        };
+    }
+
     // Lazy JWKS — built from the discovered jwks_uri on first real token validation, and
     // rebuilt if a later re-discovery changes the jwks_uri (fallback → discovered).
     async function getJwks() {
         const oidc = await getOidcConfig();
         if (!jwks || jwksUri !== oidc.jwks_uri) {
             jwksUri = oidc.jwks_uri;
-            jwks = createRemoteJWKSet(new URL(jwksUri));
+            jwks = withStaleFallback(createRemoteJWKSet(new URL(jwksUri)));
         }
         return jwks;
     }
@@ -255,8 +279,11 @@ function createMcpAuth(opts) {
             const { payload } = await jwtVerify(token, await getJwks(), verifyOpts);
             // Audience is checked here rather than by jose — see acceptsAudience.
             if (!acceptsAudience(payload, { expected: tokenAudience, resourceUrl })) {
+                // Who sent it, so a client still holding a token for another resource can be
+                // found: the client id and the user, never the token.
                 warn('MCP token rejected: audience ' + JSON.stringify(payload.aud) +
-                     ' is not this server');
+                     ' is not this server (client=' + (payload.azp || payload.client_id || 'unknown') +
+                     ', sub=' + (payload.sub || 'unknown') + ')');
                 return null;
             }
             // Name each CIMD client once, so which clients reach this server — and how they
